@@ -52,6 +52,7 @@ wait(scene, ms)                                         // 基于 scene.time.del
 | 0 | 地图 Graphics（`drawMap`） |
 | 4–6 | 目标格、高亮 `hl`、光标 |
 | 10 + y | 单位容器（按行排序） |
+| 30–31 | 天气遮罩、天气粒子（`weatherFx.js`） |
 | 50–52 | HUD 顶栏、面板、HUD 按钮 |
 | 600 | 指令菜单 |
 | 800–801 | 横幅 |

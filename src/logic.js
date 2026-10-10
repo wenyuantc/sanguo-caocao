@@ -5,7 +5,8 @@ import { CLASS_BY_NAME } from './characters.js';
 import {
   GUARD_TAKEN, STATUS_KEYS, effStats, moveBonus, canMove, canAct, canCast, canCounter, alwaysHit, has, hasBuff, applyStatus, applyBuff, cure,
 } from './status.js';
-import { equipStats, defaultKit, copyKit, fx, fxSum, fxMax, FRUIT_GAIN } from './equipment.js';
+import { equipStats, defaultKit, copyKit, fx, fxSum, fxMax, FRUIT_GAIN, EQUIP, SLOTS } from './equipment.js';
+import { isBad, SUN, CLOUD } from './weather.js';
 
 export const key = (x, y) => y * COLS + x;
 export const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
@@ -292,6 +293,7 @@ const FORMULA = {
   d: (x) => x * 1.2 + 30,
   e: (x) => (x + 4) * 0.4 + 8,
   f: (x) => x / 5 + 5,
+  g: (x) => x + 25,
 };
 const spellX = (a, d) => a.lvl + (effStats(a).int - effStats(d).int) / 3;
 
@@ -301,12 +303,14 @@ const WET = new Set(['W', 'B', 'S']);
 const ROUGH = new Set(['M', 'F']);
 const nearAny = (map, x, y, set) => [[0, 0], ...RANGES.cross].some(([dx, dy]) => inMap(x + dx, y + dy) && set.has(map[y + dy][x + dx]));
 export const isWild = (map, x, y) => WILD.has(map[y][x]);
+// 只作用于野外的全图策略（砂暴）；玄武 / 白虎的全图不看地形
+const wildOnly = (sp) => sp.area === 'map' && sp.target === 'foe';
 
 // 地形限制（自行设计，参考 research P5）：可以施放时返回 null，否则返回中文原因；以目标（范围中心）所在格判断
 export function spellBlock(map, spellId, x, y) {
   const sp = SPELLS[spellId];
   const c = map[y][x];
-  if (sp.area === 'map') return WILD.has(c) ? null : '砂暴只能攻击身处野外的敌军';
+  if (wildOnly(sp)) return WILD.has(c) ? null : '砂暴只能攻击身处野外的敌军';
   if (sp.elem === 'fire' && (c === 'W' || c === 'B')) return '火系策略无法攻击河流、桥梁上的目标';
   if (sp.elem === 'water' && !nearAny(map, x, y, WET)) return '水系策略需目标处在河流、桥梁、战船上或旁边';
   if (sp.elem === 'earth' && !nearAny(map, x, y, ROUGH)) return '地系策略需目标处在山地、森林上或旁边';
@@ -324,21 +328,24 @@ export function spellTargetOk(a, spellId, o) {
   return !isFoe(o, a);
 }
 
-// 范围格：以 c 为中心（全图策略为全部野外格）
+// 范围格：以 c 为中心（砂暴为全部野外格，玄武 / 白虎为全图）
 const AREA = { cross: [[0, 0], ...RANGES.cross], square: [[0, 0], ...RANGES.around] };
 export function areaTiles(map, spellId, c) {
   const sp = SPELLS[spellId];
   if (sp.area === 'map') {
     const out = [];
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (WILD.has(map[y][x])) out.push({ x, y });
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (!wildOnly(sp) || WILD.has(map[y][x])) out.push({ x, y });
     return out;
   }
   return (AREA[sp.area] || [[0, 0]]).map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy })).filter((p) => inMap(p.x, p.y));
 }
 
 // 受影响的单位：范围内全部合法目标（敌对策略只打敌人，友方策略只作用于友方）
+// 玄武：全图不分敌我（不含施策者）；白虎：全图我方（含友军）
 export function spellVictims(map, units, a, spellId, c) {
   const sp = SPELLS[spellId];
+  if (sp.special === 'xuanwu') return units.filter((o) => o.alive && o !== a);
+  if (sp.special === 'baihu') return units.filter((o) => o.alive && !isFoe(o, a));
   if (sp.target === 'self') return [a];
   if (!sp.area) return [c];
   const side = (o) => o.alive && (sp.target === 'foe' ? isFoe(o, a) : !isFoe(o, a));
@@ -376,13 +383,47 @@ export function usableSpells(units, u) {
   return [...own, ...[...extra].filter((id) => !own.includes(id))];
 }
 
+// 已装备某件装备
+const wears = (u, id) => SLOTS.some((s) => u.equip?.[s]?.id === id);
+// 装备了宝玉但尚未习得的四神：策略菜单中置灰显示，并说明所需等级
+export const gemSpells = (u, known = knownSpells(u)) => Object.keys(SPELLS)
+  .filter((id) => SPELLS[id].needGem && wears(u, SPELLS[id].needGem) && !known.includes(id) && SERIES[u.cls].spells.some((e) => e.id === id));
+
+// 天气条件不满足时的原版提示（research weather.md §5.1）
+const WEATHER_NEED = { bad: [isBad, '只能在恶劣天气时使用。'], sun: [(w) => w === SUN, '只能在晴天时使用。'], cloud: [(w) => w === CLOUD, '只能在阴天时使用。'] };
+const TIER_NAME = ['一', '二', '三'];
+
+// 策略能否使用（菜单、AI、预测共用）：返回 { ok, reason }
+// 依次检查：禁咒 / 混乱、习得等级、宝玉、天气、策略值；ctx.known 为可用策略列表（含遁甲天书借用的），
+// ctx.map + ctx.target 时再检查目标所在地形
+export function spellUsable(spellId, u, weather, ctx = {}) {
+  const sp = SPELLS[spellId];
+  const no = (reason) => ({ ok: false, reason });
+  if (has(u, 'confuse')) return no(`${u.name}处于混乱状态，无法使用策略`);
+  if (has(u, 'silence')) return no(`${u.name}处于禁咒状态，无法使用策略`);
+  if (!(ctx.known || knownSpells(u)).includes(spellId)) {
+    const e = SERIES[u.cls].spells.find((l) => l.id === spellId);
+    return no(e ? `需 ${e.lvl} 级${e.tier > 1 ? `（${TIER_NAME[e.tier - 1]}阶）` : ''}才能使用` : `${classOf(u.cls, u.tier).name}无法使用${sp.name}`);
+  }
+  if (sp.needGem && !wears(u, sp.needGem)) return no(`需要装备${EQUIP[sp.needGem].name}`);
+  if (sp.noBadWeather && isBad(weather)) return no('在恶劣天气时无法使用。');
+  if (sp.weather && !WEATHER_NEED[sp.weather][0](weather)) return no(WEATHER_NEED[sp.weather][1]);
+  if (u.mp < spellCost(u, spellId)) return no(`策略值不足（需 ${spellCost(u, spellId)}）`);
+  if (ctx.map && ctx.target && sp.target === 'foe') {
+    const why = spellBlock(ctx.map, spellId, ctx.target.x, ctx.target.y);
+    if (why) return no(why);
+  }
+  return { ok: true, reason: '' };
+}
+
 // 谍报吸取的策略值：(L+Δ+1)/2+12，不超过目标现有策略值
 export const spellDrainMp = (a, d) => Math.min(d.mp, Math.max(1, Math.round((spellX(a, d) + 1) / 2 + 12)));
 
 // 成功率：对敌策略看双方“精神 + 士气”之差，再乘策略的成功率系数（海啸、晕眩低）；混乱的目标必中；友方策略必中
+// 玄武不分敌我，对每个单位都按对敌策略判定（自行设计）
 export function spellHit(a, d, spellId) {
   const sp = SPELLS[spellId];
-  if (sp.target !== 'foe' || alwaysHit(d)) return 100;
+  if ((sp.target !== 'foe' && sp.special !== 'xuanwu') || alwaysHit(d)) return 100;
   const ea = effStats(a), ed = effStats(d);
   // 装备：七星剑提高、白银盾 / 风神盾降低成功率
   const base = clamp(90 + (ea.int + ea.morale - ed.int - ed.morale) * 0.3, 50, 100) + fxSum(a, 'spellHitUp') - fxSum(d, 'spellHitDown');
@@ -395,12 +436,46 @@ export function healAmount(a, spellId) {
   return Math.round(SPELLS[spellId].heal === 'big' ? 70 + int / 2 : 40 + int / 10);
 }
 
+// 玄武的随机效果：四种异常或四种能力下降（降为 70%）之一
+export const XUANWU_EFFECTS = [
+  ...STATUS_KEYS.map((k) => ({ status: k })),
+  ...['power', 'def', 'burst', 'morale'].map((stat) => ({ buff: { stat, mult: 0.7 } })),
+];
+
+// 青龙：strikes 次雷击，每次在范围内随机选一个尚未击溃的敌人（目标越多越分散），各自判定成功率；
+// 同一目标的多次雷击合并为一个效果（dmg 合计，strikes 为命中次数），res.strikes 记录每次雷击的顺序供特效使用
+function resolveThunder(map, a, spellId, victims, res, rng) {
+  const sp = SPELLS[spellId];
+  const left = new Map(victims.map((v) => [v, v.hp]));
+  const eff = new Map();
+  res.strikes = [];
+  for (let k = 0; k < sp.strikes; k++) {
+    const pool = victims.filter((v) => left.get(v) > 0);
+    if (!pool.length) break;
+    const v = pool[Math.floor(rng() * pool.length)];
+    const hit = rng() * 100 < spellHit(a, v, spellId);
+    if (!eff.has(v)) eff.set(v, { u: v, hit: false, dmg: 0, strikes: 0 });
+    const e = eff.get(v);
+    res.strikes.push({ u: v, hit });
+    if (!hit) continue;
+    const dmg = Math.min(left.get(v), Math.max(1, Math.round(spellDamage(map, a, v, spellId) * (0.9 + rng() * 0.2))));
+    left.set(v, left.get(v) - dmg);
+    e.hit = true;
+    e.dmg += dmg;
+    e.strikes += 1;
+  }
+  res.effects = [...eff.values()];
+  return res;
+}
+
 // 结算策略（不修改单位）：返回 { caster, spellId, center, effects: [{ u, hit, dmg?, heal?, mp?, mpDrain?, status?, buff?, cure?, again? }], self }
 // 随后用 applySpell 写入；actions.js 在两者之间播放特效，Node 模拟脚本直接连用
 export function resolveSpell(map, units, a, spellId, t, rng = Math.random) {
   const sp = SPELLS[spellId];
   const res = { caster: a, spellId, center: { x: t.x, y: t.y }, effects: [], self: {} };
-  for (const v of spellVictims(map, units, a, spellId, t)) {
+  const victims = spellVictims(map, units, a, spellId, t);
+  if (sp.special === 'thunder') return resolveThunder(map, a, spellId, victims, res, rng);
+  for (const v of victims) {
     const e = { u: v, hit: rng() * 100 < spellHit(a, v, spellId) };
     res.effects.push(e);
     if (!e.hit) continue;
@@ -417,6 +492,7 @@ export function resolveSpell(map, units, a, spellId, t, rng = Math.random) {
     if (sp.cure) e.cure = sp.cure;
     if (sp.special === 'again') e.again = true;
     if (sp.special === 'meditate') { e.dmg = Math.min(v.hp - 1, 50); e.mp = Math.min(v.stats.mp - v.mp, 25); }
+    if (sp.special === 'xuanwu') Object.assign(e, XUANWU_EFFECTS[Math.floor(rng() * XUANWU_EFFECTS.length)]);
   }
   return res;
 }
@@ -522,7 +598,8 @@ function spellScore(map, units, u, id, c, foes) {
   for (const v of victims) {
     const hit = spellHit(u, v, id) / 100;
     if (sp.cat === 'damage') {
-      const d = spellDamage(map, u, v, id);
+      // 青龙：雷击平均分到范围内各目标
+      const d = Math.round(spellDamage(map, u, v, id) * (sp.strikes ? sp.strikes / victims.length : 1));
       const kill = d >= v.hp;
       score += (Math.min(d, v.hp) * (sp.formula === 'kill' ? 0.6 : 0.95) + (kill ? 80 : 0) + (u.focus === v.id ? 300 : 0)) * hit;
       if (sp.status && !kill) stat += statusValue(v, sp.status) * hit;
@@ -546,13 +623,14 @@ function spellScore(map, units, u, id, c, foes) {
   return score + Math.min(stat, STATUS_CAP) + Math.min(aux, AUX_CAP);
 }
 
-// AI 可用的策略：已掌握、策略值足够、未被禁咒；回归不由 AI 使用
-export function castable(u) {
+// AI 可用的策略：已掌握且 spellUsable 通过（禁咒、宝玉、天气、策略值）；回归与天气策略不由 AI 使用
+export function castable(u, weather = SUN) {
   if (!canCast(u)) return [];
-  return knownSpells(u).filter((id) => u.mp >= spellCost(u, id) && SPELLS[id].special !== 'again');
+  return knownSpells(u).filter((id) => SPELLS[id].special !== 'again' && !SPELLS[id].setWeather && spellUsable(id, u, weather).ok);
 }
 
-export function planAI(map, units, u) {
+// weather：当前天气（决定火系 / 四神能否使用）
+export function planAI(map, units, u, weather = SUN) {
   if (u.ai === 'peace') return null; // 不交战：原地不动、不主动攻击（如华容道放行的关羽）
   if (!canAct(u)) return null; // 混乱：不能行动
   const foes = units.filter((o) => o.alive && isFoe(o, u));
@@ -563,10 +641,10 @@ export function planAI(map, units, u) {
   const reach = Math.max(...tiles.map((t) => dist(t, u)));
   // 先按“策略 × 目标”计分（与站位无关），再按站位检查射程
   const plans = [];
-  for (const id of castable(u)) {
+  for (const id of castable(u, weather)) {
     const sp = SPELLS[id];
     let centers = sp.target === 'self' ? [u] : sp.target === 'foe' ? foes : friends;
-    if (sp.area === 'map') centers = centers.filter((c) => isWild(map, c.x, c.y)).slice(0, 1);
+    if (wildOnly(sp)) centers = centers.filter((c) => isWild(map, c.x, c.y)).slice(0, 1);
     for (const c of centers) {
       if (sp.range !== 'map' && c !== u && dist(c, u) > reach + sp.range) continue;
       if (sp.target === 'foe' && spellBlock(map, id, c.x, c.y)) continue;

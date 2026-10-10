@@ -27,7 +27,7 @@ export default [{
   turns: 25,                                   // 回合上限
   victoryText: '击退吕布 或 全灭敌军',            // 显示在右侧面板，≤ 18 字
   victory: [{ type: 'boss', target: 'lvbu' }, { type: 'all' }],
-  // 可选：protect: ['xiandi'], defeatText: '曹操或献帝撤退 / 超过 25 回合', victoryFlags, epilogues
+  // 可选：protect: ['xiandi'], defeatText: '曹操或献帝撤退 / 超过 25 回合', victoryFlags, epilogues, weather: { type, start }
   map: [ /* 13 行，每行 18 个字符 */ ],
   prologue: [{ who: '旁白', text: '……' }, { who: '曹操', side: 'player', text: '……' }],
   epilogue: [ ... ],                           // 或 epilogues: { annihilate: [...], retreat: [...], win: [...] }
@@ -42,6 +42,7 @@ export default [{
   - `{ type: 'survive', turns: N }` 坚守到第 N 回合结束（N < turns）
 - 失败：曹操撤退、`protect` 中任一单位撤退、超过 `turns`。
 - `victoryFlags: [{ unit: 'guojia', alive: true, flag: 'guojia_dead', outcome? }]` 胜利时该单位存活状态符合则设标记（填 outcome 时只在该结局生效）。
+- 天气（一般不用填）：开局天气按原版映射 `src/weather.js` 的 `STAGE_WEATHER` 自动决定。可选字段 `weather: { type, start }` 覆盖：`type` 天气类别 0~4（0 普通：晴/阴/雨/豪雨，1 晴好：晴/阴/雨，2 阴雨：晴/阴/雨/豪雨，3、4 含雪：晴/阴/雪），`start` 起始序号 0~5（第 1 回合天气 = `TABLE[type][start]`）。之后每回合我军阶段开始时序号随机 ±1 变化。没有原版对应的新关卡不填时用普通类别、序号 1（开局晴），校验会给出警告。
 - `escape: { tiles: [[x,y],...], units: ['dianwei'] }` 撤离点：列出的我军武将行动结束停在撤离点即撤出战场（不算阵亡，alive 变为 false），地图上以蓝框标出。
 - 出阵整备（自动推导，一般不用填）：出阵位置 = 本关预设我军单位的站位，上限 = 位置数，默认阵容 = 预设阵容。
   必须出阵：曹操、不在武将总表（`src/generals.js`）中的临时成员、在胜利条件 / `protect` / `escape` / `victoryFlags` / 事件（duel、onDeath、setAi）中出现的我军武将、开场 / 结尾 / 事件对白中 `side: 'player'` 发言的预设我军武将。

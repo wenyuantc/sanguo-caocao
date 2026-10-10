@@ -3,6 +3,8 @@ import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
 import { GUARD_TAKEN, GUARD_SPELL_TAKEN, effMove } from './logic.js';
 import { effStats, statusList } from './status.js';
 import { panel, text, portrait, button } from './ui.js';
+import { WEATHERS, TYPE_NAME, possibleWeathers, isBad } from './weather.js';
+import { drawWeatherIcon, WEATHER_CSS } from './weatherFx.js';
 
 const PW = WIDTH - PANEL_X;
 const FACTION_COLOR = { player: '#7fb2ff', enemy: '#ff8a7a', ally: '#8ce09a' };
@@ -26,6 +28,13 @@ export class Hud {
     this.itemText = text(scene, 560, 11, '', 16, '#d8c8a0').setDepth(51);
     this.redText = text(scene, WIDTH - 16, 11, '', 16, '#ff6a5a', FONT).setOrigin(1, 0).setDepth(51);
     this.infoBtn = button(scene, 880, 5, 84, 30, '部　队', () => scene.openInfo(), 16).setDepth(52);
+    // 天气：图标 + 名称，鼠标移上去时在预测区显示本关可能出现的天气
+    this.weatherIcon = scene.add.graphics().setDepth(51);
+    this.weatherText = text(scene, 998, 11, '', 16, '#f1e3c2', FONT).setDepth(51);
+    this.weatherInfo = '';
+    scene.add.zone(970, 4, 76, 32).setOrigin(0).setDepth(52).setInteractive()
+      .on('pointerover', () => this.forecast(this.weatherInfo))
+      .on('pointerout', () => this.forecast(''));
 
     // 右侧面板
     panel(scene, PANEL_X + 4, MAP_Y + 4, PW - 8, HEIGHT - MAP_Y - 8).setDepth(50);
@@ -64,6 +73,15 @@ export class Hud {
   setRed(red) {
     const color = red >= 3 ? '#ffe04a' : red <= -3 ? '#ff9a2a' : '#ff5a4a';
     this.redText.setText(`红色指数 ${red > 0 ? '+' : ''}${red}`).setColor(color);
+  }
+
+  // 当前天气与本关天气类别（决定可能出现的天气）
+  setWeather(w, type) {
+    drawWeatherIcon(this.weatherIcon, 984, 20, w);
+    this.weatherText.setText(WEATHERS[w]).setColor(WEATHER_CSS[w]);
+    this.weatherKinds = possibleWeathers(type).map((k) => WEATHERS[k]).join('、');
+    this.weatherInfo = `【天气】${WEATHERS[w]}${isBad(w) ? '（恶劣天气：火系策略无法使用）' : ''}\n`
+      + `本关（${TYPE_NAME[type]}）可能出现：${this.weatherKinds}\n每回合我军阶段开始时可能变化`;
   }
 
   // 只显示数量大于 0 的道具，超出顶栏宽度时以“…”省略
@@ -142,6 +160,7 @@ export class Hud {
       text(s, 0, 0, t.name, 26, '#fff2cc', FONT),
       text(s, 0, 40, `防御加成 ${Math.round(t.def * 100)}%${heal}`, 15, '#f1e3c2'),
       text(s, 0, 64, `移动消耗：${cost}`, 15, '#f1e3c2'),
+      text(s, 0, 100, `本关天气：${this.weatherKinds || '-'}`, 15, '#bfae88'),
     ]);
   }
 

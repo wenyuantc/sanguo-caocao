@@ -5,6 +5,7 @@ import {
 } from './logic.js';
 import { STATUS, BUFF_NAME, canAct, cure, applyStatus, effStats } from './status.js';
 import { EQUIP, GEAR_EXP, fx, addGearExp } from './equipment.js';
+import { WEATHERS, weatherSpellIdx } from './weather.js';
 import { tileCenter } from './unitView.js';
 import { floatText, wait } from './ui.js';
 import { castFx, spellFx, itemFx, deathFx, promoteFx } from './spellFx.js';
@@ -132,6 +133,16 @@ export async function doSpell(s, a, spellId, t) {
   const res = resolveSpell(s.map, s.units, a, spellId, t);
   s.hud.log(`${a.name} 使用了「${sp.name}」`);
   await castFx(s, a, spellId, t);
+  // 天气策略：必定成功，按本关天气类别改变天气序号（research weather.md §6）
+  if (sp.setWeather) {
+    s.views.get(a)?.faceDefault();
+    applySpell(res);
+    s.views.get(a)?.updateHp();
+    const changed = await s.changeWeather(weatherSpellIdx(s.weatherType, s.weatherIdx, sp.setWeather));
+    if (!changed) s.hud.log(`天气仍是${WEATHERS[s.weather]}`);
+    await gainExp(s, a, 10);
+    return;
+  }
   await spellFx(s, res);
   s.views.get(a)?.faceDefault();
   applySpell(res);
@@ -169,7 +180,7 @@ function showEffect(s, e) {
     v?.flashHit(0xfff0d0);
     v?.hurt();
     floatText(s, p.x, p.y - 20, `-${e.dmg}`, '#ff9a3a', 24);
-    notes.push(`损失 ${e.dmg}`);
+    notes.push(e.strikes ? `遭 ${e.strikes} 次雷击，损失 ${e.dmg}` : `损失 ${e.dmg}`);
   }
   if (e.heal) { floatText(s, p.x, p.y - 20, `+${e.heal}`, '#7dff9a'); notes.push(`兵力恢复 ${e.heal}`); }
   if (e.mp) { floatText(s, p.x, p.y - 38, `策略 +${e.mp}`, '#8ac8ff', 18); notes.push(`策略值恢复 ${e.mp}`); }
@@ -265,7 +276,7 @@ export async function runAI(s, faction) {
   for (const u of list) {
     if (s.over) return;
     if (!u.alive || !canAct(u)) continue; // 混乱：本阶段不能行动
-    const plan = planAI(s.map, s.units, u);
+    const plan = planAI(s.map, s.units, u, s.weather);
     s.setCursor(u.x, u.y);
     if (plan) {
       try {
