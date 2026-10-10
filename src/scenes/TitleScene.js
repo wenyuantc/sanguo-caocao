@@ -5,6 +5,7 @@ import { DIFFICULTIES } from '../data.js';
 import { applyLoad } from '../saves.js';
 import { FIRST_STAGE } from '../stages.js';
 import { openSaveMenu } from '../saveMenu.js';
+import { openSettingsMenu } from '../settingsMenu.js';
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -47,6 +48,7 @@ export class TitleScene extends Phaser.Scene {
     button(this, WIDTH / 2 - 110, 446, 220, 52, '读 取 进 度', () => {
       openSaveMenu(this, { mode: 'load', onLoad: (data) => applyLoad(this, data) });
     }, 24);
+    button(this, WIDTH / 2 - 110, 512, 220, 52, '游 戏 设 置', () => openSettingsMenu(this), 24);
     text(this, WIDTH / 2, HEIGHT - 70,
       '左键：选择 / 移动 / 指令　右键或 ESC：取消　骑兵克步兵，步兵克弓兵，弓兵克骑兵', 16, '#e8d6ae').setOrigin(0.5);
   }

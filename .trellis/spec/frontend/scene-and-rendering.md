@@ -8,8 +8,8 @@
 
 - 每个场景写作 `export class XScene extends Phaser.Scene { constructor() { super('X'); } }`
   （`src/scenes/TitleScene.js`、`BattleScene.js`、`EndingScene.js`）。
-- 每个 `create()` 第一句调用 `hiDpi(this)`（`src/config.js`）：画布按 `RES`(2) 倍创建，镜头放大 2 倍，
-  文字分辨率 2 倍。布局一律使用**世界坐标** `WIDTH × HEIGHT`（1200 × 672），不要用画布像素。
+- 每个 `create()` 第一句调用 `hiDpi(this)`（`src/config.js`）：画布按 `RES` 倍创建，镜头放大 `RES` 倍，
+  文字分辨率 `RES` 倍。`RES` 取自游戏设置（1 / 1.5 / 2，自动按设备像素比），不要假设它等于 2。布局一律使用**世界坐标** `WIDTH × HEIGHT`（1200 × 672），不要用画布像素。
 - 每次运行的临时状态在 `init(data)` 中重置（`BattleScene.init` 重置 `modal/over/state/sel/menu`）。
 - 场景切换用 `this.scene.start('Battle', { stage, load })` / `('Ending', { route })` / `('Title')`。
   场景是重启而不是暂停；`BattleScene.create` 会调用 `purgeTextures()` 释放上一关的 `hero-*` / `pt-*` 贴图。
@@ -49,7 +49,7 @@ wait(scene, ms)                                         // 基于 scene.time.del
 
 | 深度 | 内容 |
 |------|------|
-| 0 | 地图 Graphics（`drawMap`） |
+| 0 | 地图（`drawMap` 烘焙成的 `map-bake` 贴图 Image） |
 | 4–6 | 目标格、高亮 `hl`、光标 |
 | 10 + y | 单位容器（按行排序） |
 | 50–52 | HUD 顶栏、面板、HUD 按钮 |
@@ -76,7 +76,19 @@ return key;
 - 同样的写法：`portraits.portraitTexture`（`pt-${name}-${side}`，×4）、`spellFx.canvasTex`（`fx-*`，×3）。
 - 按逻辑尺寸绘制，再用分辨率倍数（`TEX`、`PT`、`R`）缩放 context。
 - 如果临时修改共享色板（heroSprites 中的 `C`），要在 `finally` 中恢复。
-- 地图格子用 `Graphics` 绘制，配合确定性伪随机 `rnd(x, y, i)`，保证每次加载外观一致。
+- 地图格子用 `Graphics` 绘制，配合确定性伪随机 `rnd(x, y, i)`，保证每次加载外观一致；画完后按 `RES` 倍
+  烘焙进 DynamicTexture（`map-bake`）并销毁 Graphics。大量静态 Graphics 指令在 WebGL 下每帧都会重新处理，
+  静态内容一律烘焙。
+
+## 游戏设置与性能
+
+- 设置在 `src/settings.js`（localStorage `sanguo-settings`，损坏回退默认），启动时由 `config.js` 读出
+  `SETTINGS` / `RES`，`main.js` 据此设置 `antialias`、`fps.limit` 与帧率角标。设置面板 `settingsMenu.js`
+  只在标题页打开，保存后 `location.reload()` 生效（全屏立即生效）。
+- 画质“低”时 `UnitView.idle` 不创建，引用一律写 `v.idle?.…`。
+- 帧率上限默认 0（跟随屏幕）：Phaser 的限帧器在 60Hz 屏幕上设 60 会因 rAF 计时抖动丢帧。
+- `pointermove` 处理中不要无条件重建含 Text / 头像的面板：`BattleScene.onHover` 按“格子 + state”去重
+  `hud.showUnit`，其它主动刷新面板的地方（如 `focusUnit`）要清空 `hoverKey`。
 
 ## 异步动画流程
 

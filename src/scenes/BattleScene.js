@@ -37,6 +37,7 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'busy';
     this.sel = null;
     this.menu = null;
+    this.hoverKey = null;
   }
 
   // 释放上一关生成的人物 / 头像贴图，避免连续游玩时内存持续增长（按需重新生成）
@@ -175,6 +176,7 @@ export class BattleScene extends Phaser.Scene {
   focusUnit(u) {
     this.setCursor(u.x, u.y);
     this.hud.showUnit(u, terrainAt(this.map, u.x, u.y));
+    this.hoverKey = null;
   }
 
   // ---------- 存档 ----------
@@ -570,8 +572,12 @@ export class BattleScene extends Phaser.Scene {
     const t = this.tileAt(p);
     if (!t || this.dialog.root.visible || this.modal) return;
     if (this.state !== 'busy') this.setCursor(t.x, t.y);
-    const u = this.unitAt(t.x, t.y);
-    this.hud.showUnit(u, terrainAt(this.map, t.x, t.y));
+    // 信息面板重建开销大（头像 + 多个文字）：同一格、同一状态下鼠标移动不重复刷新
+    const hk = `${t.x},${t.y},${this.state}`;
+    if (hk !== this.hoverKey) {
+      this.hoverKey = hk;
+      this.hud.showUnit(this.unitAt(t.x, t.y), terrainAt(this.map, t.x, t.y));
+    }
     // 菜单状态下预测区用于显示按钮说明，不随鼠标移动清空
     if (this.state !== 'menu') this.hud.forecast(this.state === 'target' ? this.forecastFor(t) : '');
     this.previewArea(t);

@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, RES } from './config.js';
+import { WIDTH, HEIGHT, RES, SETTINGS } from './config.js';
 import { TitleScene } from './scenes/TitleScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { EndingScene } from './scenes/EndingScene.js';
@@ -10,6 +10,16 @@ window.game = new Phaser.Game({
   width: WIDTH * RES,
   height: HEIGHT * RES,
   backgroundColor: '#0d0a07',
+  antialias: SETTINGS.quality !== 'low',
+  fps: { limit: SETTINGS.fps },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [TitleScene, BattleScene, EndingScene],
 });
+
+// 帧率角标：DOM 叠加，与场景无关
+if (SETTINGS.showFps) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:4px;left:6px;z-index:10;font:12px monospace;color:#9ce0a8;background:rgba(0,0,0,.5);padding:1px 5px;pointer-events:none';
+  document.body.appendChild(el);
+  setInterval(() => { el.textContent = `FPS ${Math.round(window.game.loop.actualFps)}`; }, 500);
+}
