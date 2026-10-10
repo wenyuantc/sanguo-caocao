@@ -64,6 +64,9 @@ export function applyLoad(scene, data) {
   scene.registry.set('difficulty', data.difficulty || 'normal');
   scene.registry.set('red', data.red ?? 0);
   scene.registry.set('flags', data.flags || {});
+  // 旧存档没有装备与金钱：背包为空，进入战斗时按原版规则补发初始装备
+  scene.registry.set('inventory', Array.isArray(data.inventory) ? data.inventory : []);
+  scene.registry.set('gold', data.gold ?? 0);
   scene.scene.start('Battle', { stage: data.stage, load: data.kind === 'battle' ? data : null });
 }
 

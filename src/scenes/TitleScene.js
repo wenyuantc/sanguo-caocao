@@ -83,6 +83,8 @@ export class TitleScene extends Phaser.Scene {
         this.registry.set('items', { ...d.items });
         this.registry.set('red', 0);
         this.registry.set('flags', {});
+        this.registry.set('inventory', []);
+        this.registry.set('gold', 0);
         this.scene.start('Battle', { stage: FIRST_STAGE });
       });
       root.add([g, zone,
