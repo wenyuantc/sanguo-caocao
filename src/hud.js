@@ -1,7 +1,7 @@
 import { PANEL_X, WIDTH, HEIGHT, MAP_Y, COLORS, FONT, FACTION_NAME } from './config.js';
 import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
-import { GUARD_TAKEN, GUARD_SPELL_TAKEN } from './logic.js';
-import { effStats, moveBonus, statusList } from './status.js';
+import { GUARD_TAKEN, GUARD_SPELL_TAKEN, effMove } from './logic.js';
+import { effStats, statusList } from './status.js';
 import { panel, text, portrait, button } from './ui.js';
 
 const PW = WIDTH - PANEL_X;
@@ -68,7 +68,7 @@ export class Hud {
 
   // 只显示数量大于 0 的道具，超出顶栏宽度时以“…”省略
   setItems(items) {
-    const parts = Object.keys(ITEMS).filter((k) => items[k] > 0).map((k) => `${ITEMS[k].name}×${items[k]}`);
+    const parts = Object.keys(ITEMS).filter((k) => items[k] > 0 && !ITEMS[k].fruit).map((k) => `${ITEMS[k].name}×${items[k]}`);
     const t = this.itemText;
     let n = parts.length;
     t.setText('军需：' + (parts.join(' ') || '无'));
@@ -113,7 +113,7 @@ export class Hud {
     // 五项能力 + 移动（三列，套用增减益：上升绿色、下降红色），地形单独一行
     const st = effStats(u);
     const col = (v, base) => (v > base ? '#9ce0a8' : v < base ? '#ff8a7a' : '#f6ecd2');
-    const mv = cls.move + moveBonus(u);
+    const mv = effMove(u);
     const rows = [...STAT5.map((k) => [STAT_NAME[k], st[k], u.stats[k]]), ['移动', mv, cls.move]];
     rows.forEach(([k, v, base], i) => {
       const x = (i % 3) * 100, y = 140 + Math.floor(i / 3) * 22;

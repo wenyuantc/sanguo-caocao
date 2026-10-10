@@ -5,6 +5,7 @@ import { CLASS_BY_NAME } from './characters.js';
 import {
   GUARD_TAKEN, STATUS_KEYS, effStats, moveBonus, canMove, canAct, canCast, canCounter, alwaysHit, has, hasBuff, applyStatus, applyBuff, cure,
 } from './status.js';
+import { equipStats, defaultKit, copyKit, fx, fxSum, fxMax, FRUIT_GAIN } from './equipment.js';
 
 export const key = (x, y) => y * COLS + x;
 export const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
@@ -34,28 +35,36 @@ export function tierFor(cls, lvl, gate = PROMOTE_LVL) {
 // 非我军单位的定阶门槛（随难度）
 const gateOf = (diff) => diff?.tierLvl || PROMOTE_LVL;
 
-// 能力：u 需含 cls / tier / lvl，可选 bonus / mult / gradeMod
+// 能力：u 需含 cls / tier / lvl，可选 bonus / mult / gradeMod / equip / fruits
 // HP/MP = 系列基础 + 每级成长 × (等级 + 2 × 已转职次数) + 武将加成（原版公式）；mult 为难度倍率
 // 五项 = BASE5 + 成长档 × 等级 + 加成（关卡数据中的 bonus.agi 视为爆发）
+// 装备加成与果子（每个 +FRUIT_GAIN）直接加在结果上，不乘难度倍率
 export function calcStats(u) {
   const sr = SERIES[u.cls];
   const tier = Math.min(u.tier || 1, sr.tiers.length);
-  const b = u.bonus || {}, m = u.mult || {};
+  const b = u.bonus || {}, m = u.mult || {}, eq = equipStats(u.equip), fr = u.fruits || {};
   const lv = u.lvl + 2 * (tier - 1);
   const s = {
-    hp: Math.round((sr.hp[0] + sr.hp[1] * lv) * (m.hp || 1) + (b.hp || 0)),
-    mp: Math.max(0, Math.round(sr.mp[0] + sr.mp[1] * lv + (b.mp || 0))),
+    hp: Math.round((sr.hp[0] + sr.hp[1] * lv) * (m.hp || 1) + (b.hp || 0)) + (eq.hp || 0),
+    mp: Math.max(0, Math.round(sr.mp[0] + sr.mp[1] * lv + (b.mp || 0)) + (eq.mp || 0)),
   };
   for (const k of STAT5) {
     const add = k === 'burst' ? b.burst ?? b.agi ?? 0 : b[k] || 0;
-    s[k] = Math.round((BASE5 + GRADE[u.gradeMod?.[k] || sr.grow[k]] * u.lvl) * (m[k] || 1) + add);
+    s[k] = Math.round((BASE5 + GRADE[u.gradeMod?.[k] || sr.grow[k]] * u.lvl) * (m[k] || 1) + add) + (eq[k] || 0) + (fr[k] || 0) * FRUIT_GAIN;
   }
   return s;
 }
 
-// diff：难度配置，只作用于敌军
-// 阶级：我军沿用 roster 记录（旧存档缺省为一阶），首次出阵的我军按 15/30 定阶，敌军 / 友军按难度门槛定阶
-export function createUnit(def, saved, diff) {
+// 装备变化（升级、换装）后重算能力，兵力 / 策略值不超过新上限
+export function refreshStats(u) {
+  u.stats = calcStats(u);
+  u.hp = Math.min(u.hp, u.stats.hp);
+  u.mp = Math.min(u.mp, u.stats.mp);
+}
+
+// diff：难度配置，只作用于敌军；equip：我军武将的装备实例副本（kitFrom），缺省时按兵种与等级配默认普通装备
+// 阶级：我军沿用 roster 记录（有 lvl 的成长记录；旧存档缺省为一阶），首次出阵的我军按 15/30 定阶，敌军 / 友军按难度门槛定阶
+export function createUnit(def, saved, diff, equip) {
   const hard = def.faction === 'enemy' && diff;
   const lvl = Math.max(def.lvl, saved?.lvl || 0) + (hard ? diff.lvl : 0);
   let ai = def.ai || 'aggressive';
@@ -65,12 +74,14 @@ export function createUnit(def, saved, diff) {
     ...def,
     ...role,
     lvl,
-    tier: saved ? Math.min(saved.tier || 1, SERIES[role.cls].tiers.length)
+    tier: saved?.lvl ? Math.min(saved.tier || 1, SERIES[role.cls].tiers.length)
       : tierFor(role.cls, lvl, def.faction === 'player' ? PROMOTE_LVL : gateOf(diff)),
     exp: saved?.exp || 0,
     ai,
     status: {},
     buffs: {},
+    equip: equip || defaultKit(role.cls, lvl),
+    fruits: saved?.fruits ? { ...saved.fruits } : null,
     mult: hard ? diff.mult : null,
     acted: false,
     moved: false,
@@ -84,9 +95,10 @@ export function createUnit(def, saved, diff) {
 
 // 读取战斗中存档的单位：兵种以总表 / 登记表为准，缺 tier 时我军视为一阶、其他按等级定阶，能力按新公式重算
 export function restoreUnit(saved, diff) {
-  // 旧存档没有异常 / 增减益：视为无状态
+  // 旧存档没有异常 / 增减益：视为无状态；没有装备：按兵种与等级配默认普通装备（我军武将由 BattleScene 先补上）
   const u = { ...saved, ...roleOf(saved), status: { ...saved.status }, buffs: { ...saved.buffs } };
   u.tier = Math.min(saved.tier || (u.faction === 'player' ? 1 : tierFor(u.cls, u.lvl, gateOf(diff))), SERIES[u.cls].tiers.length);
+  u.equip = saved.equip ? copyKit(saved.equip) : defaultKit(u.cls, u.lvl);
   u.stats = calcStats(u);
   u.hp = Math.min(u.hp, u.stats.hp);
   u.mp = Math.min(u.mp, u.stats.mp);
@@ -139,11 +151,16 @@ export function terrainAt(map, x, y) {
   return TERRAIN[map[y][x]];
 }
 
-// Dijkstra 计算可移动范围；敌对单位阻挡，友方可穿过但不可停留；麻痹 / 混乱时只有原地，强行使移动力 +2
+// 移动力：兵种 + 增益（强行）+ 装备（马、风车轮）
+export const effMove = (u) => classOf(u.cls, u.tier).move + moveBonus(u) + fxSum(u, 'move');
+
+// Dijkstra 计算可移动范围；敌对单位阻挡（赤兔马可穿过），友方可穿过但不可停留；麻痹 / 混乱时只有原地，强行使移动力 +2
+// 的卢：可通行地形的消耗都为 1
 export function reachable(map, units, u) {
   const cls = classOf(u.cls, u.tier);
   if (!canMove(u)) return new Map([[key(u.x, u.y), { x: u.x, y: u.y, cost: 0, prev: null }]]);
-  const move = cls.move + moveBonus(u);
+  const move = effMove(u);
+  const pass = !!fx(u, 'passThrough'), flat = !!fx(u, 'allTerrain');
   const occ = new Map();
   for (const o of units) if (o.alive) occ.set(key(o.x, o.y), o);
   const best = new Map([[key(u.x, u.y), { x: u.x, y: u.y, cost: 0, prev: null }]]);
@@ -155,8 +172,9 @@ export function reachable(map, units, u) {
       const nx = cur.x + dx, ny = cur.y + dy;
       if (!inMap(nx, ny)) continue;
       const o = occ.get(key(nx, ny));
-      if (o && isFoe(o, u)) continue;
-      const c = cur.cost + terrainAt(map, nx, ny).cost[cls.moveType];
+      if (o && isFoe(o, u) && !pass) continue;
+      const tc = terrainAt(map, nx, ny).cost[cls.moveType];
+      const c = cur.cost + (flat && tc < 99 ? 1 : tc);
       if (c > move) continue;
       const k = key(nx, ny);
       if (best.has(k) && best.get(k).cost <= c) continue;
@@ -179,8 +197,9 @@ export function pathTo(node) {
   return path;
 }
 
+// 攻击范围：兵种阶级的范围，装备没羽箭时改为周围两格
 export function attackOffsets(u) {
-  return RANGES[classOf(u.cls, u.tier).range];
+  return RANGES[fx(u, 'range')?.range || classOf(u.cls, u.tier).range];
 }
 
 export function canAttackFrom(u, x, y, target) {
@@ -220,26 +239,42 @@ export function affinity(a, d) {
   return 1;
 }
 
+// 骑兵类（青釭剑加成对象）：骑马的骑兵相克类型，弓骑兵不算
+const isRider = (u) => { const c = classOf(u.cls, u.tier); return c.moveType === 'horse' && c.type === 'horse'; };
+
 // 物理：攻击对防御；命中看双方爆发之差，会心看双方士气之差（系数自行设计，量级与旧公式接近）
 // 能力一律取 effStats（套用增减益）；混乱的目标必中
+// 装备：镜铠使距离 2 格以上的攻击无效（伤害 0）；青釭剑打骑兵类 ×1.5
 export function physDamage(map, a, d) {
+  if (dist(a, d) > 1 && fx(d, 'rangedImmune')) return 0;
   const t = terrainAt(map, d.x, d.y);
   const base = (effStats(a).atk - effStats(d).def * 0.5) * 0.75;
   const lvl = 1 + (a.lvl - d.lvl) * 0.03;
-  return Math.max(5, Math.round(base * lvl * affinity(a, d) * (1 - t.def) * taken(d)));
+  const horse = isRider(d) ? fx(a, 'vsHorse')?.mult || 1 : 1;
+  return Math.max(5, Math.round(base * lvl * affinity(a, d) * horse * (1 - t.def) * taken(d)));
 }
 
+// 倚天剑 / 风神盾：敌人对装备者的命中率降低（在上下限之后扣除）
 export function hitRate(map, a, d) {
   if (alwaysHit(d)) return 100;
   const t = terrainAt(map, d.x, d.y);
-  return Math.round(clamp(92 + (effStats(a).burst - effStats(d).burst) * 0.8 - t.def * 40, 55, 100));
+  return Math.round(clamp(92 + (effStats(a).burst - effStats(d).burst) * 0.8 - t.def * 40, 55, 100)) - fxSum(d, 'hitDown');
 }
 
-export const critRate = (a, d) => Math.round(clamp(4 + (effStats(a).morale - effStats(d).morale) * 0.3, 2, 25));
+// 玉玺：每次攻击都会心；黄金铠：不会被会心一击（优先）
+export function critRate(a, d) {
+  if (fx(d, 'noCrit')) return 0;
+  if (fx(a, 'alwaysCrit')) return 100;
+  return Math.round(clamp(4 + (effStats(a).morale - effStats(d).morale) * 0.3, 2, 25));
+}
 
-export function rollAttack(map, a, d) {
+// 能否反击：未混乱、攻击方没有青龙偃月刀、攻击方在反击范围内
+export const counterOk = (a, d) => canCounter(d) && !fx(a, 'noCounter') && canAttackFrom(d, d.x, d.y, a);
+
+// noCrit：不判定会心（蛇矛穿透到身后的伤害）
+export function rollAttack(map, a, d, noCrit = false) {
   const hit = Math.random() * 100 < hitRate(map, a, d);
-  const crit = hit && Math.random() * 100 < critRate(a, d);
+  const crit = !noCrit && hit && Math.random() * 100 < critRate(a, d);
   const dmg = hit ? Math.round(physDamage(map, a, d) * (0.9 + Math.random() * 0.2) * (crit ? 1.5 : 1)) : 0;
   return { hit, crit, dmg };
 }
@@ -322,7 +357,23 @@ export function spellDamage(map, a, d, spellId) {
   if (sp.elem === 'fire') m *= t.fire || 1;
   if (sp.special === 'drain' && a.cls === 'dancer') m *= 2;
   if (d.cls === 'xiliang') m *= 1.1;
+  // 装备：芭蕉扇 / 五火神焰扇强化对应属性，白银铠减轻受到的策略伤害
+  const up = fx(a, 'elemUp');
+  if (up && up.elem === sp.elem) m *= up.mult;
+  m *= fx(d, 'spellTaken')?.mult || 1;
   return Math.max(1, Math.round(FORMULA[sp.formula](spellX(a, d), effStats(a).int >= effStats(d).int) * m));
+}
+
+// 策略消耗：白羽扇减半（向上取整）
+export const spellCost = (u, id) => (fx(u, 'mpHalf') ? Math.ceil(SPELLS[id].mp / 2) : SPELLS[id].mp);
+
+// 可使用的策略：已掌握的策略；装备遁甲天书时加上相邻友军已掌握的策略
+export function usableSpells(units, u) {
+  const own = knownSpells(u);
+  if (!fx(u, 'copySpells')) return own;
+  const extra = new Set();
+  for (const o of units) if (o !== u && o.alive && !isFoe(o, u) && dist(o, u) === 1) knownSpells(o).forEach((id) => extra.add(id));
+  return [...own, ...[...extra].filter((id) => !own.includes(id))];
 }
 
 // 谍报吸取的策略值：(L+Δ+1)/2+12，不超过目标现有策略值
@@ -333,8 +384,9 @@ export function spellHit(a, d, spellId) {
   const sp = SPELLS[spellId];
   if (sp.target !== 'foe' || alwaysHit(d)) return 100;
   const ea = effStats(a), ed = effStats(d);
-  const base = clamp(90 + (ea.int + ea.morale - ed.int - ed.morale) * 0.3, 50, 100);
-  return Math.round(base * (sp.hitMod || 1));
+  // 装备：七星剑提高、白银盾 / 风神盾降低成功率
+  const base = clamp(90 + (ea.int + ea.morale - ed.int - ed.morale) * 0.3, 50, 100) + fxSum(a, 'spellHitUp') - fxSum(d, 'spellHitDown');
+  return Math.round(clamp(base, 0, 100) * (sp.hitMod || 1));
 }
 
 // 回复量（research P3）：小补给 / 援队 40 + 精神 / 10；大补给 / 援军 / 输送 70 + 精神 / 2
@@ -372,7 +424,7 @@ export function resolveSpell(map, units, a, spellId, t, rng = Math.random) {
 // 写入策略结算：扣施策者策略值，依次套用伤害 / 回复 / 异常 / 增减益 / 解除 / 再行动；记录实际解除的异常与作用的能力项
 export function applySpell(res) {
   const a = res.caster;
-  a.mp = Math.max(0, a.mp - SPELLS[res.spellId].mp);
+  a.mp = Math.max(0, a.mp - spellCost(a, res.spellId));
   for (const e of res.effects) {
     const v = e.u;
     if (!e.hit) continue;
@@ -395,6 +447,18 @@ export function applySpell(res) {
 
 export function expFor(a, d, killed) {
   return Math.max(2, Math.min(60, 10 + (d.lvl - a.lvl) * 3 + (killed ? 25 : 0)));
+}
+
+// 阶段开始时的装备效果：回复兵力（凤凰羽衣 / 青囊书不叠加，取最高）、回复策略值、解除异常；
+// 返回 { heal, mp, cured, exp, weapon, armor }，经验类（孙子兵法、六韬、三略）由场景按动画流程发放
+export function tickGear(u) {
+  const out = { heal: 0, mp: 0, cured: [], exp: fxSum(u, 'expPerTurn'), weapon: fxSum(u, 'weaponExpPerTurn'), armor: fxSum(u, 'armorExpPerTurn') };
+  const rate = fxMax(u, 'healEachTurn', 'rate');
+  if (rate && u.hp < u.stats.hp) { out.heal = Math.min(u.stats.hp - u.hp, Math.round(u.stats.hp * rate)); u.hp += out.heal; }
+  const mp = fxSum(u, 'mpEachTurn');
+  if (mp && u.mp < u.stats.mp) { out.mp = Math.min(u.stats.mp - u.mp, mp); u.mp += out.mp; }
+  if (fx(u, 'cureEachTurn')) out.cured = cure(u, 'all');
+  return out;
 }
 
 // ---------- 敌军/友军 AI ----------
@@ -485,7 +549,7 @@ function spellScore(map, units, u, id, c, foes) {
 // AI 可用的策略：已掌握、策略值足够、未被禁咒；回归不由 AI 使用
 export function castable(u) {
   if (!canCast(u)) return [];
-  return knownSpells(u).filter((id) => u.mp >= SPELLS[id].mp && SPELLS[id].special !== 'again');
+  return knownSpells(u).filter((id) => u.mp >= spellCost(u, id) && SPELLS[id].special !== 'again');
 }
 
 export function planAI(map, units, u) {
@@ -519,7 +583,7 @@ export function planAI(map, units, u) {
     for (const f of foes) {
       if (!canAttackFrom(u, tile.x, tile.y, f)) continue;
       const d = physDamage(map, u, f);
-      const counter = canCounter(f) && canAttackFrom(f, f.x, f.y, self) && d < f.hp ? physDamage(map, f, self) : 0;
+      const counter = counterOk(self, f) && d < f.hp ? physDamage(map, f, self) : 0;
       const focus = u.focus === f.id ? 300 : 0;
       consider(d + (d >= f.hp ? 80 : 0) + (f.leader ? 15 : 0) + focus - counter * 0.4 + tdef, { tile, type: 'attack', target: f });
     }

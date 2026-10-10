@@ -769,10 +769,10 @@ export default [
         { who: '旁白', text: '吕布弃濮阳东走，投奔徐州刘备。兖州复归曹操所有。' },
         { who: '田氏', side: 'ally', text: '小人先前附逆，今日愿听曹公发落。' },
         { who: '曹操', side: 'player', text: '……', choices: [
-          { text: '你既有悔过之心，此番便饶你一命。', reply: [
+          { text: '你既有悔过之心，此番便饶你一命。', flag: 'puyang_merchant_spared', reply: [
             { who: '田氏', side: 'ally', text: '谢曹公不杀之恩！此乃吕布遗下的宝弓，献与曹公。' },
           ] },
-          { text: '首鼠两端之徒，没其家财以充军资！', reply: [
+          { text: '首鼠两端之徒，没其家财以充军资！', flag: 'puyang_merchant_fined', reply: [
             { who: '旁白', text: '曹操抄没田氏家财，得金三千，以充军资。' },
           ] },
         ] },

@@ -36,6 +36,7 @@ export const RANGES = {
   line2: [[2, 0], [-2, 0], [0, 2], [0, -2]], // 直线 2 格
   ring4: ring(4, 4), // 距离 4 的一圈
   r45: ring(4, 5), // 距离 4~5
+  r12: ring(1, 2), // 周围两格内 12 格（装备没羽箭的贼兵）
   none: [],
 };
 // 旧名别名（移动范围计算等仍使用 melee）
@@ -139,6 +140,13 @@ export const ITEMS = {
   panacea: { name: '万能药', desc: '解除全部异常', cure: 'all' },
   // 印绶：我军 15 级（一阶）/ 30 级（二阶）以上可用于转职
   seal: { name: '印绶', desc: '转职（15 / 30 级）', promote: true },
+  // 果子：3 级普通装备卖出获得，只能在整备时使用（fruit 为对应能力，exp 为经验果）
+  fruit_exp: { name: '经验果', desc: '经验 +50（整备时使用）', fruit: 'exp' },
+  fruit_atk: { name: '武力果', desc: '攻击 +2（整备时使用）', fruit: 'atk' },
+  fruit_int: { name: '智力果', desc: '精神 +2（整备时使用）', fruit: 'int' },
+  fruit_def: { name: '统率力果', desc: '防御 +2（整备时使用）', fruit: 'def' },
+  fruit_burst: { name: '敏捷果', desc: '爆发 +2（整备时使用）', fruit: 'burst' },
+  fruit_morale: { name: '好运果', desc: '士气 +2（整备时使用）', fruit: 'morale' },
 };
 // 印绶过关奖励：从第 16 关（徐州入侵战）起每关胜利 +1（原版自此关起有售，商店由后续子任务实现）
 export const SEAL_FROM = 'xuzhou_ruqin';
