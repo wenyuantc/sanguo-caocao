@@ -14,6 +14,7 @@ src/
 ├── data.js             # 静态规则表：TERRAIN、RANGES、SERIES（兵种系列与阶级）/ classOf、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
 ├── spells.js           # 策略表 SPELLS 与各系列习得表 SPELL_LEARN（纯数据，data.js 再导出）
 ├── status.js           # 异常状态与增减益：effStats、tickStatus、各种判定（纯函数）
+├── equipment.js        # 装备与宝物：EQUIP / KINDS、装备属性与特效查询（fx/fxSum）、初始装备、奖励 REWARDS / 掉落 DROPS / 商店 SHOP_UNLOCK（纯函数）
 ├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、策略结算、AI 决策（不依赖 Phaser）
 ├── actions.js          # 作用于场景的异步战斗行动：doAttack/doSpell/doItem/killUnit/runAI
 ├── stageMeta.js        # normalizeStage、PLANNED_IDS、FIRST_STAGE、ENDINGS（不依赖 Phaser，校验脚本也会用）
@@ -24,10 +25,11 @@ src/
 ├── characters.js       # 按中文名登记的外形表 BASE + 合并 extra_a..f；兵种登记 CLASS_BY_NAME；颜色工具函数
 ├── characters/extra_<组>.js  # 各组补充的武将外形（default 导出对象）
 ├── generals.js         # 武将总表 GENERALS（默认兵种、bonus、阵亡/离队标记、joinAt），纯数据
-├── deploy.js           # 出阵推导 planDeploy / buildPlayerDefs（纯函数，不依赖 Phaser）
+├── deploy.js           # 出阵推导 planDeploy / buildPlayerDefs、商店货架 shopStock（纯函数，不依赖 Phaser）
 ├── saves.js            # localStorage 存档位/自动存档、导出导入、applyLoad
 ├── saveMenu.js         # 存档/读档弹窗 UI（openSaveMenu）
-├── prep.js             # 出阵整备弹窗 UI（openPrep）
+├── prep.js             # 整备弹窗 UI（openPrep）：阵容 / 装备 / 道具 / 商店四页
+├── rewardPanel.js      # 过关战果弹窗（openRewards，返回 Promise）
 ├── infoPanel.js        # 部队情报弹窗 UI（openInfo）
 ├── ui.js               # panel/text/button/portrait/DialogBox/floatText/wait
 ├── hud.js              # class Hud：顶栏、右侧面板、日志、横幅
@@ -50,7 +52,7 @@ GQ.md                        # 与 1998 原版对照的关卡清单
 ## 依赖方向
 
 ```
-spells.js → data.js → status.js、config.js、stageMeta.js        （底层表，不导入其他游戏代码）
+spells.js → data.js → status.js、equipment.js、config.js、stageMeta.js   （底层表，不导入其他游戏代码）
         ↑
 logic.js（规则）   stages/*.js（数据）   characters.js（外形）
         ↑
@@ -59,9 +61,9 @@ actions.js、ui.js、hud.js、unitView.js、*Fx.js、heroSprites.js、portraits.
 scenes/*.js
 ```
 
-- `logic.js` 只导入 `config.js`、`data.js`、`status.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
+- `logic.js` 只导入 `config.js`、`data.js`、`status.js`、`equipment.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
   （AI 决策和 HUD 攻击预测调用的是同一批函数）。
-- `stageMeta.js`、`stages/*.js`、`spells.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`deploy.js` 必须能被 Node 直接导入：
+- `stageMeta.js`、`stages/*.js`、`spells.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`equipment.js`、`deploy.js` 必须能被 Node 直接导入：
   `scripts/validate-stages.mjs` 会直接 import 它们。这些文件里不要导入 `phaser`，也不要访问 `window`/`localStorage`。
 - 只有场景负责把各模块串起来。
 
@@ -77,6 +79,8 @@ scenes/*.js
 | 新策略 / 习得调整 | `src/spells.js` 的 `SPELLS` / `SPELL_LEARN`；新效果类型在 `logic.js` 的 `resolveSpell` / `applySpell` 与 `spellFx.js` 的 `hitFx` 中补充 |
 | 新异常 / 增减益 | `src/status.js`（`STATUS`、`tickStatus`、判定函数），图标在 `unitView.updateStatus` |
 | 新规则或公式 | `src/logic.js` 中导出的纯函数 |
+| 新装备 / 宝物特效 | `src/equipment.js` 的 `EQUIP`（新特效类型补 `FX_DESC`，在 `logic.js` / `actions.js` 用 `fx` / `fxSum` 读取）；图标按种类在 `spellFx.js` 的 `drawGear` |
+| 关卡奖励 / 掉落 / 商店上新 | `src/equipment.js` 的 `REWARDS` / `DROPS` / `SHOP_UNLOCK`（校验脚本检查引用） |
 | 新的带动画的战斗行动 | `src/actions.js`（async，接收场景 `s`） |
 | 新的可复用控件 | `src/ui.js` 中的工厂函数 `(scene, x, y, ...)` |
 | 新画面 | `src/scenes/<Name>Scene.js`，并在 `main.js` 的 scene 数组中注册 |

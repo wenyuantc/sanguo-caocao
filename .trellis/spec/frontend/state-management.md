@@ -12,13 +12,15 @@
 | Key | 结构 | 写入位置 |
 |-----|------|----------|
 | `difficulty` | `'normal' \| 'hard' \| 'hell'` | `TitleScene.chooseDifficulty`、`applyLoad` |
-| `roster` | `{ [我军单位id]: { lvl, exp, cls, tier } }`（`tier` 阶级 1~3，旧存档缺失时 `applyLoad` 补为 1；`cls` 仅作记录，兵种以武将总表为准） | `BattleScene.victory`、`applyLoad` |
+| `roster` | `{ [我军单位id]: { lvl, exp, cls, tier, equip?: { weapon, armor, acc }（背包 uid 或 null）, fruits?: { [能力]: 个数 } } }`（`tier` 阶级 1~3，旧存档缺失时 `applyLoad` 补为 1；`cls` 仅作记录，兵种以武将总表为准）。**只有带 `lvl` 的条目才算成长记录**：首次出阵前 `kitFor` / 整备可能先写入只有 `equip` / `fruits` 的条目，`createUnit` 与 `planDeploy` 用 `saved?.lvl` 判断是否沿用 `tier` | `BattleScene.victory`（合并写入，保留 `equip` / `fruits`）、`BattleScene.kitFor`、整备（`prep.js`）、`applyLoad` |
 | `joined` | `[武将id]`，已加入的武将（仅 `generals.js` 中的武将） | 新游戏（`[]`）、`BattleScene.victory`、`applyLoad`（旧存档缺失时用 `roster` 的键推导） |
 | `items` | `{ [道具id]: 数量 }`（id 见 data-contracts 的 `ITEMS`；`seal` 印绶从 `SEAL_FROM` 关起每关胜利 +1，另按关序轮流获得一件 `LOOT` 战利品） | 新游戏、`victory`（加上 `difficulty.reward`、印绶与战利品）、`applyLoad`（`migrateItems` 迁移旧道具） |
 | `red` | 整数，红色指数 | `applyChoice`、`victory`、`applyLoad` |
 | `flags` | `{ [标记名]: true }` | `setFlag`、`applyLoad` |
+| `inventory` | `[{ uid, id, lvl, exp }]`，全部持有的装备实例（含已装备的；`id` 见 `EQUIP`，宝物唯一） | 新游戏（`[]`）、`kitFor`（补发初始装备）、整备（买卖）、`victory`（写回熟练度并加入掉落与奖励）、`applyLoad`（缺失为 `[]`） |
+| `gold` | 整数，军资金 | 新游戏（0）、整备商店、`victory`（`goldFor(曹操等级)` + 奖励金钱）、`applyLoad`（缺失为 0） |
 
-- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部六个** key。
+- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部八个** key。
   新增 key 时，要在这里重置，并在 `saves.applyLoad` 中恢复。
 - 写入时一律写副本：`this.registry.set('flags', { ...this.flags })`、`items = { ...this.items }`。
 
@@ -45,6 +47,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 - 单位是**可变的普通对象**；逻辑直接修改 `u.x/u.y/u.hp/u.mp/u.alive/u.acted/u.ai`，再调用对应的视图方法。
   没有事件总线或观察者。
 - 单位从不从 `units` 中移除；撤退/撤离只设置 `alive = false`（以及 `escaped = true`）。处处用 `u.alive` 过滤。
+- 装备：`create()` 复制 `this.inventory` / `this.gold`；我军武将的单位持有装备实例副本 `u.equip`（`kitFrom`），没有装备记录时 `kitFor` 按 `issueKit` 生成初始装备并**立即**写入 registry；敌军 / 友军 / 临时成员用 `defaultKit`（无 uid）。战斗中的熟练度、掉落（`dropLoot` → `this.gained`）只改副本，胜利时按 uid 写回；败北重开时丢弃。整备中的换装、吃果子、买卖立即写入 registry（重新挑战时保留）。
 - 我军成长只在胜利时写入 `roster`（`{ lvl, exp, cls, tier }`），同时把本关我军武将并入 `joined`。败北/重新挑战会按 registry 状态重开本关
   （`scene.start('Battle', { stage: this.stageId })`）。
 - 阶段顺序：我军 → 友军 → 敌军 → `turn += 1`；`survive` 和 `turns` 回合上限在 `nextPhase` 中检查。
@@ -57,14 +60,15 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 | `sanguo-save` | 单个自动存档，每关胜利后由 `victory()` 写入，`kind: 'stage'` |
 
 - 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、回合、道具、红色指数、标记、roster、
-  `joined`、`firedEvents`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
+  `joined`、`firedEvents`、`inventory`、`gold`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` / `equip` / `fruits` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
   （旧存档单位缺 `tier` 时我军视为一阶、其他按难度门槛定阶，兵种按武将总表 / 登记表覆盖）。
   不要持久化派生数据或 Phaser 对象。
 - 只有在我军阶段、`state` 为 `'idle'`/`'move'` 时才允许存档（`openSave`）。
 - `EndingScene` 会调用 `clearAuto()`。
 - 导出/导入的文件格式为 `{ app: 'sanguo-caocao-save', version: 1, type: 'all' | 'single', ... }`；
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。
-- 自动存档（`writeAuto`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`。
+- 自动存档（`writeAuto`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`。
+- 兼容没有装备的旧存档：`applyLoad` 把 `inventory` 设为 `[]`、`gold` 设为 0；进入战斗时 `kitFor` 按原版规则补发初始装备；战斗中存档里没有 `equip` 的我军武将单位同样补发。`validSave` 不要求这两个字段。
 - `getStage(id)` 仍通过 `LEGACY`（`stageMeta.js`）兼容旧存档中的数字关卡下标；导入校验 `validSave`
   的关卡字段同样接受非空字符串 id 或非负整数。
 - 兼容旧道具：`migrateItems` 只处理带 `wheat` 键的旧格式（麦 → 米 `rice`，旧酒 `wine`（策略 +20）→ 神秘水 `water`）；新格式的 `wine` 是神秘酒，不再迁移。

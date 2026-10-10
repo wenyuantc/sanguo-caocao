@@ -123,3 +123,10 @@ export default [{
 - 只校验本组：`node scripts/validate-stages.mjs <组字母>`（例如 `node scripts/validate-stages.mjs c`），必须 0 错误，警告尽量消除。
 - 其他组同时在编辑各自文件，不要运行 `vite build`，也不要修改本组以外的任何文件。
 - `src/characters/extra_<组>.js` 每次都用一次性完整写入，保证任何时刻语法都正确（其他组的校验也会导入它）。
+
+## 12. 装备奖励、掉落与商店（`src/equipment.js`，整合阶段维护，各组不要改）
+- 关卡奖励 `REWARDS[关卡id]`：`[{ item?: 装备id | [依次取第一件未拥有的], gold?, ifFlag?, unlessFlag?, annihilate?: true|false, maxTurn?, alive?: 单位id, via?: 胜利条件类型, outcome?, note? }]`，胜利时（结尾对白之后）按条件发放；宝物只能拥有一件，已有时跳过。
+- 敌将掉落 `DROPS[关卡id] = { 敌军单位id: 装备id | [...] }`：击破时立即获得（败北重开则作废）。改动敌将 id 时同步修改这里。
+- 商店上新 `SHOP_UNLOCK[关卡id] = [商品]`：本关及之前（沿 next 能走到本关）上架过的商品都在整备“商店”页出售。
+- 奖励条件用到的剧情标记必须由某关设置（事件 `setFlag`、选项 `flag` 或 `victoryFlags`），例如濮阳之战（三）结尾选项的 `puyang_merchant_spared` / `puyang_merchant_fined`。
+- 校验脚本检查：装备数量（普通 37 / 宝物 50）、以上三表引用的关卡 / 装备 / 敌将 / 剧情标记 / 胜利方式是否存在。
