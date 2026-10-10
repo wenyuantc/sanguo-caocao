@@ -14,6 +14,7 @@ import { CHARACTERS, CLASS_BY_NAME } from '../src/characters.js';
 import { GENERALS } from '../src/generals.js';
 import { roleOf } from '../src/logic.js';
 import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
+import { EQUIP, REWARDS, DROPS, SHOP_UNLOCK, STARTER_TREASURES, ITEM_PRICE, gearDesc } from '../src/equipment.js';
 
 const COLS = 18, ROWS = 13;
 const errors = [], warns = [];
@@ -220,6 +221,58 @@ for (const [id, d] of Object.entries(DIFFICULTIES)) {
   for (const k of [...Object.keys(d.items), ...Object.keys(d.reward)]) if (!ITEMS[k]) errors.push(`[difficulty] ${id} 道具不存在：${k}`);
 }
 for (const k of LOOT) if (!ITEMS[k]) errors.push(`[loot] 道具不存在：${k}`);
+
+// 装备：数量（普通 37 / 宝物 50）、可装备系列、特效说明、射程；奖励 / 掉落 / 商店引用的关卡与物品
+const eqErr = (m) => errors.push(`[equipment] ${m}`);
+const eqList = Object.values(EQUIP);
+const nNormal = eqList.filter((e) => !e.treasure).length, nTreasure = eqList.length - nNormal;
+if (nNormal !== 37 || nTreasure !== 50) eqErr(`装备数量应为普通 37 / 宝物 50，实际 ${nNormal} / ${nTreasure}`);
+for (const [id, e] of Object.entries(EQUIP)) {
+  for (const c of e.series) if (!SERIES[c]) eqErr(`${id} 可装备系列不存在：${c}`);
+  for (const f of e.effects) if (f.type === 'range' && !RANGES[f.range]) eqErr(`${id} 射程不存在：${f.range}`);
+  try { gearDesc(id, 1); } catch { eqErr(`${id} 特效缺少说明`); }
+  if (e.sellFruit && !ITEMS[e.sellFruit]?.fruit) eqErr(`${id} 卖出得到的果子不存在：${e.sellFruit}`);
+}
+const gearIds = (item) => (Array.isArray(item) ? item : [item]);
+const setFlags = new Set(STAGES.flatMap((s) => {
+  const out = [...(s.victoryFlags || []).map((r) => r.flag), ...s.events.map((e) => e.setFlag)];
+  const scan = (lines) => (lines || []).forEach((l) => (l.choices || []).forEach((c) => { out.push(c.flag); scan(c.reply); }));
+  [s.prologue, s.epilogue, ...Object.values(s.epilogues || {}), ...s.events.flatMap((e) => [e.dialog, e.after])].forEach(scan);
+  return out;
+}).filter(Boolean));
+for (const [sid, list] of Object.entries(REWARDS)) {
+  if (!PLANNED_IDS.includes(sid)) eqErr(`奖励关卡不存在：${sid}`);
+  for (const r of list) {
+    if (r.item) gearIds(r.item).forEach((id) => EQUIP[id] || eqErr(`${sid} 奖励装备不存在：${id}`));
+    if (!r.item && !r.gold) eqErr(`${sid} 奖励条目没有装备或金钱`);
+    const s = getStage(sid);
+    if (!s || groups.length) continue;
+    for (const f of [r.ifFlag, r.unlessFlag]) if (f && !setFlags.has(f)) eqErr(`${sid} 奖励条件的剧情标记没有任何关卡设置：${f}`);
+    if (r.alive && !s.units.some((u) => u.id === r.alive)) eqErr(`${sid} 奖励条件的单位不在关卡中：${r.alive}`);
+    if (r.via && !s.victory.some((c) => c.type === r.via)) eqErr(`${sid} 奖励条件的胜利方式不存在：${r.via}`);
+  }
+}
+for (const [sid, map] of Object.entries(DROPS)) {
+  if (!PLANNED_IDS.includes(sid)) eqErr(`掉落关卡不存在：${sid}`);
+  const s = getStage(sid);
+  for (const [uid, item] of Object.entries(map)) {
+    gearIds(item).forEach((id) => EQUIP[id] || eqErr(`${sid} 掉落装备不存在：${id}`));
+    const all = s ? [...s.units, ...s.events.flatMap((e) => e.units || [])] : [];
+    if (s && !all.some((u) => u.id === uid && u.faction === 'enemy')) eqErr(`${sid} 掉落的敌军单位不在关卡中：${uid}`);
+  }
+}
+for (const [sid, goods] of Object.entries(SHOP_UNLOCK)) {
+  if (!PLANNED_IDS.includes(sid)) eqErr(`商店上架关卡不存在：${sid}`);
+  for (const id of goods) {
+    if (EQUIP[id]?.treasure) eqErr(`${sid} 商店不能出售宝物：${id}`);
+    else if (!EQUIP[id] && !ITEM_PRICE[id]) eqErr(`${sid} 商品不存在或没有价格：${id}`);
+  }
+}
+for (const [gid, list] of Object.entries(STARTER_TREASURES)) {
+  if (!GENERALS[gid]) eqErr(`初始宝物的武将不存在：${gid}`);
+  for (const id of list) if (!EQUIP[id]?.treasure) eqErr(`${gid} 初始宝物不存在：${id}`);
+}
+for (const id of Object.keys(ITEM_PRICE)) if (!ITEMS[id]) eqErr(`有价格的道具不存在：${id}`);
 
 console.log(`共 ${STAGES.length} 关`);
 warns.forEach((w) => console.log('警告', w));
