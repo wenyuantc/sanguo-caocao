@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/data-contracts.md", "reason": "规则表与单位对象契约，calcStats 与预测函数的约束"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "新增持久化状态需进入 snapshot、writeAuto、applyLoad 与新游戏重置"}
+{"file": ".trellis/spec/frontend/scene-and-rendering.md", "reason": "程序化贴图、特效与覆盖层 UI 写法"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新模块放置与依赖方向（logic 保持纯函数）"}
+{"file": ".trellis/tasks/10-10-core-systems/research/equipment.md", "reason": "87 种装备与 50 宝物的效果、取得条件、升级规则、果子、商店上新与金钱"}
+{"file": ".trellis/tasks/10-10-core-systems/research/status.md", "reason": "宝物附带的异常状态与解除"}

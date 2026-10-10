@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "代码风格、禁止写法、验证命令与评审清单"}
+{"file": ".trellis/tasks/10-10-core-systems/research/weather.md", "reason": "天气种类、类别×序号表、每回合变化算法、各关开局天气、天气策略与四神条件"}

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "registry 新增 joined、roster.cls，存档快照/自动存档/读档/新游戏重置的规则"}
+{"file": ".trellis/spec/frontend/data-contracts.md", "reason": "单位对象与 createUnit 契约，规则函数保持纯函数"}
+{"file": ".trellis/spec/frontend/scene-and-rendering.md", "reason": "整备与情报覆盖层的 UI 工厂函数、显示层级、监听清理"}
+{"file": ".trellis/spec/frontend/stage-data.md", "reason": "关卡单位、事件、对白结构，用于推导必须出阵与预留武将"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新模块 generals.js / deploy.js / prep.js / infoPanel.js 的放置与依赖方向"}
+{"file": "docs/STAGE_GUIDE.md", "reason": "我军武将表与加入时间、剧情标记名，构建武将总表的来源"}

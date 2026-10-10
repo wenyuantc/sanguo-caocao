@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/scene-and-rendering.md", "reason": "Phaser 场景、程序化贴图、覆盖层与异步动画流程"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "新持久化状态与存档规则"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新模块放置与依赖方向"}
+{"file": ".trellis/tasks/10-10-core-systems/research/maps.md", "reason": "原版地图尺寸、30 种地形、恢复地形、策略地形类别、地形规则表"}
+{"file": ".trellis/spec/frontend/stage-data.md", "reason": "关卡结构与 events 不可重排等约束"}

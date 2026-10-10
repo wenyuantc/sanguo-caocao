@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/scene-and-rendering.md", "reason": "Phaser 场景、程序化贴图、覆盖层与异步动画流程"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "新持久化状态与存档规则"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新模块放置与依赖方向"}
+{"file": ".trellis/tasks/10-10-core-systems/research/weather.md", "reason": "天气种类、类别×序号表、每回合变化算法、各关开局天气、天气策略与四神条件"}
+{"file": ".trellis/tasks/10-10-core-systems/research/spells.md", "reason": "火系与四神策略定义"}
