@@ -32,9 +32,11 @@ export class Hud {
     this.weatherIcon = scene.add.graphics().setDepth(51);
     this.weatherText = text(scene, 998, 11, '', 16, '#f1e3c2', FONT).setDepth(51);
     this.weatherInfo = '';
+    // 移开时恢复原有内容（菜单说明、目标提示不能被清空）
+    let prev = '';
     scene.add.zone(970, 4, 76, 32).setOrigin(0).setDepth(52).setInteractive()
-      .on('pointerover', () => this.forecast(this.weatherInfo))
-      .on('pointerout', () => this.forecast(''));
+      .on('pointerover', () => { prev = this.forecastText.text; this.forecast(this.weatherInfo); })
+      .on('pointerout', () => this.forecast(prev));
 
     // 右侧面板
     panel(scene, PANEL_X + 4, MAP_Y + 4, PW - 8, HEIGHT - MAP_Y - 8).setDepth(50);
