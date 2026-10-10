@@ -98,6 +98,17 @@ const BASE = {
   献帝: { hat: 'emperor', young: true, robe: true, robeColor: '#e8c040', brow: 0.02 },
 };
 
+// 兵种登记：敌军 / 友军按名字指定原版兵种系列（覆盖关卡数据中的兵种，同时影响外形）
+// 我军武将的兵种以 generals.js 为准；与总表同名的敌将（如张辽、张郃、贾诩）也沿用总表兵种（见 logic.roleOf）
+export const CLASS_BY_NAME = {
+  吕布: 'xiliang', 马超: 'xiliang', 马腾: 'xiliang', 马岱: 'xiliang', 董卓: 'xiliang', 华雄: 'xiliang', 高顺: 'xiliang',
+  周瑜: 'dudu', 陆逊: 'dudu',
+  诸葛亮: 'sorcerer', 孔明幻影: 'sorcerer', 魔王孔明: 'sorcerer',
+  甘宁: 'pirate', 周泰: 'pirate',
+  袁绍: 'lord', 刘备: 'lord', 孙坚: 'lord', 孙策: 'lord', 孙权: 'lord',
+  献帝: 'emperor', 粮草车: 'transport',
+};
+
 export const CHARACTERS = { ...BASE, ...extraA, ...extraB, ...extraC, ...extraD, ...extraE, ...extraF };
 export const getCharacter = (name) => CHARACTERS[name];
 

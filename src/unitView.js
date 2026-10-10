@@ -27,11 +27,33 @@ export class UnitView {
     tag.fillStyle(col, 1).fillRoundedRect(tx, -24, 15, 15, 3);
     tag.lineStyle(1, unit.leader ? COLORS.gold : 0xf1e3c2, 1).strokeRoundedRect(tx, -24, 15, 15, 3);
     const name = scene.add.text(tx + 7.5, -16.5, unit.mark || unit.name[0], { fontFamily: FONT, fontSize: '12px', color: '#fff8e6' }).setOrigin(0.5);
-    this.body.add([g, this.sprite, tag, name]);
+    // 阶级标记：姓名牌下方的金色菱形（二阶 1 个，三阶 2 个）
+    this.tagX = tx;
+    this.tierMark = scene.add.graphics();
+    this.body.add([g, this.sprite, tag, name, this.tierMark]);
+    this.drawTier();
     this.hpBar = scene.add.graphics();
     this.c.add([this.body, this.hpBar]);
     this.updateHp();
     this.idle = scene.tweens.add({ targets: this.body, y: -2, yoyo: true, repeat: -1, duration: 600 + Math.random() * 300, ease: 'Sine.easeInOut' });
+  }
+
+  drawTier() {
+    const g = this.tierMark.clear();
+    const n = (this.unit.tier || 1) - 1;
+    for (let i = 0; i < n; i++) {
+      const cx = this.tagX + 7.5 + (i - (n - 1) / 2) * 7, cy = -5;
+      const pts = [{ x: cx, y: cy - 3 }, { x: cx + 3, y: cy }, { x: cx, y: cy + 3 }, { x: cx - 3, y: cy }];
+      g.fillStyle(0xffd36a, 1).fillPoints(pts, true);
+      g.lineStyle(1, 0x5a3a10, 1).strokePoints(pts, true);
+    }
+  }
+
+  // 转职后更新外形与阶级标记
+  refresh() {
+    this.sprite.setTexture(unitTexture(this.scene, this.unit));
+    this.drawTier();
+    this.updateHp();
   }
 
   // 兵力条平滑过渡

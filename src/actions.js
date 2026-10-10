@@ -1,10 +1,10 @@
-import { SPELLS, ITEMS } from './data.js';
+import { SPELLS, ITEMS, classOf } from './data.js';
 import {
-  canAttackFrom, rollAttack, spellDamage, spellHit, healAmount, expFor, levelUp, planAI, reachable, pathTo, key, terrainAt,
+  canAttackFrom, rollAttack, spellDamage, spellHit, healAmount, expFor, levelUp, promote, planAI, reachable, pathTo, key, terrainAt,
 } from './logic.js';
 import { tileCenter } from './unitView.js';
 import { floatText, wait } from './ui.js';
-import { castFx, spellFx, itemFx, deathFx } from './spellFx.js';
+import { castFx, spellFx, itemFx, deathFx, promoteFx } from './spellFx.js';
 import { playAttack } from './attackFx.js';
 
 export async function doAttack(s, a, d) {
@@ -83,6 +83,11 @@ export async function doItem(s, a, itemId, t) {
   s.items[itemId] -= 1;
   s.hud.setItems(s.items);
   s.hud.log(`${a.name} 对 ${t.name} 使用了「${it.name}」`);
+  if (it.promote) {
+    await doPromote(s, t);
+    await gainExp(s, a, 6);
+    return;
+  }
   await itemFx(s, a, itemId, t);
   const p = tileCenter(t.x, t.y);
   if (it.hp) {
@@ -100,6 +105,16 @@ export async function doItem(s, a, itemId, t) {
   await gainExp(s, a, 6);
 }
 
+// 印绶转职：升阶、兵力策略回满、换装特效与日志
+async function doPromote(s, t) {
+  const from = classOf(t.cls, t.tier);
+  const { diff, learned } = promote(t);
+  const to = classOf(t.cls, t.tier);
+  await promoteFx(s, t, `转职·${to.name}`, () => s.views.get(t).refresh());
+  s.hud.log(`★ ${t.name} 由${from.name}转职为${to.name}（兵力+${diff.hp} 策略+${diff.mp} 移动${from.move}→${to.move}）`);
+  if (learned.length) s.hud.log(`${t.name} 习得策略：${learned.map((id) => SPELLS[id].name).join('、')}`);
+}
+
 async function gainExp(s, u, amt) {
   if (!u.alive || u.faction !== 'player') return;
   u.exp += amt;
@@ -108,7 +123,7 @@ async function gainExp(s, u, amt) {
     const diff = levelUp(u);
     const p = tileCenter(u.x, u.y);
     floatText(s, p.x, p.y - 30, `升级！Lv${u.lvl}`, '#ffe08a', 26);
-    s.hud.log(`★ ${u.name} 升至 ${u.lvl} 级（武力+${diff.atk} 防御+${diff.def} 兵力+${diff.hp}）`);
+    s.hud.log(`★ ${u.name} 升至 ${u.lvl} 级（攻击+${diff.atk} 防御+${diff.def} 兵力+${diff.hp}）`);
     s.views.get(u).updateHp();
     await wait(s, 600);
   }

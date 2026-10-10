@@ -11,7 +11,7 @@ index.html              # <div id="game">，加载 /src/main.js
 src/
 ├── main.js             # new Phaser.Game({ scene: [TitleScene, BattleScene, EndingScene] })
 ├── config.js           # TILE/COLS/ROWS/MAP_X/MAP_Y/WIDTH/HEIGHT、字体、COLORS、RES + hiDpi()
-├── data.js             # 静态规则表：TERRAIN、RANGES、CLASSES、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
+├── data.js             # 静态规则表：TERRAIN、RANGES、SERIES（兵种系列与阶级）/ classOf、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
 ├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、AI 决策（不依赖 Phaser）
 ├── actions.js          # 作用于场景的异步战斗行动：doAttack/doSpell/doItem/killUnit/runAI
 ├── stageMeta.js        # normalizeStage、PLANNED_IDS、FIRST_STAGE、ENDINGS（不依赖 Phaser，校验脚本也会用）
@@ -19,7 +19,7 @@ src/
 ├── stages/
 │   ├── helpers.js      # 单位工厂 P / E / A
 │   └── a.js … f.js     # 每组关卡一个文件（A–F），default 导出关卡对象数组
-├── characters.js       # 按中文名登记的外形表 BASE + 合并 extra_a..f；颜色工具函数
+├── characters.js       # 按中文名登记的外形表 BASE + 合并 extra_a..f；兵种登记 CLASS_BY_NAME；颜色工具函数
 ├── characters/extra_<组>.js  # 各组补充的武将外形（default 导出对象）
 ├── generals.js         # 武将总表 GENERALS（默认兵种、bonus、阵亡/离队标记、joinAt），纯数据
 ├── deploy.js           # 出阵推导 planDeploy / buildPlayerDefs（纯函数，不依赖 Phaser）
@@ -57,7 +57,7 @@ actions.js、ui.js、hud.js、unitView.js、*Fx.js、heroSprites.js、portraits.
 scenes/*.js
 ```
 
-- `logic.js` 只导入 `config.js` 和 `data.js`；保持不依赖 Phaser、不访问场景，规则才能复用
+- `logic.js` 只导入 `config.js`、`data.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
   （AI 决策和 HUD 攻击预测调用的是同一批函数）。
 - `stageMeta.js`、`stages/*.js`、`data.js`、`characters.js`、`generals.js`、`deploy.js` 必须能被 Node 直接导入：
   `scripts/validate-stages.mjs` 会直接 import 它们。这些文件里不要导入 `phaser`，也不要访问 `window`/`localStorage`。

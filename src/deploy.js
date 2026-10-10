@@ -1,6 +1,7 @@
 // 出阵推导：根据关卡预设我军、武将总表与战役状态，推导出阵位置、上限、必须出阵 / 不可出阵与候选名单
 // 纯函数，不依赖 Phaser（Node 可直接导入）
-import { TERRAIN, CLASSES } from './data.js';
+import { TERRAIN, classOf } from './data.js';
+import { roleOf, tierFor } from './logic.js';
 import { GENERALS, isGeneral } from './generals.js';
 import { getStage } from './stages.js';
 
@@ -77,13 +78,17 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
   const pool = poolIds.map((id) => {
     const def = defsById[id], saved = roster[id], g = GENERALS[id];
     const floor = def ? def.lvl : Math.max(1, lord.lvl - 1);
+    const lvl = Math.max(floor, saved?.lvl || 0);
+    // 兵种、个人修正与加成以武将总表为准；阶级同 createUnit（roster 记录，首次出阵按等级定阶）
     return {
       id,
       name: def?.name || g.name,
-      cls: def?.cls || saved?.cls || g.cls,
+      cls: g.cls,
+      gradeMod: g.gradeMod || null,
+      tier: saved ? saved.tier || 1 : tierFor(g.cls, lvl),
       floor,
-      lvl: Math.max(floor, saved?.lvl || 0),
-      bonus: def ? def.bonus : g.bonus,
+      lvl,
+      bonus: g.bonus,
       preset: !!def,
     };
   });
@@ -106,7 +111,11 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
   }
 
   // 临时成员的展示信息（整备界面锁定显示）
-  const fixedCards = fixed.map((d) => ({ id: d.id, name: d.name, cls: d.cls, bonus: d.bonus, lvl: Math.max(d.lvl, roster[d.id]?.lvl || 0), fixed: true }));
+  const fixedCards = fixed.map((d) => {
+    const { cls, bonus } = roleOf(d);
+    const saved = roster[d.id], lvl = Math.max(d.lvl, saved?.lvl || 0);
+    return { id: d.id, name: d.name, cls, bonus, lvl, tier: saved ? saved.tier || 1 : tierFor(cls, lvl), fixed: true };
+  });
   return { stageId: stage.id, map: stage.map, slots, max, required, blocked, pool, fixed, fixedCards, defaults, defsById, joined: [...allJoined] };
 }
 
@@ -125,7 +134,7 @@ export function buildPlayerDefs(plan, selectedIds) {
   }
   for (const id of rest) {
     const p = plan.pool.find((o) => o.id === id);
-    const move = CLASSES[p.cls].moveType;
+    const move = classOf(p.cls).moveType;
     const free = plan.slots.filter(([x, y]) => !used.has(k(x, y)));
     const slot = free.find(([x, y]) => TERRAIN[plan.map[y][x]].cost[move] < 99) || free[0];
     if (!slot) continue;

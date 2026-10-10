@@ -1,5 +1,4 @@
 // 高清矢量人物：Canvas 2D 程序化绘制，逻辑坐标 LW x LH，贴图按 TEX 倍分辨率生成
-import { CLASSES } from './data.js';
 import { getCharacter, skinOf, armorPalette, hexShade } from './characters.js';
 
 export const TEX = 3;
@@ -50,11 +49,20 @@ const CLASS_LOOK = {
   archercav: { head: 'cap', weapon: 'bow', quiver: true, horse: '#8a5a2a' },
   strategist: { head: 'scholar', weapon: 'fan', robe: true },
   healer: { head: 'taoist', weapon: 'staff', robe: true, robeColor: '#9ad0a8' },
-  bandit: { head: 'turban', weapon: 'club', cloth: { a: '#9a7444', d: '#4e3418', l: '#d8bc8a' } },
+  bandit: { head: 'band', hatColor: '#6a4a2a', weapon: 'axe' },
+  yellow: { head: 'turban', weapon: 'club', cloth: { a: '#9a7444', d: '#4e3418', l: '#d8bc8a' } },
   taoist: { head: 'taoist', weapon: 'staff', robe: true, robeColor: '#d6ae36', beard: 'long' },
   fighter: { head: 'band', weapon: 'fist' },
   emperor: { head: 'emperor', weapon: 'none', robe: true, robeColor: '#e8c040' },
-  catapult: { machine: true, weapon: 'catapult' },
+  catapult: { machine: 'catapult', weapon: 'catapult' },
+  mountstrat: { head: 'scholar', weapon: 'fan', robe: true, robeColor: '#c8b88a', horse: '#6a5040' },
+  dancer: { head: 'cap', hatColor: '#c84a7a', weapon: 'twin', robe: true, robeColor: '#e898b8' },
+  xiliang: { head: 'helmet', hatColor: '#d8dce4', weapon: 'spear', horse: '#e8e2d4', cape: true },
+  pirate: { head: 'band', hatColor: '#2a6a8a', weapon: 'axe' },
+  dudu: { head: 'helmet', weapon: 'sword', horse: '#a07040', cape: true },
+  sorcerer: { head: 'scholar', weapon: 'fan', robe: true, robeColor: '#f0eee6' },
+  commoner: { head: 'band', hatColor: '#8a7a5a', weapon: 'none', robe: true, robeColor: '#b8a888' },
+  transport: { machine: 'cart', weapon: 'none' },
 };
 const BEARD_MAP = { mustache: 'mustache', goatee: 'goatee', short: 'goatee', full: 'full', long: 'long' };
 
@@ -63,7 +71,7 @@ function lookOf(unit) {
   const look = { ...CLASS_LOOK[unit.cls] };
   const ch = getCharacter(unit.name);
   if (!ch || look.machine) return look;
-  const ranged = ['bow', 'far'].includes(CLASSES[unit.cls].range);
+  const ranged = look.weapon === 'bow';
   if (ch.hat) look.head = ch.hat;
   if (ch.weapon && !ranged && look.weapon !== 'fan' && look.weapon !== 'none') look.weapon = ch.weapon;
   if (look.horse && ch.horse) look.horse = ch.horse;
@@ -72,7 +80,7 @@ function lookOf(unit) {
   if (ch.armor) look.cloth = armorPalette(ch.armor);
   if (ch.robeColor && look.robe) look.robeColor = ch.robeColor;
   if (look.weapon === 'fist' || look.weapon === 'glaive' || look.weapon === 'axe' || look.weapon === 'halberd') look.shield = false;
-  look.hatColor = ch.hatColor;
+  if (ch.hat || ch.hatColor) look.hatColor = ch.hatColor;
   look.skin = skinOf(ch);
   look.hairColor = ch.hairColor;
   return look;
@@ -116,6 +124,33 @@ function drawHuman(k, L, F, oy, mounted) {
     fill(C.goldD, poly([24.5, y(37.6)], [27.5, y(37.6)], [27.5, y(41)], [24.5, y(41)]), C.ink, 0.4);
     fill(grad(12, y(24), 18, y(32), shade(P.a, 1.3), P.d), ell(17, y(28), 5.2, 4), C.gold, 0.8);
     fill(grad(34, y(24), 40, y(32), shade(P.a, 1.3), P.d), ell(35, y(28), 5.2, 4), C.gold, 0.8);
+    if (L.tier >= 2) {
+      // 二阶：甲衣金边
+      line(17, y(25), 18, y(38), 0.9, C.gold, false);
+      line(35, y(25), 34, y(38), 0.9, C.gold, false);
+      line(13.5, y(48), 38.5, y(48), 0.9, C.gold, false);
+    }
+    if (L.tier >= 3) {
+      // 三阶：华丽盔甲（金色大肩甲 + 护心镜）
+      for (const [sx, dir] of [[17, -1], [35, 1]]) {
+        fill(grad(sx - 6, y(23), sx + 6, y(32), C.white, C.gold, C.goldD), ell(sx, y(27.5), 6.4, 4.6), C.ink, 0.6);
+        fill(C.gold, poly([sx + dir * 3, y(24)], [sx + dir * 8.5, y(20.5)], [sx + dir * 6.5, y(26)]), C.ink, 0.4);
+        for (const rx of [-3, 0, 3]) fill(C.goldD, ell(sx + rx, y(29.5), 0.6, 0.6), null);
+      }
+      fill(grad(21, y(28), 31, y(37), C.white, C.gold, C.goldD), ell(26, y(32), 6.6, 5.4), C.ink, 0.6);
+      fill(grad(24, y(30), 28, y(34), '#ff7a60', C.red, C.redD), ell(26, y(32), 2.2, 2.2), C.ink, 0.5);
+    }
+  }
+  if (L.robe && L.tier >= 2) {
+    // 袍服：二阶金边，三阶加金色云肩
+    line(18, y(25), 14.5, y(mounted ? 37 : 56), 0.8, C.gold, false);
+    line(34, y(25), 37.5, y(mounted ? 37 : 56), 0.8, C.gold, false);
+    if (L.tier >= 3) {
+      fill(grad(16, y(23), 36, y(31), C.white, C.gold, C.goldD), () => {
+        ctx.moveTo(15, y(27)); ctx.quadraticCurveTo(26, y(21), 37, y(27)); ctx.quadraticCurveTo(26, y(33), 15, y(27)); ctx.closePath();
+      }, C.ink, 0.5);
+      fill(grad(24, y(26), 28, y(30), '#ff7a60', C.red, C.redD), ell(26, y(28), 1.8, 1.8), C.ink, 0.4);
+    }
   }
   // 手臂
   const sleeve = L.robe ? shade(L.robeColor || F.l, 0.9) : P.a;
@@ -322,7 +357,7 @@ function drawWeapon(k, L, oy) {
   }
 }
 
-function drawHorse(k, color, F) {
+function drawHorse(k, color, F, tier = 1) {
   const { ctx, grad, fill, ell, poly, line } = k;
   const mane = shade(color, 0.4);
   line(20, 49, 18.5, 62, 3.1, shade(color, 0.65));
@@ -345,12 +380,20 @@ function drawHorse(k, color, F) {
   line(22, 49, 22, 62, 3.3, color);
   line(33, 49, 33.5, 62, 3.3, color);
   for (const hx of [22, 33.5]) fill('#2a1a10', poly([hx - 2, 61], [hx + 2, 61], [hx + 2.2, 63.4], [hx - 2.2, 63.4]), null);
+  if (tier >= 3) {
+    // 三阶：马匹披甲（面甲、颈甲、阵营色马衣金边）
+    fill(grad(34, 28, 44, 46, C.white, C.metal, C.metalD), poly([34, 41.5], [38, 30.5], [43.8, 31], [41.2, 45.5]), C.ink, 0.6);
+    for (const ly of [34, 38, 42]) line(36.5 - (ly - 34) * 0.15, ly, 42.5 - (ly - 34) * 0.15, ly + 0.5, 0.5, C.metalD, false);
+    fill(grad(41, 27, 50, 34, C.white, C.metalD), poly([42, 28.4], [49.2, 31.2], [47.6, 33.6], [41.4, 31.6]), C.ink, 0.5);
+    fill(grad(0, 40, 0, 54, shade(F.a, 1.2), F.d), poly([11.5, 41], [40.5, 41], [39.5, 53], [12.5, 53]), C.gold, 1);
+    for (let x = 14; x < 39; x += 4.5) fill(C.gold, poly([x, 53], [x + 2.2, 53], [x + 1.1, 55]), null);
+  }
   fill(grad(0, 38, 0, 50, F.a, F.d), poly([18.5, 38], [33.5, 38], [34.5, 49], [17.5, 49]), C.gold, 0.9);
   fill(grad(0, 35, 0, 39, '#8a5a30', '#4a2c14'), ell(26, 37.5, 7.5, 2.4));
 }
 
 // 投石车：木架 + 车轮 + 抛臂 + 石弹 + 阵营旗
-function drawCatapult(k, F) {
+function drawCatapult(k, F, tier = 1) {
   const { ctx, grad, fill, ell, poly, line } = k;
   const wood = grad(0, 30, 0, 60, '#a8743e', '#5a3818');
   fill(wood, poly([8, 50], [46, 50], [44, 55], [10, 55]));
@@ -370,11 +413,43 @@ function drawCatapult(k, F) {
   fill(C.gold, ell(22, 30, 1.6, 1.6), C.ink, 0.4);
   line(9, 50, 9, 22, 0.9, '#4a2e14', false);
   fill(grad(9, 22, 19, 30, F.a, F.d), poly([9.5, 22], [19, 25], [9.5, 29]), C.ink, 0.5);
+  if (tier >= 2) {
+    // 二阶：铁箍加固；三阶：金饰与顶旗
+    fill(grad(0, 50, 0, 52, C.metal, C.metalD), poly([8, 50], [46, 50], [45.6, 51.8], [8.4, 51.8]), C.ink, 0.4);
+    for (const wx of [14, 40]) { ctx.strokeStyle = tier >= 3 ? C.gold : C.metal; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(wx, 56, 6.2, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  if (tier >= 3) {
+    fill(C.gold, ell(9, 21.5, 1.4, 1.4), C.ink, 0.4);
+    fill(grad(20, 27, 24, 33, C.white, C.gold, C.goldD), poly([19.5, 28], [24.5, 28], [24, 32.5], [20, 32.5]), C.ink, 0.4);
+  }
+}
+
+// 辎重队：粮车 + 粮袋 + 阵营旗
+function drawCart(k, F) {
+  const { ctx, grad, fill, ell, poly, line } = k;
+  line(41, 47, 53, 43, 1.8, '#7a5028');
+  fill(grad(0, 37, 0, 52, '#b07a44', '#5a3818'), poly([7, 38], [43, 38], [42, 51], [8, 51]));
+  for (const x of [14, 20, 26, 32, 38]) line(x, 39.5, x, 49.5, 0.5, '#4a2e14', false);
+  for (const [x, yy] of [[14, 34], [25, 33], [36, 34], [19.5, 28], [30.5, 28]]) {
+    fill(grad(x - 5, yy - 4, x + 5, yy + 5, '#f2e4b8', '#a89060'), ell(x, yy, 5.6, 4.6), C.ink, 0.6);
+    line(x - 2, yy - 3.4, x + 2, yy - 3.4, 0.8, '#8a6a3a', false);
+  }
+  for (const wx of [15, 35]) {
+    fill(grad(wx - 6, 50, wx + 6, 62, '#8a5a2a', '#3a2410'), ell(wx, 56, 6, 6), C.ink, 0.8);
+    ctx.strokeStyle = '#2a1808'; ctx.lineWidth = 0.7;
+    for (let a = 0; a < Math.PI; a += Math.PI / 3) { ctx.beginPath(); ctx.moveTo(wx + Math.cos(a) * 5.3, 56 + Math.sin(a) * 5.3); ctx.lineTo(wx - Math.cos(a) * 5.3, 56 - Math.sin(a) * 5.3); ctx.stroke(); }
+    fill(C.metalD, ell(wx, 56, 1.3, 1.3), null);
+  }
+  line(8.5, 38, 8.5, 12, 0.9, '#4a2e14', false);
+  fill(grad(9, 12, 19, 20, F.a, F.d), poly([9, 12], [19, 15], [9, 19]), C.ink, 0.5);
 }
 
 export function unitTexture(scene, unit) {
   const L = lookOf(unit);
-  const key = `hero-${unit.cls}-${unit.faction}-${unit.name}`;
+  // 阶级外形：二阶金边、披风，三阶华丽盔甲与马匹披甲
+  L.tier = unit.tier || 1;
+  if (L.tier >= 2 && !L.machine) L.cape = true;
+  const key = `hero-${unit.cls}-${L.tier}-${unit.faction}-${unit.name}`;
   if (scene.textures.exists(key)) return key;
   const tex = scene.textures.createCanvas(key, LW * TEX, (LH + PAD) * TEX);
   const ctx = tex.getContext();
@@ -388,10 +463,12 @@ export function unitTexture(scene, unit) {
   if (L.skin) [C.skin, C.skinD] = L.skin;
   if (L.hairColor) C.hair = L.hairColor;
   try {
-    if (L.machine) {
-      drawCatapult(k, F);
+    if (L.machine === 'cart') {
+      drawCart(k, F);
+    } else if (L.machine) {
+      drawCatapult(k, F, L.tier);
     } else if (L.horse) {
-      drawHorse(k, L.horse, F);
+      drawHorse(k, L.horse, F, L.tier);
       drawHuman(k, L, F, -14, true);
       k.line(28, 34, 29, 47, 3.6, (L.cloth || F).d);
       k.fill('#2a1a10', k.ell(29.4, 48.5, 2.6, 1.6));

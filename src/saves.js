@@ -47,9 +47,11 @@ export function formatTime(ts) {
 
 // 读取存档：写入全局状态后进入战场
 export function applyLoad(scene, data) {
-  scene.registry.set('roster', data.roster || {});
+  // 旧存档的 roster 没有 tier（阶级）：视为一阶
+  const roster = Object.fromEntries(Object.entries(data.roster || {}).map(([id, r]) => [id, { ...r, tier: r.tier || 1 }]));
+  scene.registry.set('roster', roster);
   // 旧存档没有加入记录：用 roster 中的武将推导
-  scene.registry.set('joined', Array.isArray(data.joined) ? data.joined.filter(isGeneral) : Object.keys(data.roster || {}).filter(isGeneral));
+  scene.registry.set('joined', Array.isArray(data.joined) ? data.joined.filter(isGeneral) : Object.keys(roster).filter(isGeneral));
   scene.registry.set('items', data.items);
   scene.registry.set('difficulty', data.difficulty || 'normal');
   scene.registry.set('red', data.red ?? 0);

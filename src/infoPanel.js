@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { WIDTH, HEIGHT, FONT, COLORS, FACTION_NAME } from './config.js';
-import { CLASSES } from './data.js';
+import { classOf } from './data.js';
 import { panel, text, button } from './ui.js';
 
 const TABS = ['player', 'ally', 'enemy'];
@@ -80,7 +80,7 @@ export function openInfo(scene, { onPick, onClose }) {
         onPick(u);
       });
       const status = u.faction === 'player' ? (u.acted ? '已行动' : '待命中') : STANCE[u.ai] || '进攻';
-      const cells = [u.name, CLASSES[u.cls].name, `Lv ${u.lvl}`, `${u.hp} / ${u.stats.hp}`, `${u.mp} / ${u.stats.mp}`, status];
+      const cells = [u.name, classOf(u.cls, u.tier).name, `Lv ${u.lvl}`, `${u.hp} / ${u.stats.hp}`, `${u.mp} / ${u.stats.mp}`, status];
       const colors = ['#fff2cc', '#f1e3c2', '#f1e3c2', '#9ce0a8', '#9cc8ff', u.faction === 'player' && u.acted ? '#8a7a60' : '#f1e3c2'];
       list.add([g, zone, ...cells.map((s, k) => text(scene, lx + COLS_X[k], y + 4, s, 15, colors[k], k === 0 ? FONT : undefined))]);
     });

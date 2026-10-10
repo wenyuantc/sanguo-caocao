@@ -12,14 +12,18 @@
 | 表 | 条目结构 |
 |----|----------|
 | `TERRAIN[字符]` | `{ name, color, cost: { foot, horse }, def, heal, fire? }`，cost 为 `99` 表示不可通行 |
-| `RANGES[名称]` | `[dx, dy]` 偏移数组（`melee`、`bow`、`far`、`none`） |
-| `CLASSES[cls]` | `{ name, glyph, move, moveType: 'foot'|'horse', range: RANGES 的 key, type, base: Stats, grow: Stats, spells: SPELLS 的 key[] }` |
+| `RANGES[名称]` | `[dx, dy]` 偏移数组：`cross` 十字、`around` 周围 8 格、`ring2`、`r23`、`r24`、`line2`、`ring4`、`r45`、`none`；旧名 `melee`/`bow`/`far` 为别名 |
+| `SERIES[cls]` | 兵种系列：`{ name, moveType: 'foot'|'horse', type, tiers: [{ name, glyph, move, range }], grow: { atk, int, def, burst, morale }（成长档字母）, hp: [基础, 每级], mp: [基础, 每级], spells }`；可转职系列 3 阶，特殊兵种 1 阶 |
+| `classOf(cls, tier)` | 按阶级取兵种视图 `{ name, glyph, move, moveType, range, type, spells, tier, tiers, series }`（缓存对象，只读）。按单位取兵种信息一律用 `classOf(u.cls, u.tier)` |
+| `CLASSES[cls]` | 兼容视图，等于 `classOf(cls, 1)`；新代码不要用 |
+| `GRADE` / `STAT5` / `STAT_NAME` | 成长档 `{ S: 4, A: 3, B: 2, C: 1 }`；五项能力 key 列表与中文名 |
+| `PROMOTE_LVL` | 转职等级 `[15, 30]` |
 | `ADVANTAGE` | `{ horse: 'foot', foot: 'bow', bow: 'horse' }`，按兵种的 `type` 索引 |
 | `SPELLS[id]` | `{ name, mp, range, kind: 'damage'|'heal', power, color, desc }` |
-| `ITEMS[id]` | `{ name, desc, hp?, mp? }` |
-| `DIFFICULTIES[id]` | `{ name, color, lvl, mult: Stats|null, aggressive, items, reward, desc[] }`；通过 `diffOf(id)` 读取（找不到时退回 `normal`） |
+| `ITEMS[id]` | `{ name, desc, hp?, mp?, promote? }`（`seal` 印绶：`promote: true`，按转职处理；`SEAL_FROM` 起每关胜利奖励 1 个） |
+| `DIFFICULTIES[id]` | `{ name, color, lvl, mult: Stats|null, aggressive, tierLvl: [二阶, 三阶], items, reward, desc[] }`（`tierLvl`：敌军 / 友军自动定阶门槛，普通 `[20, 35]`，困难 / 地狱 `[15, 30]`）；通过 `diffOf(id)` 读取（找不到时退回 `normal`） |
 
-`Stats` = `{ hp, mp, atk, def, int, agi }`。新增兵种/策略/地形时，要填齐已有条目的**全部**字段；
+`Stats` = `{ hp, mp, atk, int, def, burst, morale }`（攻击、精神、防御、爆发、士气）；`bonus` / 难度 `mult` 使用同样的 key（关卡数据中的旧字段 `bonus.agi` 视为 `burst`）。新增兵种/策略/地形时，要填齐已有条目的**全部**字段；
 使用方直接按字段取值，不做空值检查（例如 `terrainAt(map, x, y).cost[cls.moveType]`）。
 
 ## 运行时单位对象
@@ -30,17 +34,23 @@
 {
   // 来自关卡定义（P/E/A）：id, name, cls, faction: 'player'|'enemy'|'ally', x, y,
   //   leader?, bonus?, mark?, focus?, ifFlag?, unlessFlag?
+  cls, gradeMod, bonus, // roleOf(def)：我军武将取 generals.js；其他按 CLASS_BY_NAME / 同名武将 / 黄巾映射覆盖
   lvl,            // max(def.lvl, roster 中的 lvl)，敌军再加 difficulty.lvl
+  guard?,         // 主将 / 受保护单位（BattleScene.markGuard）
+  tier,           // 1~3：我军取 roster 的 tier（缺省 1）；无 roster 记录的我军 tierFor(cls, lvl)（15/30）；敌军 / 友军 tierFor(cls, lvl, diff.tierLvl)
   exp,            // 0..99，仅我军使用
   ai,             // 'aggressive' | 'hold' | 'peace'
   mult,           // 难度属性倍率（敌军），否则为 null
-  stats,          // calcStats(cls, lvl, bonus, mult)，派生值，从不存档
+  stats,          // calcStats(u)，派生值，从不存档
   hp, mp,         // 当前值
   acted, moved, alive, escaped?
 }
 ```
 
-- `stats` 永远是派生值；修改 `lvl`/`bonus`/`mult` 后要用 `calcStats` 重新计算（参考 `levelUp`）。
+- `stats` 永远是派生值；修改 `lvl`/`tier`/`bonus`/`mult` 后要用 `calcStats(u)` 重新计算（参考 `levelUp`、`promote`）。
+- 公式：HP/MP = 系列基础 + 每级 × (lvl + 2 × (tier − 1)) + 加成；五项 = `BASE5` + `GRADE[档]` × lvl + 加成（`gradeMod` 覆盖个人成长档）。
+- 转职：`promoteBlock(u)` 返回 `null` 或中文原因；`promote(u)` 升阶、重算并回满，返回 `{ diff, learned }`（`learned` 为新阶级多出的策略，供策略按阶级习得使用）。
+- 读取战斗中存档的单位用 `restoreUnit(saved, diff)`：重新套用兵种覆盖、补 tier、重算能力。
 - 敌我判断只有一条规则：`isFoe(a, b)`，即是否敌军；我军和友军互为友方。
 - 规则和事件用 `u.id`（关卡内唯一）识别单位；`views` 用对象引用识别单位。
 
@@ -51,6 +61,8 @@
 - `rollAttack()` 返回 `{ hit, crit, dmg }`；预测函数（`physDamage`、`hitRate`、`spellDamage`、
   `spellHit`、`healAmount`）是确定性的，AI 和 HUD 共用。
 - `planAI()` 返回 `null` 或 `{ score, tile, type: 'attack'|'spell'|'wait', target?, spell? }`。
+- 主将保护：`u.guard`（曹操与关卡 `protect` 单位，由 `BattleScene.markGuard` 设置并随存档保存）受到的物理与策略伤害乘 `GUARD_TAKEN`（0.7）；`planAI` 对 guard 单位按威胁图（每格可被几个敌人打到）扣分避险。
+- 战斗公式：物理伤害看攻击对防御；命中看双方爆发之差，会心看双方士气之差；策略成功率看双方“精神 + 士气”之差。
 
 ## 关卡与存档结构
 

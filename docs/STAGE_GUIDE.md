@@ -54,12 +54,20 @@ export default [{
 - 每个单位必须站在其兵种可通行的格子上，初始不得重叠；我军必须能走到首领附近（校验脚本会检查）。
 
 ## 5. 单位
-`P/E/A(id, 名字, 兵种, 等级, x, y, extra)`；extra：`leader: true`（主将，金色光环）、`ai: 'aggressive'|'hold'|'peace'`（hold 原地固守，进入攻击范围才出击；peace 原地不动且不主动攻击，用于放行/中立）、`bonus: { hp, atk, def, int, agi }`、`mark: '惇'`（棋子上的字，默认名字首字）、`focus: '目标id'`（AI 优先攻击，用于友军关羽去单挑华雄等）、`ifFlag`/`unlessFlag`（对白行也可带这两个字段，按剧情标记显示/隐藏）。
-- 兵种：`lord`群雄、`cavalry`骑兵、`infantry`步兵、`archer`弓兵、`archercav`弓骑、`fighter`武术家、`strategist`策士(火计/落石/援队)、`healer`风水士(援队/大援队/落石)、`taoist`道士、`bandit`黄巾/贼兵、`catapult`投石车(射程2~3)、`emperor`天子(不能攻击，配合 protect，ai 用 hold)。
-- 相克：骑兵克步兵、步兵克弓兵、弓兵克骑兵。
+`P/E/A(id, 名字, 兵种, 等级, x, y, extra)`；extra：`leader: true`（主将，金色光环）、`ai: 'aggressive'|'hold'|'peace'`（hold 原地固守，进入攻击范围才出击；peace 原地不动且不主动攻击，用于放行/中立）、`bonus: { hp, mp, atk, int, def, burst, morale }`（旧字段 `agi` 视为 `burst`）、`mark: '惇'`（棋子上的字，默认名字首字）、`focus: '目标id'`（AI 优先攻击，用于友军关羽去单挑华雄等）、`ifFlag`/`unlessFlag`（对白行也可带这两个字段，按剧情标记显示/隐藏）。
+- 兵种填写**系列 id**（`src/data.js` 的 `SERIES`），阶级不用填：敌军 / 友军按等级（含难度加级）自动定阶，门槛随难度：普通 ≥20 二阶、≥35 三阶，困难 / 地狱 ≥15 二阶、≥30 三阶（`DIFFICULTIES[id].tierLvl`）；我军由转职决定。
+  - 可转职系列（一阶 / 二阶 / 三阶）：`lord` 群雄/英雄/霸王、`infantry` 轻步兵/重步兵/近卫兵、`archer` 弓兵/弩兵/连弩兵、`cavalry` 轻骑兵/重骑兵/亲卫队、`archercav` 弓骑兵/弩骑兵/连弩骑兵、`catapult` 轻炮车/重炮车/霹雳车（射程 4 / 4~5 / 4~5，不能打近身）、`fighter` 武道家/拳士/拳圣、`bandit` 贼兵/义贼/豪杰、`strategist` 策士/参谋/军师、`healer` 风水士/方术士/仙术士、`taoist` 道士/幻术士/妖术士、`mountstrat` 骑马策士/骑马参谋/骑马军师（骑马）、`dancer` 舞娘/舞伎/巫女。
+  - 单阶特殊兵种：`xiliang` 西凉骑兵、`yellow` 黄巾贼、`pirate` 海盗、`dudu` 都督（骑马）、`sorcerer` 咒术士、`emperor` 皇帝（不能攻击，配合 protect，ai 用 hold）、`commoner` 百姓、`transport` 辎重队（不能攻击）。
+  - 兵种覆盖（不必改关卡数据）：我军武将的兵种以武将总表 `src/generals.js` 为准，关卡里写的 `cls` 对我军武将不生效；敌军 / 友军按名字登记（`src/characters.js` 的 `CLASS_BY_NAME`，如吕布→西凉骑兵、诸葛亮→咒术士、周瑜→都督、粮草车→辎重队）或与武将总表同名（如敌将张郃→弓骑兵）覆盖；关卡兵种为 `bandit` 且名字含“黄巾”的敌兵映射为黄巾贼。站位是否可通行按覆盖后的兵种检查。
+- 能力：兵力 / 策略 + 五项（攻击 atk、精神 int、防御 def、爆发 burst、士气 morale）。HP/MP = 系列基础 + 每级成长 × (等级 + 2 × 已转职次数) + 加成；五项 = 统一基础值 + 成长档（S/A/B/C = 每级 +4/+3/+2/+1）× 等级 + 加成。
+- 相克：骑兵克步兵、步兵克弓兵、弓兵克骑兵（策士系、炮车、皇帝等不参与相克）。
+- 主将保护：曹操与 `protect` 中的单位（不分阵营）受到的伤害 ×0.7（`GUARD_TAKEN`）；由 AI 控制时（如受保护的友军）选位会避开敌人集中的格子。三阶射程（连弩 2~4、霹雳车 4~5）威胁范围很大，布置开局站位时仍应让主将远离敌方远程单位。
 - 同一关内 id 唯一。我军武将 id 必须使用下表；敌军/友军用有意义的 id（如 `lvbu`、`yanliang`、`e_cav1`）。
 
 ## 6. 我军武将表（id / 名字 / 兵种 / bonus / 起始加入关）
+> 兵种、个人成长修正与 bonus 以 `src/generals.js` 为准（原版兵种，见 research class-tiers §6）；下表“兵种”列是关卡数据中的写法，仅供参考。
+> 现行兵种：曹操 lord、夏侯惇 / 曹仁 / 张辽 / 曹彰 / 关羽 cavalry、夏侯渊 / 张郃 / 曹丕 archercav、曹洪 / 乐进 / 李典 / 庞德 infantry、于禁 / 徐晃 archer、典韦 fighter、许褚 bandit、荀彧 / 程昱 strategist、荀攸 / 满宠 healer、郭嘉 / 贾诩 taoist、刘晔 catapult、司马懿 mountstrat、貂蝉 dancer。
+> 转职：我军 15 级（一阶→二阶）、30 级（二阶→三阶）用道具“印绶”转职；印绶从第 16 关徐州入侵战起每关胜利奖励 1 个。首次出阵的武将按等级自动定阶（例如 30 级加入即为三阶）。
 | id | 名字 | 兵种 | bonus | 加入 |
 |---|---|---|---|---|
 | caocao | 曹操 | lord | {atk:4,int:6} | 1 |

@@ -110,6 +110,18 @@ export function ensureTextures(s) {
     ctx.beginPath(); ctx.moveTo(12, 10); ctx.lineTo(17, 14.5); ctx.lineTo(12, 19); ctx.lineTo(7, 14.5); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#ffe8b0'; ctx.font = 'bold 5.5px "STKaiti","KaiTi",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('酒', 12, 14.8);
   });
+  canvasTex(s, 'fx-seal', 24, 24, (ctx) => {
+    // 印绶：金印 + 印钮 + 红色绶带
+    ctx.strokeStyle = '#7a1008'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(12, 9); ctx.quadraticCurveTo(4, 12, 5, 22); ctx.moveTo(12, 9); ctx.quadraticCurveTo(19, 13, 18, 22); ctx.stroke();
+    ctx.strokeStyle = '#d8302a'; ctx.lineWidth = 1.3; ctx.stroke();
+    const gold = ctx.createLinearGradient(5, 10, 19, 22);
+    gold.addColorStop(0, '#fff2b0'); gold.addColorStop(0.45, '#f0c848'); gold.addColorStop(1, '#8a6410');
+    ctx.fillStyle = gold; ctx.strokeStyle = '#4a3008'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.rect(6, 11, 12, 10); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(8, 11); ctx.quadraticCurveTo(12, 2, 16, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#7a1008'; ctx.font = 'bold 6px "STKaiti","KaiTi",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('印', 12, 16.5);
+  });
   // 道具碎粒
   canvasTex(s, 'fx-beanlet', 8, 8, (ctx) => {
     ctx.fillStyle = '#6ac048'; ctx.strokeStyle = '#2a5a18'; ctx.lineWidth = 0.6;
@@ -430,4 +442,32 @@ export async function deathFx(s, v) {
   }
   await tween(s, { targets: v.c, alpha: 0, delay: 120, duration: 420 });
   v.c.destroy();
+}
+
+// 转职：金色光柱与环绕星光（复用回复特效），中途闪白换装，金色字样“转职·新兵种”
+// onChange 在闪光时调用（更新外形）
+export async function promoteFx(s, unit, title, onChange) {
+  ensureTextures(s);
+  const p = tileCenter(unit.x, unit.y);
+  const v = s.views.get(unit);
+  const done = heal(s, p, 0xffd36a);
+  for (let i = 0; i < 14; i++) {
+    const a = (Math.PI * 2 * i) / 14;
+    const st = img(s, 'fx-spark', p.x + Math.cos(a) * 30, p.y + Math.sin(a) * 14 + 6, rand(0.6, 1)).setTint(0xffe08a).setBlendMode(ADD);
+    s.tweens.add({ targets: st, x: p.x, y: p.y - 6, alpha: 0, delay: i * 20, duration: 420, ease: 'Quad.easeIn', onComplete: () => st.destroy() });
+  }
+  await delay(s, 420);
+  v.sprite.setTintMode(Phaser.TintModes.FILL).setTint(0xfff2c0);
+  onChange();
+  s.cameras.main.flash(120, 255, 236, 170);
+  const burst = img(s, 'fx-glow', p.x, p.y, 1.4).setTint(0xffd36a).setBlendMode(ADD);
+  s.tweens.add({ targets: burst, scale: 4.5 / R, alpha: 0, duration: 500, onComplete: () => burst.destroy() });
+  const halo = s.add.ellipse(p.x, p.y + 17, 12, 5).setStrokeStyle(3, 0xffd36a, 1).setDepth(9);
+  s.tweens.add({ targets: halo, scaleX: 5, scaleY: 5, alpha: 0, duration: 700, onComplete: () => halo.destroy() });
+  s.time.delayedCall(180, () => { v.sprite.setTintMode(Phaser.TintModes.MULTIPLY).clearTint(); });
+  const label = text(s, p.x, p.y - 46, title, 24, '#ffd36a', FONT).setOrigin(0.5).setStroke('#3a1800', 6).setDepth(D + 40).setAlpha(0).setScale(1.8);
+  s.tweens.add({ targets: label, alpha: 1, scale: 1, duration: 260, ease: 'Back.easeOut' });
+  s.tweens.add({ targets: label, alpha: 0, y: label.y - 14, delay: 1100, duration: 320, onComplete: () => label.destroy() });
+  await done;
+  await delay(s, 900);
 }

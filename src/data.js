@@ -13,55 +13,105 @@ export const TERRAIN = {
   T: { name: '营寨', color: 0xa08458, cost: { foot: 1, horse: 1 }, def: 0.2, heal: 0.1, fire: 1.2 },
 };
 
-// 攻击范围：melee 上下左右；bow 距离2 + 斜角1
+// 攻击范围（原版代码，见 research class-tiers §4）：[dx, dy] 偏移
+const ring = (lo, hi) => {
+  const out = [];
+  for (let dy = -hi; dy <= hi; dy++) for (let dx = -hi; dx <= hi; dx++) {
+    const d = Math.abs(dx) + Math.abs(dy);
+    if (d >= lo && d <= hi) out.push([dx, dy]);
+  }
+  return out;
+};
+const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 export const RANGES = {
-  melee: [[1, 0], [-1, 0], [0, 1], [0, -1]],
-  bow: [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1]],
-  // 投石车：距离 2~3（不能攻击相邻）
-  far: [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1],
-    [3, 0], [-3, 0], [0, 3], [0, -3], [2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]],
+  cross: ring(1, 1), // 十字：上下左右
+  around: AROUND, // 周围 8 格
+  ring2: ring(2, 2), // 距离 2 的一圈
+  r23: ring(2, 3), // 距离 2~3
+  r24: ring(2, 4), // 距离 2~4
+  line2: [[2, 0], [-2, 0], [0, 2], [0, -2]], // 直线 2 格
+  ring4: ring(4, 4), // 距离 4 的一圈
+  r45: ring(4, 5), // 距离 4~5
   none: [],
 };
+// 旧名别名（移动范围计算等仍使用 melee）
+RANGES.melee = RANGES.cross;
+RANGES.bow = RANGES.ring2;
+RANGES.far = RANGES.r23;
 
-// 兵种：基础值(1级) + 成长
-export const CLASSES = {
-  lord: { name: '群雄', glyph: '君', move: 6, moveType: 'horse', range: 'melee', type: 'horse',
-    base: { hp: 115, mp: 20, atk: 72, def: 58, int: 75, agi: 62 },
-    grow: { hp: 9, mp: 2, atk: 3, def: 2.5, int: 3, agi: 2.5 }, spells: ['fire', 'heal'] },
-  cavalry: { name: '骑兵', glyph: '骑', move: 6, moveType: 'horse', range: 'melee', type: 'horse',
-    base: { hp: 100, mp: 6, atk: 72, def: 52, int: 40, agi: 60 },
-    grow: { hp: 8, mp: 1, atk: 3, def: 2.5, int: 1, agi: 2.5 }, spells: [] },
-  infantry: { name: '步兵', glyph: '步', move: 4, moveType: 'foot', range: 'melee', type: 'foot',
-    base: { hp: 120, mp: 6, atk: 66, def: 64, int: 40, agi: 48 },
-    grow: { hp: 10, mp: 1, atk: 2.5, def: 3, int: 1, agi: 2 }, spells: [] },
-  archer: { name: '弓兵', glyph: '弓', move: 4, moveType: 'foot', range: 'bow', type: 'bow',
-    base: { hp: 90, mp: 6, atk: 66, def: 48, int: 45, agi: 56 },
-    grow: { hp: 7, mp: 1, atk: 3, def: 2, int: 1.5, agi: 2.5 }, spells: [] },
-  strategist: { name: '策士', glyph: '策', move: 4, moveType: 'foot', range: 'melee', type: 'mage',
-    base: { hp: 82, mp: 32, atk: 45, def: 45, int: 86, agi: 50 },
-    grow: { hp: 6, mp: 4, atk: 1.5, def: 2, int: 3.5, agi: 2 }, spells: ['fire', 'rock', 'heal'] },
-  bandit: { name: '黄巾', glyph: '贼', move: 5, moveType: 'foot', range: 'melee', type: 'foot',
-    base: { hp: 85, mp: 0, atk: 60, def: 44, int: 30, agi: 50 },
-    grow: { hp: 7, mp: 0, atk: 2.5, def: 2, int: 1, agi: 2 }, spells: [] },
-  taoist: { name: '道士', glyph: '道', move: 4, moveType: 'foot', range: 'melee', type: 'mage',
-    base: { hp: 88, mp: 30, atk: 45, def: 46, int: 80, agi: 50 },
-    grow: { hp: 7, mp: 4, atk: 1.5, def: 2, int: 3, agi: 2 }, spells: ['fire', 'heal'] },
-  archercav: { name: '弓骑', glyph: '骑', move: 6, moveType: 'horse', range: 'bow', type: 'bow',
-    base: { hp: 95, mp: 6, atk: 68, def: 50, int: 45, agi: 62 },
-    grow: { hp: 7.5, mp: 1, atk: 3, def: 2, int: 1.5, agi: 2.5 }, spells: [] },
-  fighter: { name: '武术家', glyph: '武', move: 5, moveType: 'foot', range: 'melee', type: 'foot',
-    base: { hp: 125, mp: 6, atk: 74, def: 54, int: 35, agi: 64 },
-    grow: { hp: 10, mp: 1, atk: 3.2, def: 2.2, int: 1, agi: 2.8 }, spells: [] },
-  catapult: { name: '投石车', glyph: '车', move: 3, moveType: 'foot', range: 'far', type: 'siege',
-    base: { hp: 90, mp: 0, atk: 78, def: 40, int: 30, agi: 30 },
-    grow: { hp: 7, mp: 0, atk: 3.2, def: 1.8, int: 1, agi: 1.2 }, spells: [] },
-  healer: { name: '风水士', glyph: '风', move: 4, moveType: 'foot', range: 'melee', type: 'mage',
-    base: { hp: 84, mp: 36, atk: 42, def: 46, int: 82, agi: 52 },
-    grow: { hp: 6.5, mp: 4.5, atk: 1.4, def: 2, int: 3.2, agi: 2 }, spells: ['heal', 'heal2', 'rock'] },
-  emperor: { name: '天子', glyph: '帝', move: 4, moveType: 'foot', range: 'none', type: 'noble',
-    base: { hp: 90, mp: 0, atk: 20, def: 50, int: 70, agi: 45 },
-    grow: { hp: 6, mp: 0, atk: 0.5, def: 2, int: 1, agi: 1.5 }, spells: [] },
+// 成长档：每级加成（S/A/B/C = +4/+3/+2/+1）
+export const GRADE = { S: 4, A: 3, B: 2, C: 1 };
+// 五项能力：攻击、精神、防御、爆发、士气
+export const STAT5 = ['atk', 'int', 'def', 'burst', 'morale'];
+export const STAT_NAME = { atk: '攻击', int: '精神', def: '防御', burst: '爆发', morale: '士气' };
+
+// 兵种系列（原版，见 research class-tiers §1~§4）
+// tiers: 各阶 { name, glyph, move, range }；单阶特殊兵种只有一项
+// grow: 五项成长档；hp / mp: [基础, 每级]；type: 相克类型（mage / siege / noble 不参与相克）
+// 文官系（策士 / 风水士 / 道士 / 骑马策士）与都督、海盗、咒术士、黄巾贼的普通攻击范围原版查不到，为自行设计
+const T = (name, glyph, move, range) => ({ name, glyph, move, range });
+export const SERIES = {
+  lord: { name: '君主', moveType: 'horse', type: 'horse', tiers: [T('群雄', '雄', 6, 'cross'), T('英雄', '英', 6, 'around'), T('霸王', '霸', 7, 'around')],
+    grow: { atk: 'A', int: 'A', def: 'A', burst: 'A', morale: 'A' }, hp: [100, 5], mp: [30, 1], spells: ['fire', 'heal'] },
+  infantry: { name: '步兵', moveType: 'foot', type: 'foot', tiers: [T('轻步兵', '步', 4, 'around'), T('重步兵', '步', 4, 'around'), T('近卫兵', '近', 5, 'around')],
+    grow: { atk: 'B', int: 'A', def: 'S', burst: 'B', morale: 'B' }, hp: [110, 6], mp: [10, 1], spells: [] },
+  archer: { name: '弓兵', moveType: 'foot', type: 'bow', tiers: [T('弓兵', '弓', 4, 'ring2'), T('弩兵', '弩', 4, 'r23'), T('连弩兵', '弩', 5, 'r24')],
+    grow: { atk: 'A', int: 'B', def: 'B', burst: 'B', morale: 'S' }, hp: [90, 4], mp: [10, 1], spells: [] },
+  cavalry: { name: '骑兵', moveType: 'horse', type: 'horse', tiers: [T('轻骑兵', '骑', 6, 'cross'), T('重骑兵', '骑', 6, 'cross'), T('亲卫队', '卫', 7, 'around')],
+    grow: { atk: 'S', int: 'B', def: 'A', burst: 'B', morale: 'B' }, hp: [100, 5], mp: [10, 1], spells: [] },
+  archercav: { name: '弓骑兵', moveType: 'horse', type: 'bow', tiers: [T('弓骑兵', '弓', 6, 'line2'), T('弩骑兵', '弩', 6, 'ring2'), T('连弩骑兵', '弩', 7, 'r23')],
+    grow: { atk: 'S', int: 'B', def: 'B', burst: 'B', morale: 'A' }, hp: [100, 5], mp: [10, 1], spells: [] },
+  // 炮车二阶射程有冲突，采用 4~5 格
+  catapult: { name: '炮车', moveType: 'foot', type: 'siege', tiers: [T('轻炮车', '车', 3, 'ring4'), T('重炮车', '车', 3, 'r45'), T('霹雳车', '霹', 4, 'r45')],
+    grow: { atk: 'S', int: 'B', def: 'A', burst: 'C', morale: 'A' }, hp: [90, 4], mp: [10, 1], spells: [] },
+  fighter: { name: '武道家', moveType: 'foot', type: 'foot', tiers: [T('武道家', '武', 5, 'cross'), T('拳士', '拳', 5, 'around'), T('拳圣', '圣', 6, 'around')],
+    grow: { atk: 'A', int: 'C', def: 'A', burst: 'S', morale: 'B' }, hp: [90, 4], mp: [20, 1], spells: [] },
+  bandit: { name: '贼兵', moveType: 'foot', type: 'foot', tiers: [T('贼兵', '贼', 5, 'around'), T('义贼', '义', 5, 'around'), T('豪杰', '豪', 6, 'around')],
+    grow: { atk: 'S', int: 'C', def: 'B', burst: 'B', morale: 'S' }, hp: [100, 5], mp: [20, 1], spells: [] },
+  strategist: { name: '策士', moveType: 'foot', type: 'mage', tiers: [T('策士', '策', 4, 'cross'), T('参谋', '参', 4, 'around'), T('军师', '军', 5, 'around')],
+    grow: { atk: 'B', int: 'S', def: 'B', burst: 'B', morale: 'B' }, hp: [90, 4], mp: [40, 2], spells: ['fire', 'rock', 'heal'] },
+  healer: { name: '风水士', moveType: 'foot', type: 'mage', tiers: [T('风水士', '风', 4, 'cross'), T('方术士', '方', 5, 'around'), T('仙术士', '仙', 6, 'around')],
+    grow: { atk: 'C', int: 'S', def: 'C', burst: 'A', morale: 'A' }, hp: [80, 3], mp: [50, 2], spells: ['heal', 'heal2', 'rock'] },
+  taoist: { name: '道士', moveType: 'foot', type: 'mage', tiers: [T('道士', '道', 4, 'cross'), T('幻术士', '幻', 4, 'around'), T('妖术士', '妖', 5, 'around')],
+    grow: { atk: 'C', int: 'S', def: 'B', burst: 'A', morale: 'B' }, hp: [80, 3], mp: [40, 2], spells: ['fire', 'heal'] },
+  mountstrat: { name: '骑马策士', moveType: 'horse', type: 'mage', tiers: [T('骑马策士', '策', 6, 'cross'), T('骑马参谋', '参', 6, 'around'), T('骑马军师', '军', 7, 'around')],
+    grow: { atk: 'A', int: 'S', def: 'B', burst: 'B', morale: 'C' }, hp: [100, 5], mp: [40, 2], spells: ['fire', 'rock', 'heal'] },
+  dancer: { name: '舞娘', moveType: 'foot', type: 'foot', tiers: [T('舞娘', '舞', 5, 'cross'), T('舞伎', '伎', 5, 'around'), T('巫女', '巫', 6, 'around')],
+    grow: { atk: 'A', int: 'B', def: 'B', burst: 'S', morale: 'B' }, hp: [90, 3], mp: [20, 1], spells: ['heal'] },
+  // ---------- 单阶特殊兵种 ----------
+  xiliang: { name: '西凉骑兵', moveType: 'horse', type: 'horse', tiers: [T('西凉骑兵', '凉', 6, 'around')],
+    grow: { atk: 'S', int: 'C', def: 'S', burst: 'B', morale: 'B' }, hp: [110, 6], mp: [5, 1], spells: [] },
+  // 黄巾贼的 HP/MP 与攻击范围原版查不到，自行设计
+  yellow: { name: '黄巾贼', moveType: 'foot', type: 'foot', tiers: [T('黄巾贼', '巾', 4, 'cross')],
+    grow: { atk: 'B', int: 'C', def: 'B', burst: 'B', morale: 'C' }, hp: [90, 4], mp: [5, 1], spells: [] },
+  pirate: { name: '海盗', moveType: 'foot', type: 'foot', tiers: [T('海盗', '海', 5, 'around')],
+    grow: { atk: 'S', int: 'B', def: 'B', burst: 'A', morale: 'B' }, hp: [90, 4], mp: [20, 1], spells: [] },
+  dudu: { name: '都督', moveType: 'horse', type: 'mage', tiers: [T('都督', '督', 5, 'around')],
+    grow: { atk: 'A', int: 'S', def: 'B', burst: 'B', morale: 'B' }, hp: [90, 4], mp: [30, 2], spells: ['fire', 'rock', 'heal'] },
+  sorcerer: { name: '咒术士', moveType: 'foot', type: 'mage', tiers: [T('咒术士', '咒', 5, 'around')],
+    grow: { atk: 'C', int: 'S', def: 'B', burst: 'B', morale: 'A' }, hp: [80, 3], mp: [60, 3], spells: ['fire', 'rock', 'heal', 'heal2'] },
+  emperor: { name: '皇帝', moveType: 'foot', type: 'noble', tiers: [T('皇帝', '帝', 4, 'none')],
+    grow: { atk: 'C', int: 'C', def: 'C', burst: 'C', morale: 'S' }, hp: [80, 3], mp: [5, 1], spells: [] },
+  // 百姓、辎重队的 HP/MP 原版查不到，自行设计
+  commoner: { name: '百姓', moveType: 'foot', type: 'noble', tiers: [T('百姓', '民', 4, 'none')],
+    grow: { atk: 'C', int: 'C', def: 'C', burst: 'C', morale: 'C' }, hp: [70, 3], mp: [0, 0], spells: [] },
+  transport: { name: '辎重队', moveType: 'foot', type: 'noble', tiers: [T('辎重队', '辎', 4, 'none')],
+    grow: { atk: 'C', int: 'B', def: 'C', burst: 'C', morale: 'B' }, hp: [100, 4], mp: [10, 1], spells: [] },
 };
+
+// 按系列与阶级取兵种信息：{ name, glyph, move, range, moveType, type, spells, tier, tiers, series }
+// spells 目前按系列共用；策略按阶级习得由策略子任务在此细化
+const VIEWS = Object.fromEntries(Object.entries(SERIES).map(([id, s]) => [id, s.tiers.map((t, i) => ({
+  ...t, moveType: s.moveType, type: s.type, spells: s.spells, tier: i + 1, tiers: s.tiers.length, series: s.name,
+}))]));
+export function classOf(cls, tier = 1) {
+  const v = VIEWS[cls];
+  return v[Math.min(Math.max(tier || 1, 1), v.length) - 1];
+}
+// 兼容视图：各系列一阶
+export const CLASSES = Object.fromEntries(Object.keys(SERIES).map((id) => [id, classOf(id, 1)]));
+// 转职所需等级：一阶 → 二阶 15 级，二阶 → 三阶 30 级
+export const PROMOTE_LVL = [15, 30];
 
 // 兵种相克：攻击方类型 -> 被克制方类型
 export const ADVANTAGE = { horse: 'foot', foot: 'bow', bow: 'horse' };
@@ -77,24 +127,28 @@ export const ITEMS = {
   bean: { name: '豆', desc: '恢复兵力 60', hp: 60 },
   wheat: { name: '麦', desc: '恢复兵力 120', hp: 120 },
   wine: { name: '酒', desc: '恢复策略 20', mp: 20 },
+  // 印绶：我军 15 级（一阶）/ 30 级（二阶）以上可用于转职
+  seal: { name: '印绶', desc: '转职（15 / 30 级）', promote: true },
 };
+// 印绶过关奖励：从第 16 关（徐州入侵战）起每关胜利 +1（原版自此关起有售，商店由后续子任务实现）
+export const SEAL_FROM = 'xuzhou_ruqin';
 
-// 难度：仅作用于敌军（等级加成、属性倍率、AI），以及军需补给
+// 难度：仅作用于敌军（等级加成、属性倍率、AI），以及军需补给；tierLvl 为敌军 / 友军自动定阶的等级门槛 [二阶, 三阶]
 export const DIFFICULTIES = {
   normal: {
-    name: '普通', color: '#9ce0a8', lvl: 0, mult: null, aggressive: false,
+    name: '普通', color: '#9ce0a8', lvl: 0, mult: null, aggressive: false, tierLvl: [20, 35],
     items: { bean: 5, wheat: 2, wine: 2 }, reward: { bean: 3, wheat: 1, wine: 1 },
     desc: ['敌军保持原样', '开局军需：豆5 麦2 酒2', '适合初次体验剧情'],
   },
   hard: {
-    name: '困难', color: '#ffd27a', lvl: 2, mult: { hp: 1.15, atk: 1.1, def: 1.1, int: 1.1 }, aggressive: false,
+    name: '困难', color: '#ffd27a', lvl: 2, mult: { hp: 1.15, atk: 1.1, def: 1.1, int: 1.1 }, aggressive: false, tierLvl: [15, 30],
     items: { bean: 3, wheat: 1, wine: 1 }, reward: { bean: 2, wheat: 1, wine: 1 },
-    desc: ['敌军等级 +2', '兵力 ×1.15，武防智 ×1.1', '开局军需：豆3 麦1 酒1'],
+    desc: ['敌军等级 +2', '兵力 ×1.15，攻击防御精神 ×1.1', '开局军需：豆3 麦1 酒1'],
   },
   hell: {
-    name: '地狱', color: '#ff7a6a', lvl: 4, mult: { hp: 1.3, atk: 1.2, def: 1.15, int: 1.2, agi: 1.1 }, aggressive: true,
+    name: '地狱', color: '#ff7a6a', lvl: 4, mult: { hp: 1.3, atk: 1.2, def: 1.15, int: 1.2, burst: 1.1 }, aggressive: true, tierLvl: [15, 30],
     items: { bean: 2, wheat: 0, wine: 1 }, reward: { bean: 1, wheat: 0, wine: 1 },
-    desc: ['敌军等级 +4', '兵力 ×1.3，武力 ×1.2', '固守之敌全军出击', '开局军需：豆2 酒1'],
+    desc: ['敌军等级 +4', '兵力 ×1.3，攻击 ×1.2', '固守之敌全军出击', '开局军需：豆2 酒1'],
   },
 };
 export const diffOf = (id) => DIFFICULTIES[id] || DIFFICULTIES.normal;

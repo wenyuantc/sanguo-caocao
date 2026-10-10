@@ -8,8 +8,10 @@ const STAGES = groups.length
   ? (await Promise.all(groups.map((g) => import(`../src/stages/${g}.js`)))).flatMap((m) => m.default).map(normalizeStage)
   : (await import('../src/stages.js')).STAGES;
 const getStage = (id) => STAGES.find((s) => s.id === id);
-import { TERRAIN, CLASSES, RANGES } from '../src/data.js';
-import { CHARACTERS } from '../src/characters.js';
+import { TERRAIN, SERIES, RANGES, classOf } from '../src/data.js';
+import { CHARACTERS, CLASS_BY_NAME } from '../src/characters.js';
+import { GENERALS } from '../src/generals.js';
+import { roleOf } from '../src/logic.js';
 import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
 
 const COLS = 18, ROWS = 13;
@@ -39,12 +41,15 @@ for (const s of STAGES) {
     if (!u.id || !u.name) { err(s, `单位缺少 id/name：${JSON.stringify(u)}`); continue; }
     if (unitIds.has(u.id)) err(s, `单位 id 重复：${u.id}`);
     unitIds.add(u.id);
-    const cls = CLASSES[u.cls];
-    if (!cls) { err(s, `${u.name}(${u.id}) 兵种不存在：${u.cls}`); continue; }
+    // 关卡中的兵种必须是 SERIES 的 key；实际兵种按武将总表 / 兵种登记表覆盖后检查站位
+    if (!SERIES[u.cls]) { err(s, `${u.name}(${u.id}) 兵种不存在：${u.cls}`); continue; }
+    const real = roleOf(u).cls;
+    const cls = SERIES[real] && classOf(real);
+    if (!cls) { err(s, `${u.name}(${u.id}) 覆盖后的兵种不存在：${real}`); continue; }
     if (!['player', 'enemy', 'ally'].includes(u.faction)) err(s, `${u.id} 阵营错误`);
     if (!(u.x >= 0 && u.x < COLS && u.y >= 0 && u.y < ROWS)) { err(s, `${u.name}(${u.id}) 坐标越界 (${u.x},${u.y})`); continue; }
     const t = terr(u.x, u.y);
-    if (t && t.cost[cls.moveType] >= 99) err(s, `${u.name}(${u.id}) 站在不可通行地形 ${t.name} (${u.x},${u.y})`);
+    if (t && t.cost[cls.moveType] >= 99) err(s, `${u.name}(${u.id}) [${cls.name}] 站在不可通行地形 ${t.name} (${u.x},${u.y})`);
     if (!fromEvent && !u.ifFlag) {
       const k = `${u.x},${u.y}`;
       if (occ.has(k)) err(s, `${u.name} 与 ${occ.get(k)} 站位重叠 (${k})`);
@@ -157,7 +162,7 @@ for (const s of STAGES) {
       }
       if (c.type === 'reach') {
         const who = c.unit === 'any' ? null : player.find((u) => u.id === c.unit);
-        const mt = who ? CLASSES[who.cls]?.moveType || 'foot' : 'foot';
+        const mt = who ? classOf(roleOf(who).cls)?.moveType || 'foot' : 'foot';
         const area = flood(who || cc, mt);
         for (const [x, y] of c.tiles) if (!area.has(`${x},${y}`)) err(s, `${who?.name || '我军'}（${mt === 'horse' ? '骑马' : '步行'}）无法到达目标格 (${x},${y})`);
       }
@@ -183,6 +188,10 @@ if (!groups.length) {
   walk(FIRST_STAGE);
   for (const s of STAGES) if (!reach.has(s.id)) warns.push(`[${s.id}] 从首关无法到达此关`);
 }
+
+// 兵种登记：武将总表与按名字登记的兵种必须存在
+for (const [id, g] of Object.entries(GENERALS)) if (!SERIES[g.cls]) errors.push(`[generals] ${id} 兵种不存在：${g.cls}`);
+for (const [name, c] of Object.entries(CLASS_BY_NAME)) if (!SERIES[c]) errors.push(`[characters] ${name} 兵种不存在：${c}`);
 
 console.log(`共 ${STAGES.length} 关`);
 warns.forEach((w) => console.log('警告', w));

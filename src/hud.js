@@ -1,5 +1,6 @@
 import { PANEL_X, WIDTH, HEIGHT, MAP_Y, COLORS, FONT, FACTION_NAME } from './config.js';
-import { CLASSES, ITEMS } from './data.js';
+import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
+import { GUARD_TAKEN } from './logic.js';
 import { panel, text, portrait, button } from './ui.js';
 
 const PW = WIDTH - PANEL_X;
@@ -38,7 +39,7 @@ export class Hud {
     const loseText = text(scene, PANEL_X + 20, y + 20, lose, 15, '#f1e3c2').setDepth(51).setWordWrapWidth(PW - 40);
     const shift = Math.max(0, y + 24 + loseText.height - (MAP_Y + 104));
     this.info = scene.add.container(PANEL_X + 16, MAP_Y + 110 + shift).setDepth(51);
-    this.forecastText = text(scene, PANEL_X + 20, MAP_Y + 352 + shift, '', 15, '#ffd27a').setDepth(51).setLineSpacing(4);
+    this.forecastText = text(scene, PANEL_X + 20, MAP_Y + 352 + shift, '', 15, '#ffd27a').setDepth(51).setLineSpacing(4).setWordWrapWidth(PW - 40);
     const g = scene.add.graphics().setDepth(51);
     g.lineStyle(1, COLORS.gold, 0.4).lineBetween(PANEL_X + 16, MAP_Y + 104 + shift, WIDTH - 16, MAP_Y + 104 + shift);
     g.lineStyle(1, COLORS.gold, 0.4).lineBetween(PANEL_X + 16, MAP_Y + 410 + shift, WIDTH - 16, MAP_Y + 410 + shift);
@@ -82,10 +83,16 @@ export class Hud {
     const s = this.scene;
     this.info.removeAll(true);
     if (!u) { if (terrain) this.showTerrain(terrain); return; }
-    const cls = CLASSES[u.cls];
+    const cls = classOf(u.cls, u.tier);
     const items = [portrait(s, 36, 40, u.name, u.faction, 72)];
+    // 兵种标识字：头像右下角的小印章，二阶以上金色
+    const badge = s.add.graphics();
+    badge.fillStyle(0x2a1b0e, 0.95).fillRoundedRect(56, 58, 22, 22, 4);
+    badge.lineStyle(2, cls.tier > 1 ? COLORS.gold : 0x9a8a6a, 1).strokeRoundedRect(56, 58, 22, 22, 4);
+    items.push(badge, text(s, 67, 69, cls.glyph, 15, cls.tier > 1 ? '#ffd36a' : '#f1e3c2', FONT).setOrigin(0.5));
     items.push(text(s, 86, 2, u.name, 24, '#fff2cc', FONT));
-    items.push(text(s, 86, 34, `${FACTION_NAME[u.faction]}·${cls.name}`, 15, FACTION_COLOR[u.faction]));
+    const tierName = cls.tiers > 1 ? `（${['一', '二', '三'][cls.tier - 1]}阶）` : '';
+    items.push(text(s, 86, 34, `${FACTION_NAME[u.faction]}·${cls.name}${tierName}`, 15, FACTION_COLOR[u.faction]));
     items.push(text(s, 86, 56, `Lv ${u.lvl}${u.faction === 'player' ? `　EXP ${u.exp}/100` : ''}`, 15, '#f1e3c2'));
     const bars = s.add.graphics();
     const bar = (y, label, v, max, col) => {
@@ -98,13 +105,16 @@ export class Hud {
     bar(116, '策略', u.mp, u.stats.mp, 0x4a9df0);
     items.push(bars);
     const st = u.stats;
-    const rows = [['武力', st.atk], ['防御', st.def], ['智力', st.int], ['敏捷', st.agi], ['移动', cls.move], ['地形', terrain ? `${terrain.name} ${Math.round(terrain.def * 100)}%` : '-']];
+    // 五项能力 + 移动（三列），地形单独一行
+    const rows = [...STAT5.map((k) => [STAT_NAME[k], st[k]]), ['移动', cls.move]];
     rows.forEach(([k, v], i) => {
-      const x = (i % 2) * 150, y = 142 + Math.floor(i / 2) * 24;
-      items.push(text(s, x, y, k, 15, '#e9c46a', FONT), text(s, x + 42, y, String(v), 15, '#f6ecd2'));
+      const x = (i % 3) * 100, y = 142 + Math.floor(i / 3) * 24;
+      items.push(text(s, x, y, k, 15, '#e9c46a', FONT), text(s, x + 38, y, String(v), 15, '#f6ecd2'));
     });
+    items.push(text(s, 0, 190, '地形', 15, '#e9c46a', FONT),
+      text(s, 38, 190, terrain ? `${terrain.name} ${Math.round(terrain.def * 100)}%` : '-', 15, '#f6ecd2'));
     const status = u.faction === 'player' ? (u.acted ? '已行动' : '待命中') : u.ai === 'aggressive' ? '进攻' : '固守';
-    items.push(text(s, 0, 216, `状态：${status}`, 14, '#bfae88'));
+    items.push(text(s, 0, 216, `状态：${status}${u.guard ? `　主将·受到伤害 −${Math.round((1 - GUARD_TAKEN) * 100)}%` : ''}`, 14, '#bfae88'));
     this.info.add(items);
   }
 

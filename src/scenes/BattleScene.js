@@ -1,9 +1,9 @@
 import * as Phaser from 'phaser';
 import { TILE, COLS, ROWS, MAP_X, MAP_Y, FONT, hiDpi } from '../config.js';
-import { getStage, resolveNext, FIRST_STAGE, ENDINGS } from '../stages.js';
-import { CLASSES, SPELLS, ITEMS, diffOf } from '../data.js';
+import { getStage, resolveNext, FIRST_STAGE, ENDINGS, PLANNED_IDS } from '../stages.js';
+import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, diffOf } from '../data.js';
 import {
-  createUnit, calcStats, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt, dist,
+  createUnit, restoreUnit, promoteBlock, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt, dist,
   physDamage, hitRate, canAttackFrom, spellDamage, spellHit, healAmount,
 } from '../logic.js';
 import { drawMap } from '../mapRender.js';
@@ -60,7 +60,7 @@ export class BattleScene extends Phaser.Scene {
     this.deployPlan = null;
     if (load) {
       this.joined = [...joined];
-      this.units = load.units.map((u) => ({ ...u, stats: calcStats(u.cls, u.lvl, u.bonus, u.mult) }));
+      this.units = load.units.map((u) => restoreUnit(u, this.difficulty));
     } else {
       // 新战斗：先按默认阵容生成我军（开场剧情时显示），整备确认后再按选择重建
       this.deployPlan = planDeploy(stage, { roster, joined, flags: this.flags });
@@ -68,6 +68,9 @@ export class BattleScene extends Phaser.Scene {
       const others = stage.units.filter((d) => d.faction !== 'player' && this.flagOk(d)).map((d) => createUnit(d, null, this.difficulty));
       this.units = [...this.playerUnits(this.deployPlan.defaults), ...others];
     }
+    // 主将与受保护单位：受到伤害减轻（GUARD_TAKEN），AI 控制时不冒进
+    this.guardIds = new Set(['caocao', ...(stage.protect || [])]);
+    this.units.forEach((u) => this.markGuard(u));
     this.views = new Map();
     this.units.filter((u) => u.alive).forEach((u) => this.views.set(u, new UnitView(this, u)));
     this.hl = this.add.graphics().setDepth(5);
@@ -96,6 +99,10 @@ export class BattleScene extends Phaser.Scene {
     await this.startPhase('player');
   }
 
+  markGuard(u) {
+    u.guard = this.guardIds.has(u.id);
+  }
+
   // ---------- 出阵整备 ----------
   playerUnits(ids) {
     const roster = this.registry.get('roster') || {};
@@ -118,6 +125,7 @@ export class BattleScene extends Phaser.Scene {
       this.views.delete(u);
     }
     const players = this.playerUnits(ids);
+    players.forEach((u) => this.markGuard(u));
     this.units = [...players, ...this.units.filter((u) => u.faction !== 'player')];
     players.forEach((u) => this.views.set(u, new UnitView(this, u)));
   }
@@ -263,6 +271,7 @@ export class BattleScene extends Phaser.Scene {
       if (!this.flagOk(d)) continue;
       if (this.unitAt(d.x, d.y)) continue;
       const u = createUnit(d, d.faction === 'player' ? (this.registry.get('roster') || {})[d.id] : null, this.difficulty);
+      this.markGuard(u);
       this.units.push(u);
       const v = new UnitView(this, u);
       this.views.set(u, v);
@@ -397,7 +406,7 @@ export class BattleScene extends Phaser.Scene {
     const eps = this.stage.epilogues || {};
     await this.dialog.show((annihilated && eps.annihilate) || eps[outcome] || this.stage.epilogue);
     const roster = this.registry.get('roster') || {};
-    for (const u of this.units) if (u.faction === 'player') roster[u.id] = { lvl: u.lvl, exp: u.exp, cls: u.cls };
+    for (const u of this.units) if (u.faction === 'player') roster[u.id] = { lvl: u.lvl, exp: u.exp, cls: u.cls, tier: u.tier };
     this.registry.set('roster', roster);
     const joined = [...new Set([...this.joined, ...this.units.filter((u) => u.faction === 'player' && isGeneral(u.id)).map((u) => u.id)])];
     this.registry.set('joined', joined);
@@ -405,12 +414,16 @@ export class BattleScene extends Phaser.Scene {
     // 过关奖励补给
     const items = { ...this.items };
     for (const [k, n] of Object.entries(this.difficulty.reward)) items[k] = (items[k] || 0) + n;
+    // 印绶：从徐州入侵战起每关胜利 +1
+    const seal = PLANNED_IDS.indexOf(this.stageId) >= PLANNED_IDS.indexOf(SEAL_FROM);
+    if (seal) items.seal = (items.seal || 0) + 1;
     this.registry.set('items', items);
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
     writeAuto({
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       summary: { lordLvl: this.units.find((u) => u.id === 'caocao').lvl },
     });
+    if (seal) await this.hud.banner('获得「印绶」×1', '#ffd36a');
     if (next && getStage(next)) this.scene.start('Battle', { stage: next });
     else this.scene.start('Ending', { route: ENDINGS[next] || 'villain' });
   }
@@ -454,7 +467,9 @@ export class BattleScene extends Phaser.Scene {
       else if (u && u !== this.sel.unit) { this.clearSelection(); this.state = 'idle'; this.onClick(p); }
       else this.cancel();
     } else if (this.state === 'target') {
-      if (this.sel.targets.some((o) => o.x === t.x && o.y === t.y) && u && this.validTarget(u)) this.execute(u);
+      const inRange = this.sel.targets.some((o) => o.x === t.x && o.y === t.y);
+      if (inRange && u && this.validTarget(u)) this.execute(u);
+      else if (inRange && u && this.sel.action.kind === 'item' && ITEMS[this.sel.action.id].promote && !isFoe(u, this.sel.unit)) this.hud.log(promoteBlock(u));
     }
   }
 
@@ -548,7 +563,7 @@ export class BattleScene extends Phaser.Scene {
     this.hl.clear();
     this.setCursor(u.x, u.y);
     const foes = attackTiles(u).some((t) => { const o = this.unitAt(t.x, t.y); return o && isFoe(o, u); });
-    const spells = CLASSES[u.cls].spells;
+    const spells = classOf(u.cls, u.tier).spells;
     const hasItem = Object.values(this.items).some((n) => n > 0);
     this.buildMenu([
       ['攻　击', () => this.startTarget('attack'), !foes],
@@ -560,18 +575,33 @@ export class BattleScene extends Phaser.Scene {
 
   spellMenu() {
     const u = this.sel.unit;
-    const entries = CLASSES[u.cls].spells.map((id) => [`${SPELLS[id].name} ${SPELLS[id].mp}`, () => this.startTarget('spell', id), u.mp < SPELLS[id].mp]);
+    const spells = classOf(u.cls, u.tier).spells;
+    const entries = spells.map((id) => [`${SPELLS[id].name} ${SPELLS[id].mp}`, () => this.startTarget('spell', id), u.mp < SPELLS[id].mp]);
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}\n` + CLASSES[u.cls].spells.map((id) => `${SPELLS[id].name}：${SPELLS[id].desc}`).join('\n'));
+    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}\n` + spells.map((id) => `${SPELLS[id].name}：${SPELLS[id].desc}`).join('\n'));
+  }
+
+  // 道具目标格：自身与上下左右
+  itemTiles(u) {
+    return [{ x: u.x, y: u.y }, ...RANGES.cross.map(([dx, dy]) => ({ x: u.x + dx, y: u.y + dy })).filter((p) => inMap(p.x, p.y))];
   }
 
   itemMenu() {
     ensureTextures(this);
-    const entries = Object.entries(this.items).map(([id, n]) => [`${ITEMS[id].name} ×${n}`, () => this.startTarget('item', id), n <= 0, `fx-${id}`]);
+    const u = this.sel.unit;
+    // 印绶：自身或相邻有可转职的我军时才可用，否则置灰并说明原因
+    const near = this.itemTiles(u).map((t) => this.unitAt(t.x, t.y)).filter((o) => o && !isFoe(o, u));
+    const sealOk = near.some((o) => !promoteBlock(o));
+    const entries = Object.entries(this.items).map(([id, n]) => [`${ITEMS[id].name} ×${n}`, () => this.startTarget('item', id), n <= 0 || (ITEMS[id].promote && !sealOk), `fx-${id}`]);
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast(Object.values(ITEMS).map((it) => `${it.name}：${it.desc}`).join('\n'));
+    // 说明两项一行，避免超出预测区
+    const descs = Object.entries(ITEMS).filter(([id]) => id in this.items).map(([, it]) => `${it.name}：${it.desc}`);
+    const lines = [];
+    for (let i = 0; i < descs.length; i += 2) lines.push(descs.slice(i, i + 2).join('　'));
+    if ('seal' in this.items && !sealOk) lines.push(`印绶不可用：${promoteBlock(u) || '附近没有可转职的武将'}`);
+    this.hud.forecast(lines.join('\n'));
   }
 
   startTarget(kind, id) {
@@ -580,7 +610,7 @@ export class BattleScene extends Phaser.Scene {
     let tiles;
     if (kind === 'attack') tiles = attackTiles(u);
     else if (kind === 'spell') tiles = spellTiles(u, id);
-    else tiles = [{ x: u.x, y: u.y }, ...attackTiles({ cls: 'infantry' }, u.x, u.y)];
+    else tiles = this.itemTiles(u);
     this.sel.action = { kind, id };
     this.sel.targets = tiles;
     this.state = 'target';
@@ -592,14 +622,20 @@ export class BattleScene extends Phaser.Scene {
 
   validTarget(o) {
     const { unit: u, action } = this.sel;
+    if (action.kind === 'item' && ITEMS[action.id].promote) return !isFoe(o, u) && !promoteBlock(o);
     const healish = action.kind === 'item' || (action.kind === 'spell' && SPELLS[action.id].kind === 'heal');
     return healish ? !isFoe(o, u) : isFoe(o, u);
   }
 
   forecastFor(t) {
     const o = this.unitAt(t.x, t.y);
-    if (!o || !this.sel?.targets.some((p) => p.x === t.x && p.y === t.y) || !this.validTarget(o)) return '';
+    if (!o || !this.sel?.targets.some((p) => p.x === t.x && p.y === t.y)) return '';
     const { unit: u, action } = this.sel;
+    if (action.kind === 'item' && ITEMS[action.id].promote && !isFoe(o, u)) {
+      const why = promoteBlock(o);
+      return why ? `【印绶】${why}` : `【印绶】${o.name}：${classOf(o.cls, o.tier).name} → ${classOf(o.cls, o.tier + 1).name}`;
+    }
+    if (!this.validTarget(o)) return '';
     if (action.kind === 'attack') {
       const d = physDamage(this.map, u, o);
       let s = `【攻击预测】\n伤害 ${d}　命中 ${hitRate(this.map, u, o)}%`;

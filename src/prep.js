@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { WIDTH, HEIGHT, FONT, COLORS } from './config.js';
-import { CLASSES } from './data.js';
+import { classOf } from './data.js';
 import { calcStats } from './logic.js';
 import { panel, text, button, portrait } from './ui.js';
 
@@ -85,11 +85,11 @@ export function openPrep(scene, plan, onConfirm) {
       zone.on('pointerdown', (p, lx, ly, e) => { e?.stopPropagation?.(); toggle(c); });
       const pt = portrait(scene, cx + 52, cy + ch / 2, c.name, 'player', 84);
       if (!on) pt.setAlpha(0.5);
-      const hp = calcStats(c.cls, c.lvl, c.bonus).hp;
+      const hp = calcStats(c).hp;
       const tag = lock ? ['必须出阵', '#ffd36a'] : on ? ['出　阵', '#9cc8ff'] : ['待　命', '#8a7a60'];
       list.add([g, zone, pt,
         text(scene, cx + 104, cy + 10, c.name, 22, on ? '#fff2cc' : '#bfae88', FONT),
-        text(scene, cx + 104, cy + 42, `${CLASSES[c.cls].name}　Lv ${c.lvl}`, 15, '#f1e3c2'),
+        text(scene, cx + 104, cy + 42, `${classOf(c.cls, c.tier).name}　Lv ${c.lvl}`, 15, '#f1e3c2'),
         text(scene, cx + 104, cy + 66, `兵力 ${hp}`, 15, '#9ce0a8'),
         text(scene, cx + 104, cy + 92, tag[0], 15, tag[1], FONT)]);
     });
