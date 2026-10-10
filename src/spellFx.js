@@ -3,6 +3,7 @@ import { tileCenter } from './unitView.js';
 import { text } from './ui.js';
 import { FONT, TILE, COLS, ROWS, MAP_X, MAP_Y } from './config.js';
 import { ITEMS, SPELLS, TERRAIN } from './data.js';
+import { EQUIP, KINDS } from './equipment.js';
 
 // 策略 / 道具特效：先生成高清特效贴图，再用补间组合
 const D = 720;
@@ -184,6 +185,92 @@ export function ensureTextures(s) {
     ctx.beginPath(); ctx.moveTo(0.5, 3); ctx.quadraticCurveTo(5, -1, 9.5, 3); ctx.quadraticCurveTo(5, 7, 0.5, 3); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(1, 3); ctx.lineTo(9, 3); ctx.stroke();
   });
+  gearTextures(s);
+}
+
+// ---------- 装备 / 果子图标（整备、奖励面板、掉落特效共用） ----------
+const FRUIT_COLOR = { exp: '#e8c040', atk: '#e04a3a', int: '#4a8ae0', def: '#8a6ad0', burst: '#40b060', morale: '#f08ac0' };
+
+// 装备外形：武器与护具画出轮廓，其余辅助品在牌面写上种类名
+function drawGear(ctx, kind, label) {
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const steel = '#dfe6ee', dark = '#3a3020', wood = '#8a5a2a';
+  const line = (pts, w, col) => {
+    ctx.strokeStyle = col; ctx.lineWidth = w;
+    ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+  };
+  if (kind === 'sword' || kind === 'jian') {
+    line([[6, 18], [18, 6]], 2.6, steel);
+    line([[6.6, 13.6], [10.4, 17.4]], 1.6, kind === 'jian' ? '#d8b040' : dark);
+    line([[4, 20], [7, 17]], 2, wood);
+  } else if (kind === 'spear') {
+    line([[4, 20], [17, 7]], 1.6, wood);
+    ctx.fillStyle = steel; ctx.beginPath(); ctx.moveTo(20, 4); ctx.lineTo(15, 7); ctx.lineTo(17, 9); ctx.closePath(); ctx.fill();
+    line([[14.6, 9.4], [12.4, 7.2]], 1.2, '#c83030');
+  } else if (kind === 'bow') {
+    ctx.strokeStyle = wood; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(7, 12, 9, -1.15, 1.15); ctx.stroke();
+    line([[10.7, 3.8], [10.7, 20.2]], 0.7, '#f6ecd2');
+    line([[5, 12], [20, 12]], 1, steel);
+  } else if (kind === 'staff') {
+    line([[5, 20], [19, 4]], 2.2, wood);
+    line([[5, 20], [7, 17.7]], 2.6, '#c8a040'); line([[17, 6.3], [19, 4]], 2.6, '#c8a040');
+  } else if (kind === 'cata') {
+    ctx.fillStyle = wood; ctx.fillRect(4, 15, 16, 3);
+    line([[8, 15], [17, 5]], 1.6, wood);
+    ctx.fillStyle = '#9a9aa0'; ctx.beginPath(); ctx.arc(17.5, 5, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = dark; [7, 17].forEach((x) => { ctx.beginPath(); ctx.arc(x, 19, 2, 0, Math.PI * 2); ctx.fill(); });
+  } else if (kind === 'fan') {
+    ctx.fillStyle = '#f6f0e0'; ctx.strokeStyle = '#8a7a5a'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(12, 19); ctx.arc(12, 19, 14, -2.5, -0.64); ctx.closePath(); ctx.fill(); ctx.stroke();
+    for (let a = -2.3; a < -0.7; a += 0.4) line([[12, 19], [12 + Math.cos(a) * 13, 19 + Math.sin(a) * 13]], 0.5, '#b0a080');
+    line([[12, 19], [12, 22]], 1.6, wood);
+  } else if (kind === 'mail' || kind === 'robe') {
+    ctx.fillStyle = kind === 'mail' ? '#9aa4b0' : '#6a8ac0'; ctx.strokeStyle = dark; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(8, 4); ctx.lineTo(16, 4); ctx.lineTo(21, 8); ctx.lineTo(18, 11); ctx.lineTo(17, 20); ctx.lineTo(7, 20);
+    ctx.lineTo(6, 11); ctx.lineTo(3, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+    if (kind === 'mail') for (let y = 9; y < 20; y += 3) line([[7.5, y], [16.5, y]], 0.6, 'rgba(40,40,50,0.6)');
+    else line([[12, 5], [12, 20]], 0.8, '#f6ecd2');
+  } else if (kind === 'shield') {
+    ctx.fillStyle = '#a8763a'; ctx.strokeStyle = dark; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(12, 3); ctx.lineTo(20, 6); ctx.quadraticCurveTo(20, 16, 12, 21); ctx.quadraticCurveTo(4, 16, 4, 6); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#e0c060'; ctx.beginPath(); ctx.arc(12, 11, 2.4, 0, Math.PI * 2); ctx.fill();
+  } else if (kind === 'helm') {
+    ctx.fillStyle = '#9aa4b0'; ctx.strokeStyle = dark; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(12, 14, 8, Math.PI, 0); ctx.lineTo(20, 17); ctx.lineTo(4, 17); ctx.closePath(); ctx.fill(); ctx.stroke();
+    line([[12, 6], [12, 2.5]], 1.4, '#c83030');
+  } else {
+    ctx.fillStyle = '#f6ecd2'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${label.length > 1 ? 8 : 12}px "STKaiti","KaiTi",serif`;
+    ctx.fillText(label.slice(0, 2), 12, 12.6);
+  }
+}
+
+// 装备图标贴图键：eq-<种类>，宝物为 eq-<种类>-t（金框）
+export const gearIcon = (id) => `eq-${EQUIP[id].kind}${EQUIP[id].treasure ? '-t' : ''}`;
+
+export function gearTextures(s) {
+  for (const [kind, k] of Object.entries(KINDS)) {
+    for (const t of [false, true]) {
+      canvasTex(s, `eq-${kind}${t ? '-t' : ''}`, 24, 24, (ctx) => {
+        ctx.fillStyle = t ? radial(ctx, 12, 12, 15, [[0, '#7a4a1a'], [1, '#3a1e08']]) : '#2a2620';
+        ctx.strokeStyle = t ? '#ffd36a' : '#8a7a5a'; ctx.lineWidth = t ? 1.6 : 1;
+        ctx.beginPath(); ctx.roundRect(1, 1, 22, 22, 4); ctx.fill(); ctx.stroke();
+        drawGear(ctx, kind, k.name);
+      });
+    }
+  }
+  for (const [id, it] of Object.entries(ITEMS)) {
+    if (!it.fruit) continue;
+    canvasTex(s, `fx-${id}`, 24, 24, (ctx) => {
+      ctx.fillStyle = '#5aa83a'; ctx.beginPath(); ctx.ellipse(15, 5, 4, 2, -0.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = radial(ctx, 9, 10, 11, [[0, '#ffffff'], [0.35, FRUIT_COLOR[it.fruit]], [1, '#2a1a10']]);
+      ctx.strokeStyle = '#2a1a10'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(12, 14, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff6e0'; ctx.font = 'bold 8px "STKaiti","KaiTi",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(it.name[0], 12, 14.6);
+    });
+  }
 }
 
 const tween = (s, cfg) => new Promise((resolve) => s.tweens.add({ ...cfg, onComplete: resolve }));
@@ -721,6 +808,27 @@ export async function deathFx(s, v) {
   }
   await tween(s, { targets: v.c, alpha: 0, delay: 120, duration: 420 });
   v.c.destroy();
+}
+
+// 掉落：装备图标从击破处弹起，金光闪烁并显示获得字样（x, y 为格子坐标）
+export async function lootFx(s, x, y, id, label) {
+  ensureTextures(s);
+  const p = tileCenter(x, y);
+  const glow = img(s, 'fx-glow', p.x, p.y - 10, 1.2, D + 3).setTint(0xffd36a).setBlendMode(ADD).setAlpha(0);
+  const icon = img(s, gearIcon(id), p.x, p.y, 0.6, D + 5);
+  s.tweens.add({ targets: glow, alpha: 0.9, scale: 2.4 / R, duration: 300, yoyo: true, hold: 300 });
+  await tween(s, { targets: icon, y: p.y - 34, scale: 1.6 / R, duration: 380, ease: 'Back.easeOut' });
+  for (let i = 0; i < 10; i++) {
+    const a = (Math.PI * 2 * i) / 10;
+    const sp = img(s, 'fx-spark', icon.x, icon.y, rand(0.4, 0.7), D + 6).setTint(0xfff2a0).setBlendMode(ADD);
+    s.tweens.add({ targets: sp, x: icon.x + Math.cos(a) * 26, y: icon.y + Math.sin(a) * 20, alpha: 0, duration: 520, onComplete: () => sp.destroy() });
+  }
+  const t = text(s, p.x, p.y - 66, label, 20, '#ffd36a', FONT).setOrigin(0.5).setStroke('#3a1800', 5).setDepth(D + 40);
+  await delay(s, 900);
+  fadeOut(s, icon, 300, { y: icon.y - 12 });
+  fadeOut(s, glow, 300);
+  fadeOut(s, t, 300, { y: t.y - 10 });
+  await delay(s, 300);
 }
 
 // 转职：金色光柱与环绕星光（复用回复特效），中途闪白换装，金色字样“转职·新兵种”

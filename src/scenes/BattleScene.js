@@ -4,23 +4,27 @@ import { getStage, resolveNext, FIRST_STAGE, ENDINGS, PLANNED_IDS } from '../sta
 import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf } from '../data.js';
 import {
   createUnit, restoreUnit, promoteBlock, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt,
-  physDamage, hitRate, canAttackFrom, spellDamage, spellHit, healAmount, knownSpells, spellBlock, spellTargetOk, spellVictims,
-  areaTiles, spellDrainMp,
+  physDamage, hitRate, spellDamage, spellHit, healAmount, spellBlock, spellTargetOk, spellVictims,
+  areaTiles, spellDrainMp, usableSpells, spellCost, counterOk, tickGear,
 } from '../logic.js';
-import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, canCounter, has } from '../status.js';
+import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, has } from '../status.js';
 import { drawMap } from '../mapRender.js';
 import { UnitView } from '../unitView.js';
 import { Hud } from '../hud.js';
 import { DialogBox, button, wait, text, floatText } from '../ui.js';
-import { doAttack, doSpell, doItem, runAI } from '../actions.js';
+import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.js';
 import { writeAuto, applyLoad } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
-import { isGeneral } from '../generals.js';
+import { GENERALS, isGeneral } from '../generals.js';
 import { planDeploy, buildPlayerDefs } from '../deploy.js';
 import { openPrep } from '../prep.js';
 import { openInfo } from '../infoPanel.js';
-import { ensureTextures } from '../spellFx.js';
+import { openRewards } from '../rewardPanel.js';
+import { ensureTextures, lootFx } from '../spellFx.js';
 import { playDuel } from '../duel.js';
+import {
+  SLOTS, DROPS, issueKit, kitFrom, copyKit, newGear, pickGear, stageRewards, goldFor, gearName,
+} from '../equipment.js';
 
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
@@ -57,16 +61,22 @@ export class BattleScene extends Phaser.Scene {
     this.items = { ...(load?.items || this.registry.get('items') || this.difficulty.items) };
     this.red = load?.red ?? this.registry.get('red') ?? 0;
     this.flags = { ...(load?.flags || this.registry.get('flags') || {}) };
+    // 装备背包与金钱：战斗中的掉落只记在副本里，胜利时写回 registry
+    this.inventory = (load?.inventory || this.registry.get('inventory') || []).map((it) => ({ ...it }));
+    this.gold = load?.gold ?? this.registry.get('gold') ?? 0;
+    this.gained = [];
     // applyLoad 已把存档中的 joined 写入 registry（旧存档按 roster 推导）
     const joined = this.registry.get('joined') || Object.keys(roster).filter(isGeneral);
     this.deployPlan = null;
     if (load) {
       this.joined = [...joined];
-      this.units = load.units.map((u) => restoreUnit(u, this.difficulty));
+      // 旧存档的我军武将没有装备：按 roster 记录（缺失时按原版规则生成初始装备）补上
+      this.units = load.units.map((u) => restoreUnit(u.equip || u.faction !== 'player' || !isGeneral(u.id) ? u : { ...u, equip: this.kitFor(u.id, u.lvl) }, this.difficulty));
     } else {
       // 新战斗：先按默认阵容生成我军（开场剧情时显示），整备确认后再按选择重建
       this.deployPlan = planDeploy(stage, { roster, joined, flags: this.flags });
       this.joined = this.deployPlan.joined;
+      this.deployPlan.pool.forEach((c) => this.kitFor(c.id, c.lvl));
       const others = stage.units.filter((d) => d.faction !== 'player' && this.flagOk(d)).map((d) => createUnit(d, null, this.difficulty));
       this.units = [...this.playerUnits(this.deployPlan.defaults), ...others];
     }
@@ -107,20 +117,35 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ---------- 出阵整备 ----------
-  playerUnits(ids) {
+  // 我军武将的装备副本：没有装备记录（新加入 / 旧存档）时按原版规则生成初始装备，立即写入战役状态
+  kitFor(id, lvl) {
+    if (!isGeneral(id)) return undefined;
     const roster = this.registry.get('roster') || {};
-    return buildPlayerDefs(this.deployPlan, ids).map((d) => createUnit(d, roster[d.id], this.difficulty));
+    if (!roster[id]?.equip) {
+      const n = this.inventory.length;
+      const lv = Math.max(lvl || 1, roster[id]?.lvl || 0);
+      roster[id] = { ...roster[id], equip: issueKit(this.inventory, id, GENERALS[id].cls, lv) };
+      this.registry.set('roster', { ...roster });
+      this.registry.set('inventory', [...(this.registry.get('inventory') || []), ...this.inventory.slice(n).map((it) => ({ ...it }))]);
+    }
+    return kitFrom(this.inventory, roster[id].equip);
   }
 
-  // 开场剧情后选择出阵武将；阵容与默认不同时重建我军单位与视图
+  playerUnits(ids) {
+    const defs = buildPlayerDefs(this.deployPlan, ids);
+    const kits = defs.map((d) => this.kitFor(d.id, d.lvl));
+    const roster = this.registry.get('roster') || {};
+    return defs.map((d, i) => createUnit(d, roster[d.id], this.difficulty, kits[i]));
+  }
+
+  // 开场剧情后整备（出阵、装备、道具、商店）；整备中可能换装，确认后一律重建我军单位与视图
   async startPrep() {
     const plan = this.deployPlan;
     if (!plan) return;
     this.modal = true;
     const ids = await new Promise((r) => openPrep(this, plan, r));
     this.modal = false;
-    const cur = this.units.filter((u) => u.faction === 'player' && isGeneral(u.id)).map((u) => u.id);
-    if (ids.length === cur.length && ids.every((id) => cur.includes(id))) return;
+    this.hud.setItems(this.items);
     for (const u of this.units.filter((o) => o.faction === 'player')) {
       const v = this.views.get(u);
       v.idle?.remove();
@@ -172,10 +197,14 @@ export class BattleScene extends Phaser.Scene {
       flags: { ...this.flags },
       turn: this.turn,
       items: { ...this.items },
+      inventory: this.inventory.map((it) => ({ ...it })),
+      gold: this.gold,
       roster: this.registry.get('roster') || {},
       joined: [...this.joined],
       firedEvents: [...this.firedEvents],
-      units: this.units.map(({ stats, ...u }) => ({ ...u, status: { ...u.status }, buffs: { ...u.buffs } })),
+      units: this.units.map(({ stats, ...u }) => ({
+        ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits },
+      })),
       summary: { lordLvl: lord.lvl },
     };
   }
@@ -231,6 +260,8 @@ export class BattleScene extends Phaser.Scene {
     await this.hud.banner(`第${this.turn}回合　${{ player: '我军', ally: '友军', enemy: '敌军' }[faction]}阶段`,
       { player: '#9cc8ff', ally: '#9ce0a8', enemy: '#ff9a8a' }[faction]);
     await this.fireEvents(faction);
+    // 连环铠按阶段计算受到攻击的次数
+    for (const u of this.units) u.hitsTaken = 0;
     for (const u of this.units.filter((v) => v.alive && v.faction === faction)) {
       u.acted = false;
       this.views.get(u)?.setActed(false);
@@ -241,6 +272,7 @@ export class BattleScene extends Phaser.Scene {
         this.views.get(u).updateHp();
         this.hud.log(`${u.name} 在${t.name}休整，兵力 +${amt}`);
       }
+      await this.gearTurn(u);
       this.tickUnit(u);
     }
     if (faction === 'player') {
@@ -251,6 +283,35 @@ export class BattleScene extends Phaser.Scene {
     }
     await runAI(this, faction);
     if (!this.over) this.nextPhase();
+  }
+
+  // 阶段开始时的装备效果（先于异常结算，太平清领道可使混乱的单位照常行动）：回复兵力 / 策略值、解除异常、每回合经验
+  async gearTurn(u) {
+    const g = tickGear(u);
+    const v = this.views.get(u);
+    const p = { x: MAP_X + u.x * TILE + TILE / 2, y: MAP_Y + u.y * TILE + TILE / 2 };
+    if (g.heal) { floatText(this, p.x, p.y - 20, `+${g.heal}`, '#7dff9a', 20); this.hud.log(`${u.name} 的装备恢复兵力 +${g.heal}`); }
+    if (g.mp) { floatText(this, p.x, p.y - 38, `策略 +${g.mp}`, '#8ac8ff', 18); this.hud.log(`${u.name} 的太平要术恢复策略值 +${g.mp}`); }
+    if (g.cured.length) this.hud.log(`${u.name} 的太平清领道解除了${g.cured.map((k) => STATUS[k].name).join('、')}`);
+    if (g.heal || g.mp || g.cured.length) { v?.updateHp(); v?.updateStatus(); }
+    gainGear(this, u, 'weapon', g.weapon);
+    gainGear(this, u, 'armor', g.armor);
+    if (g.exp) await gainExp(this, u, g.exp);
+  }
+
+  // 敌将击破时掉落装备（宝物已拥有则不掉落），即时进入背包；等级按曹操等级
+  async dropLoot(u) {
+    const item = u.faction === 'enemy' && DROPS[this.stageId]?.[u.id];
+    const id = item && pickGear(this.inventory, item);
+    if (!id) return;
+    const it = newGear(this.inventory, id, this.lordLvl());
+    this.gained.push(it);
+    this.hud.log(`★ 获得宝物「${gearName(it)}」`);
+    await lootFx(this, u.x, u.y, it.id, `获得「${gearName(it)}」`);
+  }
+
+  lordLvl() {
+    return this.units.find((u) => u.id === 'caocao').lvl;
   }
 
   // 阶段开始时的状态处理：中毒扣血、异常自然恢复 / 到期、增减益递减；混乱的单位本阶段不能行动
@@ -279,7 +340,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.phase === 'ally') return this.startPhase('enemy');
     this.turn += 1;
     const hold = this.stage.victory.find((c) => c.type === 'survive' && this.turn > c.turns);
-    if (hold) return this.victory(hold.outcome);
+    if (hold) return this.victory(hold.outcome, 'survive');
     if (this.turn > this.stage.turns) return this.defeat('时限已到，我军粮草耗尽……');
     return this.startPhase('player');
   }
@@ -299,7 +360,9 @@ export class BattleScene extends Phaser.Scene {
     for (const d of defs) {
       if (!this.flagOk(d)) continue;
       if (this.unitAt(d.x, d.y)) continue;
-      const u = createUnit(d, d.faction === 'player' ? (this.registry.get('roster') || {})[d.id] : null, this.difficulty);
+      const mine = d.faction === 'player';
+      const kit = mine ? this.kitFor(d.id, d.lvl) : undefined;
+      const u = createUnit(d, mine ? (this.registry.get('roster') || {})[d.id] : null, this.difficulty, kit);
       this.markGuard(u);
       this.units.push(u);
       const v = new UnitView(this, u);
@@ -415,13 +478,13 @@ export class BattleScene extends Phaser.Scene {
         ok = this.units.some((u) => u.alive && u.faction === 'player' && (c.unit === 'any' || u.id === c.unit)
           && c.tiles.some(([x, y]) => u.x === x && u.y === y));
       }
-      if (ok) { await this.victory(c.outcome); return true; }
+      if (ok) { await this.victory(c.outcome, c.type); return true; }
     }
-    if (!enemiesLeft) { await this.victory('win'); return true; }
+    if (!enemiesLeft) { await this.victory('win', 'all'); return true; }
     return false;
   }
 
-  async victory(outcome = 'win') {
+  async victory(outcome = 'win', via = 'all') {
     this.over = true;
     this.state = 'busy';
     this.clearSelection();
@@ -434,9 +497,33 @@ export class BattleScene extends Phaser.Scene {
     }
     const eps = this.stage.epilogues || {};
     await this.dialog.show((annihilated && eps.annihilate) || eps[outcome] || this.stage.epilogue);
+    // 成长记录与装备 / 果子引用合并保存；战斗中的装备熟练度按 uid 写回背包
     const roster = this.registry.get('roster') || {};
-    for (const u of this.units) if (u.faction === 'player') roster[u.id] = { lvl: u.lvl, exp: u.exp, cls: u.cls, tier: u.tier };
+    for (const u of this.units) {
+      if (u.faction !== 'player') continue;
+      roster[u.id] = { ...roster[u.id], lvl: u.lvl, exp: u.exp, cls: u.cls, tier: u.tier };
+      for (const s of SLOTS) {
+        const g = u.equip?.[s];
+        const it = g?.uid != null && this.inventory.find((o) => o.uid === g.uid);
+        if (it) Object.assign(it, { lvl: g.lvl, exp: g.exp });
+      }
+    }
     this.registry.set('roster', roster);
+    const lordLvl = this.lordLvl();
+    const rewards = stageRewards(this.stageId, {
+      flags: this.flags, outcome, via, annihilated, turn: this.turn,
+      alive: (id) => this.units.some((o) => o.id === id && o.alive),
+    });
+    let gold = goldFor(lordLvl);
+    const gear = [...this.gained];
+    for (const r of rewards) {
+      if (r.gold) gold += r.gold;
+      const id = r.item && pickGear(this.inventory, r.item);
+      if (id) gear.push(newGear(this.inventory, id, lordLvl));
+    }
+    this.gold += gold;
+    this.registry.set('inventory', this.inventory.map((it) => ({ ...it })));
+    this.registry.set('gold', this.gold);
     const joined = [...new Set([...this.joined, ...this.units.filter((u) => u.faction === 'player' && isGeneral(u.id)).map((u) => u.id)])];
     this.registry.set('joined', joined);
     this.registry.set('red', this.red);
@@ -454,9 +541,13 @@ export class BattleScene extends Phaser.Scene {
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
     writeAuto({
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
-      summary: { lordLvl: this.units.find((u) => u.id === 'caocao').lvl },
+      inventory: this.inventory, gold: this.gold, summary: { lordLvl },
     });
-    await this.hud.banner(`获得${seal ? '「印绶」' : ''}「${ITEMS[loot].name}」×1`, '#ffd36a');
+    const supplies = { ...this.difficulty.reward };
+    if (seal) supplies.seal = (supplies.seal || 0) + 1;
+    supplies[loot] = (supplies[loot] || 0) + 1;
+    this.modal = true;
+    await openRewards(this, { gold, gear, items: supplies });
     if (next && getStage(next)) this.scene.start('Battle', { stage: next });
     else this.scene.start('Ending', { route: ENDINGS[next] || 'villain' });
   }
@@ -602,8 +693,8 @@ export class BattleScene extends Phaser.Scene {
     this.hl.clear();
     this.setCursor(u.x, u.y);
     const foes = attackTiles(u).some((t) => { const o = this.unitAt(t.x, t.y); return o && isFoe(o, u); });
-    const spells = knownSpells(u);
-    const hasItem = Object.values(this.items).some((n) => n > 0);
+    const spells = usableSpells(this.units, u);
+    const hasItem = Object.entries(this.items).some(([id, n]) => n > 0 && !ITEMS[id]?.fruit);
     const silent = has(u, 'silence') ? `${u.name}处于禁咒状态，无法使用策略` : '';
     this.buildMenu([
       ['攻　击', () => this.startTarget('attack'), !foes],
@@ -616,11 +707,11 @@ export class BattleScene extends Phaser.Scene {
   // 策略列表分页显示（每页 10 个）；鼠标移到策略上显示说明
   spellMenu(page = 0) {
     const u = this.sel.unit;
-    const spells = knownSpells(u);
+    const spells = usableSpells(this.units, u);
     const PER = 10, pages = Math.ceil(spells.length / PER);
     const entries = spells.slice(page * PER, (page + 1) * PER).map((id) => {
-      const sp = SPELLS[id];
-      return [`${sp.name} ${sp.mp}`, () => this.startTarget('spell', id), u.mp < sp.mp, null, `【${sp.name}】策略值 ${sp.mp}　${sp.desc}`];
+      const sp = SPELLS[id], mp = spellCost(u, id);
+      return [`${sp.name} ${mp}`, () => this.startTarget('spell', id), u.mp < mp, null, `【${sp.name}】策略值 ${mp}　${sp.desc}`];
     });
     if (pages > 1) entries.push([`下一页 ${page + 1}/${pages}`, () => this.spellMenu((page + 1) % pages)]);
     entries.push(['返　回', () => this.openMenu()]);
@@ -639,7 +730,7 @@ export class BattleScene extends Phaser.Scene {
     // 印绶：自身或相邻有可转职的我军时才可用，否则置灰并说明原因
     const near = this.itemTiles(u).map((t) => this.unitAt(t.x, t.y)).filter((o) => o && !isFoe(o, u));
     const sealOk = near.some((o) => !promoteBlock(o));
-    const ids = Object.keys(ITEMS).filter((id) => this.items[id] > 0);
+    const ids = Object.keys(ITEMS).filter((id) => this.items[id] > 0 && !ITEMS[id].fruit);
     const entries = ids.map((id) => {
       const it = ITEMS[id];
       const why = it.promote && !sealOk ? `　不可用：${promoteBlock(u) || '附近没有可转职的武将'}` : '';
@@ -695,7 +786,7 @@ export class BattleScene extends Phaser.Scene {
     if (action.kind === 'attack') {
       const d = physDamage(this.map, u, o);
       let s = `【攻击预测】\n伤害 ${d}　命中 ${hitRate(this.map, u, o)}%`;
-      if (d < o.hp && canCounter(o) && canAttackFrom(o, o.x, o.y, u)) s += `\n反击 ${physDamage(this.map, o, u)}　命中 ${hitRate(this.map, o, u)}%`;
+      if (d < o.hp && counterOk(u, o)) s += `\n反击 ${physDamage(this.map, o, u)}　命中 ${hitRate(this.map, o, u)}%`;
       else if (d >= o.hp) s += '\n可击破目标！';
       return s;
     }

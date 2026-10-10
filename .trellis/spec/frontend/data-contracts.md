@@ -37,14 +37,23 @@
 - `u.status = { poison?, paralyze?, confuse?, silence?: 剩余回合 }`；`u.buffs = { atk?|int?|def?|burst?|morale?: { mult, turns }, move?: { add, turns } }`。两者随战斗中存档保存，旧存档缺失时 `restoreUnit` 补为 `{}`。
 - `applyStatus` / `cure(u, key|'all')` / `applyBuff`（同一能力只刷新不叠加）；`tickStatus(u, rng)` 在所属阵营阶段开始时调用，返回 `[{ type: 'poison'|'recover'|'expire', … }]`。
 - 判定：`canMove`（麻痹 / 混乱时 false）、`canAct`（混乱 false）、`canCast`（禁咒 / 混乱 false）、`canCounter`（混乱 false）、`alwaysHit`（目标混乱）。
-- 战斗公式一律读 `effStats(u)`（套用增减益后的五项），不要直接读 `u.stats` 的五项；移动力加 `moveBonus(u)`。
+- 战斗公式一律读 `effStats(u)`（套用增减益后的五项），不要直接读 `u.stats` 的五项；移动力用 `effMove(u)`（兵种 + `moveBonus` + 装备）。
+
+### 装备（`src/equipment.js`，纯函数）
+
+- 装备实例 `{ uid, id, lvl, exp }`：背包 `registry.inventory` 存全部实例，`roster[id].equip` 存 uid；战斗单位持有副本 `u.equip = { weapon, armor, acc }`（`kitFrom`），敌军 / 友军 / 临时成员为 `defaultKit(cls, lvl)`（无 uid）。
+- `EQUIP[id]`：`{ name, kind, slot, treasure, tier, main, base, max, extra, price?, sellFruit?, effects: [{ type, ... }], series, cap }`；普通装备 37 件、宝物 50 件（校验脚本检查）。普通装备最高 `NORMAL_CAP`（3）级，宝物 `TREASURE_CAP`（9）级，辅助品 `cap` 为 1 不升级。
+- 属性：`gearStats(id, lvl)` / `equipStats(equip)` 直接加到 `calcStats` 结果上（不乘难度倍率）；果子 `u.fruits[能力] × FRUIT_GAIN`（2）。
+- 特效一律用 `fx(u, type)` / `fxSum(u, type, key)` / `fxMax` 查询，**不要按装备 id 判断**；新增特效类型必须在 `FX_DESC` 写说明（`gearDesc` 与校验脚本依赖）。
+- 熟练度：`GEAR_EXP`（命中 / 未中 / 被击中），`addGearExp(it, amt)` 返回升级数；只有我军武将（有 uid）的装备成长，胜利时按 uid 写回背包。
+- 取得：宝物唯一，`pickGear(inv, item)` 对数组取第一件未拥有的；`stageRewards(stageId, ctx)` 的 ctx 为 `{ flags, outcome, via（胜利条件类型）, annihilated, turn, alive(id) }`。
 
 `Stats` = `{ hp, mp, atk, int, def, burst, morale }`（攻击、精神、防御、爆发、士气）；`bonus` / 难度 `mult` 使用同样的 key（关卡数据中的旧字段 `bonus.agi` 视为 `burst`）。新增兵种/策略/地形时，要填齐已有条目的**全部**字段；
 使用方直接按字段取值，不做空值检查（例如 `terrainAt(map, x, y).cost[cls.moveType]`）。
 
 ## 运行时单位对象
 
-由 `createUnit(def, saved, diff)`（`src/logic.js`）根据关卡中的单位定义创建：
+由 `createUnit(def, saved, diff, equip?)`（`src/logic.js`）根据关卡中的单位定义创建：
 
 ```js
 {
@@ -54,7 +63,9 @@
   lvl,            // max(def.lvl, roster 中的 lvl)，敌军再加 difficulty.lvl
   guard?,         // 主将 / 受保护单位（BattleScene.markGuard）
   status, buffs,  // 异常与增减益（见上方“状态”），新单位为 {}
-  tier,           // 1~3：我军取 roster 的 tier（缺省 1）；无 roster 记录的我军 tierFor(cls, lvl)（15/30）；敌军 / 友军 tierFor(cls, lvl, diff.tierLvl)
+  equip,          // 装备副本 { weapon, armor, acc }（见上方“装备”），随战斗中存档保存
+  fruits?,        // 我军武将已吃的果子 { [能力]: 个数 }（取自 roster）
+  tier,           // 1~3：我军取 roster 的 tier（缺省 1）；roster 没有 lvl 记录的我军 tierFor(cls, lvl)（15/30）；敌军 / 友军 tierFor(cls, lvl, diff.tierLvl)
   exp,            // 0..99，仅我军使用
   ai,             // 'aggressive' | 'hold' | 'peace'
   mult,           // 难度属性倍率（敌军），否则为 null

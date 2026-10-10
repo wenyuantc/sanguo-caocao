@@ -1,33 +1,82 @@
 import { SPELLS, ITEMS, classOf } from './data.js';
 import {
   canAttackFrom, rollAttack, resolveSpell, applySpell, expFor, levelUp, promote, planAI, reachable, pathTo, key, knownSpells,
+  counterOk, attackTiles, isFoe, refreshStats,
 } from './logic.js';
-import { STATUS, BUFF_NAME, canCounter, canAct, cure } from './status.js';
+import { STATUS, BUFF_NAME, canAct, cure, applyStatus, effStats } from './status.js';
+import { EQUIP, GEAR_EXP, fx, addGearExp } from './equipment.js';
 import { tileCenter } from './unitView.js';
 import { floatText, wait } from './ui.js';
 import { castFx, spellFx, itemFx, deathFx, promoteFx } from './spellFx.js';
 import { playAttack } from './attackFx.js';
 
+// 普通攻击：攻击 → 蛇矛穿透 → 方天画戟连击（击破时）/ 反击 → 双剑 / 双鞭再反击
 export async function doAttack(s, a, d) {
   const duel = s.findDuel?.(a, d);
   if (duel) { await s.runDuel(duel); return; }
-  await strike(s, a, d, false);
-  // 混乱的单位不能反击
-  if (d.alive && a.alive && canCounter(d) && canAttackFrom(d, d.x, d.y, a)) {
+  const hit = await strike(s, a, d, false);
+  if (hit && a.alive && fx(a, 'pierce')) await pierce(s, a, d);
+  if (!d.alive) {
+    if (a.alive && fx(a, 'chain')) await chain(s, a);
+    return;
+  }
+  // 混乱的单位不能反击；青龙偃月刀封杀反击
+  if (a.alive && counterOk(a, d)) {
     await wait(s, 150);
     await strike(s, d, a, true);
+    if (a.alive && d.alive && fx(a, 'reCounter') && canAttackFrom(a, a.x, a.y, d)) {
+      await wait(s, 150);
+      s.hud.log(`${a.name} 再次反击！`);
+      await strike(s, a, d, true);
+    }
   }
 }
 
-async function strike(s, a, d, counter) {
+// 蛇矛：同时攻击目标身后一格（攻击方向上）的敌人，不判定会心
+async function pierce(s, a, d) {
+  const x = d.x + Math.sign(d.x - a.x), y = d.y + Math.sign(d.y - a.y);
+  const b = s.unitAt?.(x, y);
+  if (!b || !isFoe(b, a)) return;
+  await wait(s, 120);
+  s.hud.log(`${a.name} 的蛇矛贯穿至 ${b.name}`);
+  await strike(s, a, b, false, true);
+}
+
+// 方天画戟：击破目标后继续攻击攻击范围内防御最低的敌人（每次行动一次，反击时不触发）
+async function chain(s, a) {
+  const foes = attackTiles(a).map((t) => s.unitAt?.(t.x, t.y)).filter((o) => o && isFoe(o, a));
+  if (!foes.length) return;
+  const t = foes.reduce((m, o) => (effStats(o).def < effStats(m).def ? o : m));
+  await wait(s, 150);
+  s.hud.log(`${a.name} 乘势攻击 ${t.name}！`);
+  await strike(s, a, t, false);
+}
+
+// 单次攻击；返回是否命中。装备：龙鳞铠以策略值代替兵力承受、连环铠同阶段第 2 次起伤害减半、攻击附带异常、豆袋自动吃豆
+async function strike(s, a, d, counter, noCrit = false) {
   const vd = s.views.get(d);
-  const r = rollAttack(s.map, a, d);
+  const r = rollAttack(s.map, a, d, noCrit);
   const p = tileCenter(d.x, d.y);
   const verb = counter ? '反击' : '攻击';
+  if (r.hit && r.dmg > 0 && fx(d, 'secondHalf') && d.hitsTaken > 0) r.dmg = Math.max(1, Math.round(r.dmg / 2));
   await playAttack(s, a, d, r, () => {
     if (!r.hit) {
       floatText(s, p.x, p.y - 20, '闪避', '#cfe8ff');
       s.hud.log(`${d.name} 闪开了 ${a.name} 的${verb}`);
+      return;
+    }
+    if (!r.dmg) {
+      floatText(s, p.x, p.y - 20, '无效', '#cfe8ff');
+      s.hud.log(`${d.name} 的镜铠挡住了 ${a.name} 的${verb}`);
+      return;
+    }
+    d.hitsTaken = (d.hitsTaken || 0) + 1;
+    if (fx(d, 'mpShield') && d.mp > 0) {
+      const m = Math.min(d.mp, r.dmg);
+      d.mp -= m;
+      vd.updateHp();
+      floatText(s, p.x, p.y - 20, `策略 -${m}`, '#8ac8ff', r.crit ? 28 : 22);
+      s.hud.log(`${a.name} ${r.crit ? '会心一击！' : verb} ${d.name}，龙鳞铠以策略值承受 ${m}`);
       return;
     }
     d.hp = Math.max(0, d.hp - r.dmg);
@@ -37,8 +86,44 @@ async function strike(s, a, d, counter) {
   });
   await wait(s, 200);
   const killed = d.hp <= 0;
+  const onHit = r.hit && r.dmg > 0 && !killed && fx(a, 'onHitStatus');
+  if (onHit) {
+    applyStatus(d, onHit.status);
+    floatText(s, p.x, p.y - 44, STATUS[onHit.status].name, STATUS[onHit.status].css, 18);
+    s.hud.log(`${d.name} 陷入${STATUS[onHit.status].name}`);
+    vd.updateStatus();
+  }
+  if (r.hit && r.dmg > 0 && !killed) autoBean(s, d);
+  gainGear(s, a, 'weapon', r.hit ? GEAR_EXP.hit : GEAR_EXP.miss);
+  if (r.hit) gainGear(s, d, 'armor', GEAR_EXP.struck);
   await gainExp(s, a, r.hit ? expFor(a, d, killed) : 2);
   if (killed) await killUnit(s, d);
+  return r.hit;
+}
+
+// 豆袋：兵力低于触发线时自动吃一颗军需中的豆
+function autoBean(s, u) {
+  const f = fx(u, 'autoBean');
+  if (!f || u.faction !== 'player' || !(s.items?.bean > 0) || u.hp >= u.stats.hp * f.below) return;
+  s.items.bean -= 1;
+  s.hud.setItems(s.items);
+  const amt = Math.min(u.stats.hp - u.hp, ITEMS.bean.hp);
+  u.hp += amt;
+  const p = tileCenter(u.x, u.y);
+  floatText(s, p.x, p.y - 38, `豆袋 +${amt}`, '#7dff9a', 18);
+  s.hud.log(`${u.name} 从豆袋中取出豆，兵力 +${amt}`);
+  s.views.get(u)?.updateHp();
+}
+
+// 我军装备得经验并升级（敌军装备不成长）
+export function gainGear(s, u, slot, amt) {
+  const it = u.equip?.[slot];
+  if (!amt || !it || u.faction !== 'player' || !u.alive) return;
+  const n = addGearExp(it, amt);
+  if (!n) return;
+  refreshStats(u);
+  s.views.get(u)?.updateHp();
+  s.hud.log(`★ ${u.name} 的「${EQUIP[it.id].name}」升至 Lv${it.lvl}`);
 }
 
 // 施放策略：结算 → 施法与命中特效 → 写入结果 → 逐个目标显示数值与日志 → 经验 → 撤退
@@ -51,6 +136,9 @@ export async function doSpell(s, a, spellId, t) {
   s.views.get(a)?.faceDefault();
   applySpell(res);
   for (const e of res.effects) showEffect(s, e);
+  for (const e of res.effects) if (e.hit && e.dmg && e.u.alive && e.u.hp > 0) autoBean(s, e.u);
+  // 扇 / 宝剑等武器随策略攻击得经验
+  if (sp.cat === 'damage') gainGear(s, a, 'weapon', res.effects.some((e) => e.hit) ? GEAR_EXP.hit : GEAR_EXP.miss);
   const va = s.views.get(a);
   if (res.self.hp || res.self.mp) {
     const p = tileCenter(a.x, a.y);
@@ -145,9 +233,10 @@ async function doPromote(s, t) {
   if (learned.length) s.hud.log(`${t.name} 习得策略：${learned.map((id) => SPELLS[id].name).join('、')}`);
 }
 
-async function gainExp(s, u, amt) {
+// 孟德新书：获得经验 ×1.5
+export async function gainExp(s, u, amt) {
   if (!u.alive || u.faction !== 'player') return;
-  u.exp += amt;
+  u.exp += Math.round(amt * (fx(u, 'expMul')?.v || 1));
   while (u.exp >= 100) {
     u.exp -= 100;
     const before = knownSpells(u);
@@ -167,6 +256,7 @@ export async function killUnit(s, u) {
   s.hud.log(`${u.name} 撤退了！`);
   await deathFx(s, s.views.get(u));
   s.views.delete(u);
+  await s.dropLoot?.(u);
   await s.fireDeathEvents?.(u);
 }
 

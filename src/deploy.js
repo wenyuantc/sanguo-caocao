@@ -4,6 +4,7 @@ import { TERRAIN, classOf } from './data.js';
 import { roleOf, tierFor } from './logic.js';
 import { GENERALS, isGeneral } from './generals.js';
 import { getStage } from './stages.js';
+import { SHOP_UNLOCK } from './equipment.js';
 
 const flagOk = (d, flags) => (!d.ifFlag || flags[d.ifFlag]) && (!d.unlessFlag || !flags[d.unlessFlag]);
 const nextIds = (n) => (!n ? [] : typeof n === 'string' ? [n] : Object.entries(n).flatMap(([k, v]) => (k === 'route' ? Object.values(v) : [v])));
@@ -85,7 +86,7 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
       name: def?.name || g.name,
       cls: g.cls,
       gradeMod: g.gradeMod || null,
-      tier: saved ? saved.tier || 1 : tierFor(g.cls, lvl),
+      tier: saved?.lvl ? saved.tier || 1 : tierFor(g.cls, lvl),
       floor,
       lvl,
       bonus: g.bonus,
@@ -114,9 +115,18 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
   const fixedCards = fixed.map((d) => {
     const { cls, bonus } = roleOf(d);
     const saved = roster[d.id], lvl = Math.max(d.lvl, saved?.lvl || 0);
-    return { id: d.id, name: d.name, cls, bonus, lvl, tier: saved ? saved.tier || 1 : tierFor(cls, lvl), fixed: true };
+    return { id: d.id, name: d.name, cls, bonus, lvl, tier: saved?.lvl ? saved.tier || 1 : tierFor(cls, lvl), fixed: true };
   });
   return { stageId: stage.id, map: stage.map, slots, max, required, blocked, pool, fixed, fixedCards, defaults, defsById, joined: [...allJoined] };
+}
+
+// 商店货架：本关及之前（沿关卡衔接能走到本关）上架过的商品，按上架先后去重
+export function shopStock(stageId) {
+  const out = [];
+  for (const [at, goods] of Object.entries(SHOP_UNLOCK)) {
+    if (reaches(at, stageId)) goods.forEach((id) => out.includes(id) || out.push(id));
+  }
+  return out;
 }
 
 // 按选择生成我军单位定义（与关卡 P(...) 结构一致）：临时成员与预设武将站原位，其余依次填入空出的位置
