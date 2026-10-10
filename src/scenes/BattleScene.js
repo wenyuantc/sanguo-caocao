@@ -572,7 +572,8 @@ export class BattleScene extends Phaser.Scene {
     if (this.state !== 'busy') this.setCursor(t.x, t.y);
     const u = this.unitAt(t.x, t.y);
     this.hud.showUnit(u, terrainAt(this.map, t.x, t.y));
-    this.hud.forecast(this.state === 'target' ? this.forecastFor(t) : '');
+    // 菜单状态下预测区用于显示按钮说明，不随鼠标移动清空
+    if (this.state !== 'menu') this.hud.forecast(this.state === 'target' ? this.forecastFor(t) : '');
     this.previewArea(t);
   }
 
@@ -692,6 +693,7 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'menu';
     this.hl.clear();
     this.setCursor(u.x, u.y);
+    this.hud.forecast('');
     const foes = attackTiles(u).some((t) => { const o = this.unitAt(t.x, t.y); return o && isFoe(o, u); });
     const spells = usableSpells(this.units, u);
     const hasItem = Object.entries(this.items).some(([id, n]) => n > 0 && !ITEMS[id]?.fruit);
