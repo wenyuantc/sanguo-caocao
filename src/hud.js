@@ -17,19 +17,27 @@ export class Hud {
     text(scene, 250, 12, `［${diff.name}］`, 16, diff.color, FONT).setDepth(51);
     this.turnText = text(scene, 330, 10, '', 18, '#f1e3c2', FONT).setDepth(51);
     this.itemText = text(scene, 560, 11, '', 16, '#d8c8a0').setDepth(51);
+    this.redText = text(scene, WIDTH - 16, 11, '', 16, '#ff6a5a', FONT).setOrigin(1, 0).setDepth(51);
 
     // 右侧面板
     panel(scene, PANEL_X + 4, MAP_Y + 4, PW - 8, HEIGHT - MAP_Y - 8).setDepth(50);
-    text(scene, PANEL_X + 20, MAP_Y + 16, '胜利条件', 15, '#e9c46a', FONT).setDepth(51);
-    text(scene, PANEL_X + 20, MAP_Y + 36, stage.victoryText, 15, '#f1e3c2').setDepth(51);
-    text(scene, PANEL_X + 20, MAP_Y + 58, '失败条件', 15, '#e9c46a', FONT).setDepth(51);
-    text(scene, PANEL_X + 20, MAP_Y + 78, `曹操撤退 / 超过 ${stage.turns} 回合`, 15, '#f1e3c2').setDepth(51);
-    this.info = scene.add.container(PANEL_X + 16, MAP_Y + 110).setDepth(51);
-    this.forecastText = text(scene, PANEL_X + 20, MAP_Y + 352, '', 15, '#ffd27a').setDepth(51).setLineSpacing(4);
+    // 胜负条件按实际行高依次排布，下方区域随之下移
+    let y = MAP_Y + 16;
+    text(scene, PANEL_X + 20, y, '胜利条件', 15, '#e9c46a', FONT).setDepth(51);
+    const win = text(scene, PANEL_X + 20, y + 20, stage.victoryText, 15, '#f1e3c2').setDepth(51).setWordWrapWidth(PW - 40);
+    y += 24 + win.height;
+    text(scene, PANEL_X + 20, y, '失败条件', 15, '#e9c46a', FONT).setDepth(51);
+    const protect = (stage.protect || []).map((id) => stage.units.find((u) => u.id === id)?.name).filter(Boolean);
+    const lose = stage.defeatText || [`曹操${protect.length ? '、' + protect.join('、') : ''}撤退`, `超过 ${stage.turns} 回合`].join(' / ');
+    const loseText = text(scene, PANEL_X + 20, y + 20, lose, 15, '#f1e3c2').setDepth(51).setWordWrapWidth(PW - 40);
+    const shift = Math.max(0, y + 24 + loseText.height - (MAP_Y + 104));
+    this.info = scene.add.container(PANEL_X + 16, MAP_Y + 110 + shift).setDepth(51);
+    this.forecastText = text(scene, PANEL_X + 20, MAP_Y + 352 + shift, '', 15, '#ffd27a').setDepth(51).setLineSpacing(4);
     const g = scene.add.graphics().setDepth(51);
-    g.lineStyle(1, COLORS.gold, 0.4).lineBetween(PANEL_X + 16, MAP_Y + 104, WIDTH - 16, MAP_Y + 104);
-    g.lineStyle(1, COLORS.gold, 0.4).lineBetween(PANEL_X + 16, MAP_Y + 410, WIDTH - 16, MAP_Y + 410);
-    this.logText = text(scene, PANEL_X + 20, MAP_Y + 418, '', 14, '#cdbd98').setDepth(51).setLineSpacing(4).setWordWrapWidth(PW - 40);
+    g.lineStyle(1, COLORS.gold, 0.4).lineBetween(PANEL_X + 16, MAP_Y + 104 + shift, WIDTH - 16, MAP_Y + 104 + shift);
+    g.lineStyle(1, COLORS.gold, 0.4).lineBetween(PANEL_X + 16, MAP_Y + 410 + shift, WIDTH - 16, MAP_Y + 410 + shift);
+    this.logText = text(scene, PANEL_X + 20, MAP_Y + 418 + shift, '', 14, '#cdbd98').setDepth(51).setLineSpacing(4).setWordWrapWidth(PW - 40);
+    this.maxLogs = shift > 20 ? 4 : 5;
     this.logs = [];
     const half = (PW - 50) / 2;
     this.saveBtn = button(scene, PANEL_X + 20, HEIGHT - 102, half, 36, '保存进度', () => scene.openSave('save'), 17).setDepth(52);
@@ -43,13 +51,19 @@ export class Hud {
     this.saveBtn.setDisabled(phase !== 'player');
   }
 
+  // 红色指数：黄=忠臣、红=中立、橙=奸雄
+  setRed(red) {
+    const color = red >= 3 ? '#ffe04a' : red <= -3 ? '#ff9a2a' : '#ff5a4a';
+    this.redText.setText(`红色指数 ${red > 0 ? '+' : ''}${red}`).setColor(color);
+  }
+
   setItems(items) {
     this.itemText.setText('军需：' + Object.entries(items).map(([k, n]) => `${ITEMS[k].name}×${n}`).join('  '));
   }
 
   log(msg) {
     this.logs.push(msg);
-    if (this.logs.length > 5) this.logs.shift();
+    if (this.logs.length > this.maxLogs) this.logs.shift();
     this.logText.setText(this.logs.join('\n'));
   }
 

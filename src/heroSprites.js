@@ -1,4 +1,7 @@
 // 高清矢量人物：Canvas 2D 程序化绘制，逻辑坐标 LW x LH，贴图按 TEX 倍分辨率生成
+import { CLASSES } from './data.js';
+import { getCharacter, skinOf, armorPalette, hexShade } from './characters.js';
+
 export const TEX = 3;
 export const LW = 60, LH = 66, PAD = 34;
 export const ANCHOR_X = 26, FEET_Y = 63;
@@ -39,25 +42,40 @@ export function kit(ctx) {
   return { ctx, grad, fill, ell, poly, line };
 }
 
+const CLASS_LOOK = {
+  lord: { head: 'crown', weapon: 'sword', horse: '#3c3530', cape: true, beard: 'goatee' },
+  cavalry: { head: 'helmet', weapon: 'spear', horse: '#9a6232' },
+  infantry: { head: 'helmet', weapon: 'sword', shield: true },
+  archer: { head: 'cap', weapon: 'bow', quiver: true },
+  archercav: { head: 'cap', weapon: 'bow', quiver: true, horse: '#8a5a2a' },
+  strategist: { head: 'scholar', weapon: 'fan', robe: true },
+  healer: { head: 'taoist', weapon: 'staff', robe: true, robeColor: '#9ad0a8' },
+  bandit: { head: 'turban', weapon: 'club', cloth: { a: '#9a7444', d: '#4e3418', l: '#d8bc8a' } },
+  taoist: { head: 'taoist', weapon: 'staff', robe: true, robeColor: '#d6ae36', beard: 'long' },
+  fighter: { head: 'band', weapon: 'fist' },
+  emperor: { head: 'emperor', weapon: 'none', robe: true, robeColor: '#e8c040' },
+  catapult: { machine: true, weapon: 'catapult' },
+};
+const BEARD_MAP = { mustache: 'mustache', goatee: 'goatee', short: 'goatee', full: 'full', long: 'long' };
+
+// 兵种外形 + 武将登记表中的个性外形
 function lookOf(unit) {
-  const look = {
-    lord: { head: 'crown', weapon: 'sword', horse: '#3c3530', cape: true, beard: 'goatee' },
-    cavalry: { head: 'helmet', weapon: 'spear', horse: '#9a6232' },
-    infantry: { head: 'helmet', weapon: 'sword', shield: true },
-    archer: { head: 'cap', weapon: 'bow', quiver: true },
-    strategist: { head: 'scholar', weapon: 'fan', robe: true },
-    bandit: { head: 'turban', weapon: 'club', cloth: { a: '#9a7444', d: '#4e3418', l: '#d8bc8a' } },
-    taoist: { head: 'taoist', weapon: 'staff', robe: true, robeColor: '#d6ae36', beard: 'long' },
-  }[unit.cls];
-  const special = {
-    lvbu: { weapon: 'halberd', horse: '#b8241a', head: 'feather' },
-    dianwei: { weapon: 'halberd', shield: false, beard: 'full' },
-    huaxiong: { beard: 'full', horse: '#4a4038' },
-    xiahoudun: { beard: 'goatee', horse: '#e8e0d0' },
-    sunjian: { horse: '#c89a5a', cape: true },
-    zhangbao: { beard: 'long' },
-  }[unit.id];
-  return { ...look, ...special };
+  const look = { ...CLASS_LOOK[unit.cls] };
+  const ch = getCharacter(unit.name);
+  if (!ch || look.machine) return look;
+  const ranged = ['bow', 'far'].includes(CLASSES[unit.cls].range);
+  if (ch.hat) look.head = ch.hat;
+  if (ch.weapon && !ranged && look.weapon !== 'fan' && look.weapon !== 'none') look.weapon = ch.weapon;
+  if (look.horse && ch.horse) look.horse = ch.horse;
+  if (ch.beard) look.beard = BEARD_MAP[ch.beard];
+  if (ch.cape) look.cape = true;
+  if (ch.armor) look.cloth = armorPalette(ch.armor);
+  if (ch.robeColor && look.robe) look.robeColor = ch.robeColor;
+  if (look.weapon === 'fist' || look.weapon === 'glaive' || look.weapon === 'axe' || look.weapon === 'halberd') look.shield = false;
+  look.hatColor = ch.hatColor;
+  look.skin = skinOf(ch);
+  look.hairColor = ch.hairColor;
+  return look;
 }
 
 // ---------- 人物 ----------
@@ -122,7 +140,7 @@ function drawHead(k, L, P, oy) {
   fill(C.skin, ell(17.6, y(17), 1.6, 2.2));
   fill(C.skin, ell(34.4, y(17), 1.6, 2.2));
   const fg = ctx.createRadialGradient(24, y(14), 1, 26, y(17), 10);
-  fg.addColorStop(0, '#fde3c2'); fg.addColorStop(1, C.skinD);
+  fg.addColorStop(0, C.skin === '#f6cfa2' ? '#fde3c2' : C.skin); fg.addColorStop(1, C.skinD);
   fill(fg, ell(26, y(17), 8.4, 8.6));
   fill(C.hair, ell(26, y(15.5), 8.9, 7.6, 0, Math.PI, 0), null);
   fill(C.hair, poly([17.2, y(15)], [19.4, y(15)], [19, y(20)], [17.4, y(19)]), null);
@@ -138,7 +156,8 @@ function drawHead(k, L, P, oy) {
   line(25, y(22), 27.4, y(21.8), 0.7, '#9a4a34', false);
   if (L.beard === 'goatee') { fill(C.hair, poly([24.5, y(23.3)], [27.5, y(23.3)], [26, y(27)]), null); line(23.5, y(21.3), 25.2, y(21), 0.6, C.hair, false); line(26.8, y(21), 28.5, y(21.3), 0.6, C.hair, false); }
   if (L.beard === 'full') fill(C.hair, () => { ctx.moveTo(18.5, y(18)); ctx.quadraticCurveTo(19, y(28), 26, y(29)); ctx.quadraticCurveTo(33, y(28), 33.5, y(18)); ctx.quadraticCurveTo(26, y(24), 18.5, y(18)); }, null);
-  if (L.beard === 'long') fill('#5a5048', () => { ctx.moveTo(23, y(22.5)); ctx.lineTo(29, y(22.5)); ctx.lineTo(26, y(33)); ctx.closePath(); }, null);
+  if (L.beard === 'mustache') { line(23.2, y(21.4), 25.4, y(20.9), 0.8, C.hair, false); line(26.6, y(20.9), 28.8, y(21.4), 0.8, C.hair, false); }
+  if (L.beard === 'long') fill(C.hair, () => { ctx.moveTo(23, y(22.5)); ctx.lineTo(29, y(22.5)); ctx.lineTo(26, y(33)); ctx.closePath(); }, null);
   drawHat(k, L, P, oy);
 }
 
@@ -155,7 +174,7 @@ function drawHat(k, L, P, oy) {
   };
   switch (L.head) {
     case 'helmet':
-      helmet(P.a, P.d);
+      if (L.hatColor) helmet(L.hatColor, hexShade(L.hatColor, 0.45)); else helmet(P.a, P.d);
       fill(grad(0, y(-3), 0, y(3), '#ff5a40', C.redD), () => { ctx.moveTo(26, y(1)); ctx.quadraticCurveTo(31, y(-3), 33, y(4)); ctx.quadraticCurveTo(29, y(1), 26, y(2)); }, C.ink, 0.4);
       break;
     case 'crown':
@@ -195,6 +214,27 @@ function drawHat(k, L, P, oy) {
       fill(C.hair, ell(26, y(6.5), 4, 3));
       fill(grad(0, y(1), 0, y(8), shade(C.yellow, 1.2), C.yellowD), poly([22.5, y(8)], [29.5, y(8)], [28.5, y(2)], [23.5, y(2)]));
       line(19.5, y(5), 32.5, y(5), 0.9, C.gold);
+      break;
+    case 'band': {
+      const hc = L.hatColor || '#b8302a';
+      fill(grad(0, y(6), 0, y(13), shade(hc, 1.2), hexShade(hc, 0.6)), poly([17, y(9)], [35, y(9)], [35.5, y(12.5)], [16.5, y(12.5)]));
+      line(35, y(10.5), 40, y(15), 1.3, hc); line(35, y(11.5), 38.5, y(18), 1.1, hc);
+      break;
+    }
+    case 'headscarf': {
+      const hc = L.hatColor || '#2f8a4a';
+      fill(grad(20, y(3), 30, y(14), shade(hc, 1.3), hc, hexShade(hc, 0.5)), ell(26, y(13), 9.8, 8.4, 0, Math.PI, 0));
+      fill(hexShade(hc, 0.6), poly([16.4, y(11.6)], [35.6, y(11.6)], [35.6, y(13.8)], [16.4, y(13.8)]), C.ink, 0.5);
+      fill(hc, () => { ctx.moveTo(34, y(11)); ctx.quadraticCurveTo(41, y(14), 40, y(22)); ctx.lineTo(37.5, y(21)); ctx.quadraticCurveTo(38, y(15), 33, y(13)); ctx.closePath(); });
+      break;
+    }
+    case 'emperor':
+      fill(grad(0, y(6), 0, y(12), '#2a2420', '#0e0c0a'), poly([19, y(12)], [33, y(12)], [32, y(5)], [20, y(5)]));
+      fill(grad(0, y(2), 0, y(5), '#3a3430', '#141210'), poly([14, y(5.2)], [38, y(5.2)], [38, y(3)], [14, y(3)]));
+      for (const bx of [15, 18, 21, 31, 34, 37]) {
+        line(bx, y(5), bx, y(11), 0.4, '#e8d8a0', false);
+        fill(bx % 2 ? '#e84a3a' : '#f0d060', ell(bx, y(11.2), 0.8, 0.8), null);
+      }
       break;
     default:
   }
@@ -249,6 +289,35 @@ function drawWeapon(k, L, oy) {
       fill(grad(37, y(20), 45, y(30), '#b07a48', C.woodD), poly([37.3, y(40)], [39.6, y(40.4)], [45.8, y(22)], [41.6, y(19.5)]));
       for (const [nx, ny] of [[42.5, 23], [44, 25], [41.4, 27]]) fill(C.metalD, ell(nx, y(ny), 0.6, 0.6), null);
       break;
+    case 'glaive':
+      // 偃月刀：长柄 + 宽弧刀刃 + 刀背龙纹
+      line(41, y(2), 38, y(61), 1.8, C.wood);
+      fill(metal(40, y(-6), 48, y(10)), () => {
+        ctx.moveTo(41, y(9)); ctx.quadraticCurveTo(39.5, y(-2), 44.5, y(-7)); ctx.quadraticCurveTo(48.5, y(2), 44, y(10)); ctx.closePath();
+      });
+      line(43.6, y(-4), 42.2, y(6), 0.5, C.metalD, false);
+      fill(C.gold, ell(41.2, y(10.5), 1.8, 1.2), C.ink, 0.4);
+      fill(grad(0, y(11), 0, y(15), '#ff5a40', C.redD), poly([40.2, y(11.5)], [42.4, y(11.5)], [43.2, y(15)], [39.4, y(15)]), C.ink, 0.3);
+      break;
+    case 'axe':
+      line(40.5, y(6), 38, y(52), 1.8, C.wood);
+      fill(metal(40, y(4), 49, y(16)), () => {
+        ctx.moveTo(41, y(5)); ctx.quadraticCurveTo(50, y(4), 49, y(11)); ctx.quadraticCurveTo(50, y(18), 41, y(16)); ctx.closePath();
+      });
+      fill(metal(34, y(6), 40, y(14)), poly([40, y(7)], [35.5, y(8)], [35.5, y(13)], [40, y(14)]));
+      break;
+    case 'twin':
+      fill(metal(38, y(16), 44, y(36)), poly([39.4, y(36)], [41, y(36.5)], [45.5, y(17)], [44.6, y(14.5)], [43.6, y(16.5)]));
+      line(37, y(35), 42.5, y(37.3), 1.5, C.gold);
+      fill(metal(6, y(18), 13, y(38)), poly([13.2, y(38)], [11.8, y(38.6)], [7.5, y(19)], [8.3, y(16.6)], [9.4, y(18.4)]));
+      line(10.5, y(37.2), 16, y(39), 1.5, C.gold);
+      break;
+    case 'fist':
+      fill(grad(34, y(35), 42, y(42), C.metal, C.metalD), ell(38.5, y(38.5), 3.4, 3), C.ink, 0.6);
+      fill(grad(10, y(37), 18, y(44), C.metal, C.metalD), ell(14.5, y(40), 3.4, 3), C.ink, 0.6);
+      break;
+    case 'none':
+      break;
     default:
   }
 }
@@ -280,9 +349,32 @@ function drawHorse(k, color, F) {
   fill(grad(0, 35, 0, 39, '#8a5a30', '#4a2c14'), ell(26, 37.5, 7.5, 2.4));
 }
 
+// 投石车：木架 + 车轮 + 抛臂 + 石弹 + 阵营旗
+function drawCatapult(k, F) {
+  const { ctx, grad, fill, ell, poly, line } = k;
+  const wood = grad(0, 30, 0, 60, '#a8743e', '#5a3818');
+  fill(wood, poly([8, 50], [46, 50], [44, 55], [10, 55]));
+  line(14, 50, 22, 30, 2.2, '#7a5028'); line(30, 50, 22, 30, 2.2, '#7a5028');
+  line(36, 50, 40, 34, 1.8, '#7a5028');
+  for (const wx of [14, 40]) {
+    fill(grad(wx - 6, 50, wx + 6, 62, '#8a5a2a', '#3a2410'), ell(wx, 56, 6.2, 6.2), C.ink, 0.8);
+    ctx.strokeStyle = '#2a1808'; ctx.lineWidth = 0.7;
+    for (let a = 0; a < Math.PI; a += Math.PI / 3) { ctx.beginPath(); ctx.moveTo(wx + Math.cos(a) * 5.5, 56 + Math.sin(a) * 5.5); ctx.lineTo(wx - Math.cos(a) * 5.5, 56 - Math.sin(a) * 5.5); ctx.stroke(); }
+    fill(C.metalD, ell(wx, 56, 1.4, 1.4), null);
+  }
+  line(22, 30, 44, 14, 2.4, '#8a5a2a');
+  line(22, 30, 12, 40, 2.4, '#8a5a2a');
+  fill(grad(8, 38, 16, 46, '#7a7a80', '#3a3a40'), poly([8, 38], [16, 38], [16, 46], [8, 46]), C.ink, 0.7);
+  line(44, 14, 47, 21, 0.6, '#d8c8a0', false);
+  fill(grad(44, 19, 50, 25, '#c8baa0', '#5a4e40'), ell(47, 22.5, 3.2, 3), C.ink, 0.6);
+  fill(C.gold, ell(22, 30, 1.6, 1.6), C.ink, 0.4);
+  line(9, 50, 9, 22, 0.9, '#4a2e14', false);
+  fill(grad(9, 22, 19, 30, F.a, F.d), poly([9.5, 22], [19, 25], [9.5, 29]), C.ink, 0.5);
+}
+
 export function unitTexture(scene, unit) {
   const L = lookOf(unit);
-  const key = `hero-${unit.cls}-${unit.faction}-${unit.id}`;
+  const key = `hero-${unit.cls}-${unit.faction}-${unit.name}`;
   if (scene.textures.exists(key)) return key;
   const tex = scene.textures.createCanvas(key, LW * TEX, (LH + PAD) * TEX);
   const ctx = tex.getContext();
@@ -291,13 +383,23 @@ export function unitTexture(scene, unit) {
   ctx.lineJoin = 'round';
   const k = kit(ctx);
   const F = FACTION[unit.faction];
-  if (L.horse) {
-    drawHorse(k, L.horse, F);
-    drawHuman(k, L, F, -14, true);
-    k.line(28, 34, 29, 47, 3.6, (L.cloth || F).d);
-    k.fill('#2a1a10', k.ell(29.4, 48.5, 2.6, 1.6));
-  } else {
-    drawHuman(k, L, F, 3, false);
+  // 个性肤色 / 发色：临时覆盖调色板，绘制完恢复
+  const saved = { skin: C.skin, skinD: C.skinD, hair: C.hair };
+  if (L.skin) [C.skin, C.skinD] = L.skin;
+  if (L.hairColor) C.hair = L.hairColor;
+  try {
+    if (L.machine) {
+      drawCatapult(k, F);
+    } else if (L.horse) {
+      drawHorse(k, L.horse, F);
+      drawHuman(k, L, F, -14, true);
+      k.line(28, 34, 29, 47, 3.6, (L.cloth || F).d);
+      k.fill('#2a1a10', k.ell(29.4, 48.5, 2.6, 1.6));
+    } else {
+      drawHuman(k, L, F, 3, false);
+    }
+  } finally {
+    Object.assign(C, saved);
   }
   tex.refresh();
   return key;

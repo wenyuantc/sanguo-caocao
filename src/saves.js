@@ -48,6 +48,8 @@ export function applyLoad(scene, data) {
   scene.registry.set('roster', data.roster || {});
   scene.registry.set('items', data.items);
   scene.registry.set('difficulty', data.difficulty || 'normal');
+  scene.registry.set('red', data.red ?? 0);
+  scene.registry.set('flags', data.flags || {});
   scene.scene.start('Battle', { stage: data.stage, load: data.kind === 'battle' ? data : null });
 }
 

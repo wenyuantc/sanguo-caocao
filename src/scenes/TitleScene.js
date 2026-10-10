@@ -3,6 +3,7 @@ import { WIDTH, HEIGHT, FONT, COLORS, hiDpi } from '../config.js';
 import { button, text, panel } from '../ui.js';
 import { DIFFICULTIES } from '../data.js';
 import { applyLoad } from '../saves.js';
+import { FIRST_STAGE } from '../stages.js';
 import { openSaveMenu } from '../saveMenu.js';
 
 export class TitleScene extends Phaser.Scene {
@@ -79,7 +80,9 @@ export class TitleScene extends Phaser.Scene {
         this.registry.set('difficulty', id);
         this.registry.set('roster', {});
         this.registry.set('items', { ...d.items });
-        this.scene.start('Battle', { stage: 0 });
+        this.registry.set('red', 0);
+        this.registry.set('flags', {});
+        this.scene.start('Battle', { stage: FIRST_STAGE });
       });
       root.add([g, zone,
         text(this, cx + cw / 2, cy + 43, d.name, 40, d.color, FONT).setOrigin(0.5).setStroke('#000', 5),

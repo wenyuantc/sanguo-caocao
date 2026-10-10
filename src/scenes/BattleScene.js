@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { TILE, COLS, ROWS, MAP_X, MAP_Y, FONT, hiDpi } from '../config.js';
-import { STAGES } from '../stages.js';
+import { getStage, resolveNext, FIRST_STAGE, ENDINGS } from '../stages.js';
 import { CLASSES, SPELLS, ITEMS, diffOf } from '../data.js';
 import {
   createUnit, calcStats, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt, dist,
@@ -14,12 +14,13 @@ import { doAttack, doSpell, doItem, runAI } from '../actions.js';
 import { writeAuto, applyLoad } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { ensureTextures } from '../spellFx.js';
+import { playDuel } from '../duel.js';
 
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
 
   init(data) {
-    this.stageIndex = data?.stage ?? 0;
+    this.stageId = data?.stage ?? FIRST_STAGE;
     this.load = data?.load || null;
     this.modal = false;
     this.over = false;
@@ -28,9 +29,18 @@ export class BattleScene extends Phaser.Scene {
     this.menu = null;
   }
 
+  // 释放上一关生成的人物 / 头像贴图，避免连续游玩时内存持续增长（按需重新生成）
+  purgeTextures() {
+    for (const k of this.textures.getTextureKeys()) {
+      if (k.startsWith('hero-') || k.startsWith('pt-')) this.textures.remove(k);
+    }
+  }
+
   create() {
     hiDpi(this);
-    const stage = (this.stage = STAGES[this.stageIndex]);
+    this.purgeTextures();
+    const stage = (this.stage = getStage(this.stageId) || getStage(FIRST_STAGE));
+    this.stageId = stage.id;
     this.map = stage.map;
     this.map.forEach((r, i) => r.length !== COLS && console.warn('地图行长度错误', i, r));
     drawMap(this, this.map);
@@ -39,9 +49,11 @@ export class BattleScene extends Phaser.Scene {
     this.difficultyId = load?.difficulty || this.registry.get('difficulty') || 'normal';
     this.difficulty = diffOf(this.difficultyId);
     this.items = { ...(load?.items || this.registry.get('items') || this.difficulty.items) };
+    this.red = load?.red ?? this.registry.get('red') ?? 0;
+    this.flags = { ...(load?.flags || this.registry.get('flags') || {}) };
     this.units = load
       ? load.units.map((u) => ({ ...u, stats: calcStats(u.cls, u.lvl, u.bonus, u.mult) }))
-      : stage.units.map((d) => createUnit(d, d.faction === 'player' ? roster[d.id] : null, this.difficulty));
+      : stage.units.filter((d) => this.flagOk(d)).map((d) => createUnit(d, d.faction === 'player' ? roster[d.id] : null, this.difficulty));
     this.views = new Map();
     this.units.filter((u) => u.alive).forEach((u) => this.views.set(u, new UnitView(this, u)));
     this.hl = this.add.graphics().setDepth(5);
@@ -51,6 +63,9 @@ export class BattleScene extends Phaser.Scene {
     this.dialog = new DialogBox(this);
     this.turn = load?.turn ?? 1;
     this.firedEvents = new Set(load?.firedEvents || []);
+    this.hud.setRed(this.red);
+    this.drawGoals();
+    this.dialog.onChoice = (c) => this.applyChoice(c);
 
     this.input.mouse?.disableContextMenu();
     this.input.on('pointermove', (p) => this.onHover(p));
@@ -62,7 +77,7 @@ export class BattleScene extends Phaser.Scene {
   async start() {
     if (this.load) return this.resume();
     await this.dialog.show(this.stage.prologue);
-    await this.hud.banner(this.stage.title);
+    await this.hud.banner(`${this.stage.chapter}　${this.stage.name}`);
     await this.startPhase('player');
   }
 
@@ -81,7 +96,9 @@ export class BattleScene extends Phaser.Scene {
     return {
       kind: 'battle',
       difficulty: this.difficultyId,
-      stage: this.stageIndex,
+      stage: this.stageId,
+      red: this.red,
+      flags: { ...this.flags },
       turn: this.turn,
       items: { ...this.items },
       roster: this.registry.get('roster') || {},
@@ -163,29 +180,116 @@ export class BattleScene extends Phaser.Scene {
     if (this.phase === 'player') return this.startPhase('ally');
     if (this.phase === 'ally') return this.startPhase('enemy');
     this.turn += 1;
+    const hold = this.stage.victory.find((c) => c.type === 'survive' && this.turn > c.turns);
+    if (hold) return this.victory(hold.outcome);
     if (this.turn > this.stage.turns) return this.defeat('时限已到，我军粮草耗尽……');
     return this.startPhase('player');
   }
 
+  // ---------- 剧情事件 ----------
+  // 剧情标记：ifFlag 需要有该标记才出场，unlessFlag 有该标记则不出场
+  flagOk(d) {
+    return (!d.ifFlag || this.flags[d.ifFlag]) && (!d.unlessFlag || !this.flags[d.unlessFlag]);
+  }
+
+  setFlag(name) {
+    this.flags[name] = true;
+    this.registry.set('flags', { ...this.flags });
+  }
+
+  spawn(defs = []) {
+    for (const d of defs) {
+      if (!this.flagOk(d)) continue;
+      if (this.unitAt(d.x, d.y)) continue;
+      const u = createUnit(d, d.faction === 'player' ? (this.registry.get('roster') || {})[d.id] : null, this.difficulty);
+      this.units.push(u);
+      const v = new UnitView(this, u);
+      this.views.set(u, v);
+      v.c.setAlpha(0);
+      this.tweens.add({ targets: v.c, alpha: 1, duration: 400 });
+    }
+  }
+
+  async runEvent(i, ev) {
+    this.firedEvents.add(i);
+    if (ev.setFlag) this.setFlag(ev.setFlag);
+    this.spawn(ev.units);
+    for (const [id, ai] of Object.entries(ev.setAi || {})) {
+      const u = this.units.find((o) => o.id === id && o.alive);
+      if (u) u.ai = ai;
+    }
+    await this.dialog.show(ev.dialog);
+  }
+
   async fireEvents(faction) {
     for (const [i, ev] of this.stage.events.entries()) {
-      if (this.firedEvents.has(i) || ev.turn !== this.turn || ev.faction !== faction) continue;
-      this.firedEvents.add(i);
-      for (const d of ev.units) {
-        if (this.unitAt(d.x, d.y)) continue;
-        const u = createUnit(d, null, this.difficulty);
-        this.units.push(u);
-        const v = new UnitView(this, u);
-        this.views.set(u, v);
-        v.c.setAlpha(0);
-        this.tweens.add({ targets: v.c, alpha: 1, duration: 400 });
-      }
-      for (const [id, ai] of Object.entries(ev.setAi || {})) {
-        const u = this.units.find((o) => o.id === id && o.alive);
-        if (u) u.ai = ai;
-      }
-      await this.dialog.show(ev.dialog);
+      if (this.firedEvents.has(i) || ev.turn == null || ev.turn !== this.turn || (ev.faction || 'enemy') !== faction) continue;
+      await this.runEvent(i, ev);
     }
+  }
+
+  // 单位撤退时触发的剧情
+  async fireDeathEvents(u) {
+    for (const [i, ev] of this.stage.events.entries()) {
+      if (!this.firedEvents.has(i) && ev.onDeath === u.id) await this.runEvent(i, ev);
+    }
+  }
+
+  // 单挑：a 与 b 首次交手时触发
+  findDuel(a, b) {
+    for (const [i, ev] of this.stage.events.entries()) {
+      const d = ev.duel;
+      if (!d || this.firedEvents.has(i)) continue;
+      if ((d.a === a.id && d.b === b.id) || (d.a === b.id && d.b === a.id)) return [i, ev];
+    }
+    return null;
+  }
+
+  async runDuel([i, ev]) {
+    this.firedEvents.add(i);
+    const a = this.units.find((u) => u.id === ev.duel.a);
+    const b = this.units.find((u) => u.id === ev.duel.b);
+    await playDuel(this, a, b, ev);
+  }
+
+  applyChoice(c) {
+    if (c.red) {
+      this.red += c.red;
+      this.registry.set('red', this.red);
+      this.hud.setRed(this.red);
+    }
+    if (c.flag) this.setFlag(c.flag);
+  }
+
+  // 撤离：指定武将行动结束时停在撤离点，即安全撤出战场（不算阵亡）
+  async tryEscape(u) {
+    const esc = this.stage.escape;
+    if (!u.alive || !esc?.units.includes(u.id) || !esc.tiles.some(([x, y]) => u.x === x && u.y === y)) return;
+    u.alive = false;
+    u.escaped = true;
+    this.hud.log(`${u.name} 撤离了战场`);
+    const v = this.views.get(u);
+    this.views.delete(u);
+    if (v) await new Promise((r) => this.tweens.add({ targets: v.c, alpha: 0, y: v.c.y - 16, duration: 500, onComplete: () => { v.c.destroy(); r(); } }));
+  }
+
+  // 到达类胜利条件 / 撤离点：在地图上标出目标格（金色为胜利目标，蓝色为撤离点）
+  drawGoals() {
+    const g = this.add.graphics().setDepth(4);
+    for (const [x, y] of this.stage.escape?.tiles || []) {
+      const px = MAP_X + x * TILE, py = MAP_Y + y * TILE;
+      g.fillStyle(0x6ab8ff, 0.25).fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+      g.lineStyle(2, 0x6ab8ff, 0.9).strokeRect(px + 5, py + 5, TILE - 10, TILE - 10);
+    }
+    for (const c of this.stage.victory) {
+      if (c.type !== 'reach') continue;
+      for (const [x, y] of c.tiles) {
+        const px = MAP_X + x * TILE, py = MAP_Y + y * TILE;
+        g.fillStyle(0xffd36a, 0.28).fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+        g.lineStyle(2, 0xffd36a, 0.9).strokeRect(px + 3, py + 3, TILE - 6, TILE - 6);
+      }
+    }
+    this.tweens.add({ targets: g, alpha: 0.45, yoyo: true, repeat: -1, duration: 700 });
   }
 
   endPlayerPhase() {
@@ -199,33 +303,53 @@ export class BattleScene extends Phaser.Scene {
     if (this.over) return true;
     const lord = this.units.find((u) => u.id === 'caocao');
     if (!lord.alive) { await this.defeat('曹操撤退了……'); return true; }
-    const v = this.stage.victory;
-    const boss = this.units.find((u) => u.id === v.target);
+    for (const id of this.stage.protect || []) {
+      const u = this.units.find((o) => o.id === id);
+      if (u && !u.alive) { await this.defeat(`${u.name}撤退了……`); return true; }
+    }
     const enemiesLeft = this.units.some((u) => u.alive && u.faction === 'enemy');
-    if ((boss && !boss.alive) || !enemiesLeft) { await this.victory(); return true; }
+    for (const c of this.stage.victory) {
+      let ok = false;
+      if (c.type === 'boss') ok = this.units.some((u) => u.id === c.target && !u.alive);
+      else if (c.type === 'all') ok = !enemiesLeft;
+      else if (c.type === 'reach' && this.turn >= (c.fromTurn || 1)) {
+        ok = this.units.some((u) => u.alive && u.faction === 'player' && (c.unit === 'any' || u.id === c.unit)
+          && c.tiles.some(([x, y]) => u.x === x && u.y === y));
+      }
+      if (ok) { await this.victory(c.outcome); return true; }
+    }
+    if (!enemiesLeft) { await this.victory('win'); return true; }
     return false;
   }
 
-  async victory() {
+  async victory(outcome = 'win') {
     this.over = true;
     this.state = 'busy';
     this.clearSelection();
-    await this.hud.banner('胜　利', '#ffe08a');
-    await this.dialog.show(this.stage.epilogue);
+    const annihilated = !this.units.some((u) => u.alive && u.faction === 'enemy');
+    await this.hud.banner(outcome === 'retreat' ? '撤　退' : '胜　利', '#ffe08a');
+    // 胜利时按单位存亡设置剧情标记（例如郭嘉未撤退则战后病逝），先于结尾对白，便于对白按标记分支
+    for (const r of this.stage.victoryFlags || []) {
+      const u = this.units.find((o) => o.id === r.unit);
+      if (u && u.alive === r.alive && (!r.outcome || r.outcome === outcome)) this.setFlag(r.flag);
+    }
+    const eps = this.stage.epilogues || {};
+    await this.dialog.show((annihilated && eps.annihilate) || eps[outcome] || this.stage.epilogue);
     const roster = this.registry.get('roster') || {};
     for (const u of this.units) if (u.faction === 'player') roster[u.id] = { lvl: u.lvl, exp: u.exp };
     this.registry.set('roster', roster);
+    this.registry.set('red', this.red);
     // 过关奖励补给
     const items = { ...this.items };
     for (const [k, n] of Object.entries(this.difficulty.reward)) items[k] = (items[k] || 0) + n;
     this.registry.set('items', items);
+    const next = resolveNext(this.stage, outcome, annihilated, this.red);
     writeAuto({
-      stage: this.stageIndex + 1, roster, items, difficulty: this.difficultyId,
+      stage: next, roster, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       summary: { lordLvl: this.units.find((u) => u.id === 'caocao').lvl },
     });
-    const next = this.stageIndex + 1;
-    if (next < STAGES.length) this.scene.start('Battle', { stage: next });
-    else this.scene.start('Ending');
+    if (next && getStage(next)) this.scene.start('Battle', { stage: next });
+    else this.scene.start('Ending', { route: ENDINGS[next] || 'villain' });
   }
 
   async defeat(reason) {
@@ -237,7 +361,7 @@ export class BattleScene extends Phaser.Scene {
     const cx = (COLS * TILE) / 2, cy = MAP_Y + 300;
     this.add.rectangle(0, 0, 2000, 2000, 0x000000, 0.55).setOrigin(0).setDepth(900).setInteractive();
     text(this, cx, cy - 70, reason, 26, '#f1e3c2', FONT).setOrigin(0.5).setDepth(901);
-    button(this, cx - 170, cy, 150, 48, '重新挑战', () => this.scene.start('Battle', { stage: this.stageIndex })).setDepth(901);
+    button(this, cx - 170, cy, 150, 48, '重新挑战', () => this.scene.start('Battle', { stage: this.stageId })).setDepth(901);
     button(this, cx + 20, cy, 150, 48, '返回标题', () => this.scene.start('Title')).setDepth(901);
   }
 
@@ -422,7 +546,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (action.kind === 'spell') {
       const sp = SPELLS[action.id];
-      if (sp.kind === 'heal') return `【${sp.name}】恢复约 ${Math.min(healAmount(u), o.stats.hp - o.hp)}`;
+      if (sp.kind === 'heal') return `【${sp.name}】恢复约 ${Math.min(healAmount(u, action.id), o.stats.hp - o.hp)}`;
       return `【${sp.name}】伤害 ${spellDamage(this.map, u, o, action.id)}　成功 ${spellHit(u, o)}%`;
     }
     return `【${ITEMS[action.id].name}】${ITEMS[action.id].desc}`;
@@ -433,9 +557,14 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'busy';
     this.hl.clear();
     this.hud.forecast('');
-    if (action.kind === 'attack') await doAttack(this, u, o);
-    else if (action.kind === 'spell') await doSpell(this, u, action.id, o);
-    else await doItem(this, u, action.id, o);
+    try {
+      if (action.kind === 'attack') await doAttack(this, u, o);
+      else if (action.kind === 'spell') await doSpell(this, u, action.id, o);
+      else await doItem(this, u, action.id, o);
+    } catch (e) {
+      // 单个行动出错时不卡死整局，视为该单位行动结束
+      console.error('行动出错', e);
+    }
     await this.finishUnit(u);
   }
 
@@ -445,6 +574,7 @@ export class BattleScene extends Phaser.Scene {
     this.sel = null;
     u.acted = true;
     if (u.alive) this.views.get(u)?.setActed(true);
+    await this.tryEscape(u);
     if (await this.checkEnd()) return;
     this.state = 'idle';
     if (!this.units.some((o) => o.alive && o.faction === 'player' && !o.acted)) {

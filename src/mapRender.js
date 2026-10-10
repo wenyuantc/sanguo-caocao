@@ -96,6 +96,32 @@ function drawDetail(g, ch, px, py, x, y) {
       g.fillStyle(0xb5322a, 1).fillRect(px + T / 2 - 1, py + 6, 2, 22);
       g.fillTriangle(px + T / 2 + 1, py + 6, px + T / 2 + 15, py + 11, px + T / 2 + 1, py + 16);
       break;
+    case 'S':
+      // 战船甲板：水面上的木船
+      g.fillStyle(0x3f7fb5, 1).fillRect(px, py, T, T);
+      g.fillStyle(0x5a3a1e, 1).fillRect(px + 2, py + 4, T - 4, T - 8);
+      g.fillStyle(0x9a6a3a, 1).fillRect(px + 4, py + 6, T - 8, T - 12);
+      g.lineStyle(1, 0x6a4422, 1);
+      for (let i = 1; i < 5; i++) g.lineBetween(px + 4, py + 6 + i * 7, px + T - 4, py + 6 + i * 7);
+      g.fillStyle(0x3a2412, 1);
+      for (let i = 0; i < 5; i++) g.fillRect(px + 4 + i * 10, py + 3, 3, 4);
+      if ((x + y) % 2 === 0) {
+        g.fillStyle(0x4a2e14, 1).fillRect(px + T / 2 - 1, py + 8, 3, 28);
+        g.fillStyle(0xe8dcc0, 1).fillTriangle(px + T / 2 + 2, py + 10, px + T / 2 + 16, py + 22, px + T / 2 + 2, py + 30);
+      }
+      break;
+    case 'T':
+      // 营寨：栅栏 + 军帐
+      g.fillStyle(0x6a4a2a, 1);
+      for (let i = 0; i < 7; i++) {
+        g.fillRect(px + 2 + i * 7, py + 2, 3, 9);
+        g.fillTriangle(px + 2 + i * 7, py + 2, px + 5 + i * 7, py + 2, px + 3.5 + i * 7, py - 1);
+      }
+      g.fillStyle(0xd8c8a0, 1).fillTriangle(px + 8, py + 40, px + 40, py + 40, px + 24, py + 16);
+      g.fillStyle(0xb8a478, 1).fillTriangle(px + 24, py + 16, px + 40, py + 40, px + 30, py + 40);
+      g.fillStyle(0x4a3018, 1).fillTriangle(px + 21, py + 40, px + 27, py + 40, px + 24, py + 30);
+      g.fillStyle(0xb5322a, 1).fillRect(px + 23, py + 8, 2, 9).fillTriangle(px + 25, py + 8, px + 33, py + 11, px + 25, py + 14);
+      break;
     default:
   }
 }

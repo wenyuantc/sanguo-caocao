@@ -3,22 +3,41 @@ import { WIDTH, HEIGHT, FONT, hiDpi } from '../config.js';
 import { button, text } from '../ui.js';
 import { clearAuto } from '../saves.js';
 
+// 两种结局：忠臣线（魔王复活）/ 奸雄线（天下统一）
+const ENDING_TEXT = {
+  loyal: [
+    '五丈原一役，魔王终被击退，天下重归太平。',
+    '曹操扶持汉室，不改臣节，',
+    '与诸侯共守大汉江山。',
+    '',
+    '对酒当歌，人生几何。',
+    '周公吐哺，天下归心。',
+    '',
+    '— 忠臣篇 · 全剧终 —',
+  ],
+  villain: [
+    '建业城破，江东归附，',
+    '曹操扫平群雄，一统天下。',
+    '乱世百年，至此终结。',
+    '',
+    '老骥伏枥，志在千里；',
+    '烈士暮年，壮心不已。',
+    '',
+    '— 奸雄篇 · 全剧终 —',
+  ],
+};
+
 export class EndingScene extends Phaser.Scene {
   constructor() { super('Ending'); }
+
+  init(data) {
+    this.route = data?.route || 'villain';
+  }
 
   create() {
     hiDpi(this);
     this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x120a06).setOrigin(0);
-    const lines = [
-      '濮阳一役，曹操终退吕布，重定兖州。',
-      '此后迎天子于许都，挟天子以令诸侯，',
-      '官渡破袁绍，北征定乌桓，统一中原。',
-      '',
-      '对酒当歌，人生几何。',
-      '周公吐哺，天下归心。',
-      '',
-      '— 全剧终 —',
-    ];
+    const lines = ENDING_TEXT[this.route] || ENDING_TEXT.villain;
     const t = text(this, WIDTH / 2, HEIGHT + 20, lines.join('\n'), 30, '#f1e3c2', FONT).setOrigin(0.5, 0).setAlign('center').setLineSpacing(16);
     this.tweens.add({ targets: t, y: 90, duration: 9000, ease: 'Sine.easeOut' });
     clearAuto();

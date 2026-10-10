@@ -8,6 +8,8 @@ import { castFx, spellFx, itemFx, deathFx } from './spellFx.js';
 import { playAttack } from './attackFx.js';
 
 export async function doAttack(s, a, d) {
+  const duel = s.findDuel?.(a, d);
+  if (duel) { await s.runDuel(duel); return; }
   await strike(s, a, d, false);
   if (d.alive && a.alive && canAttackFrom(d, d.x, d.y, a)) {
     await wait(s, 150);
@@ -47,7 +49,7 @@ export async function doSpell(s, a, spellId, t) {
   await spellFx(s, spellId, t, { strong: spellId === 'fire' && (terrainAt(s.map, t.x, t.y).fire || 1) > 1, failed });
   s.views.get(a).faceDefault();
   if (sp.kind === 'heal') {
-    const amt = Math.min(t.stats.hp - t.hp, healAmount(a));
+    const amt = Math.min(t.stats.hp - t.hp, healAmount(a, spellId));
     t.hp += amt;
     s.views.get(t).updateHp();
     floatText(s, p.x, p.y - 20, `+${amt}`, '#7dff9a');
@@ -117,6 +119,7 @@ export async function killUnit(s, u) {
   s.hud.log(`${u.name} 撤退了！`);
   await deathFx(s, s.views.get(u));
   s.views.delete(u);
+  await s.fireDeathEvents?.(u);
 }
 
 export async function runAI(s, faction) {
@@ -127,13 +130,18 @@ export async function runAI(s, faction) {
     const plan = planAI(s.map, s.units, u);
     s.setCursor(u.x, u.y);
     if (plan) {
-      const node = reachable(s.map, s.units, u).get(key(plan.tile.x, plan.tile.y));
-      const path = node ? pathTo(node) : [{ x: u.x, y: u.y }];
-      const last = path[path.length - 1];
-      u.x = last.x; u.y = last.y;
-      await s.views.get(u).moveAlong(path);
-      if (plan.type === 'attack') await doAttack(s, u, plan.target);
-      else if (plan.type === 'spell') await doSpell(s, u, plan.spell, plan.target);
+      try {
+        const node = reachable(s.map, s.units, u).get(key(plan.tile.x, plan.tile.y));
+        const path = node ? pathTo(node) : [{ x: u.x, y: u.y }];
+        const last = path[path.length - 1];
+        u.x = last.x; u.y = last.y;
+        await s.views.get(u).moveAlong(path);
+        if (plan.type === 'attack') await doAttack(s, u, plan.target);
+        else if (plan.type === 'spell') await doSpell(s, u, plan.spell, plan.target);
+      } catch (e) {
+        // 单个 AI 行动出错时跳过该单位，避免整个阶段卡死
+        console.error('AI 行动出错', e);
+      }
     }
     if (s.views.get(u)) s.views.get(u).setActed(false);
     await s.checkEnd();

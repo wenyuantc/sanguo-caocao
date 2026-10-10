@@ -152,7 +152,7 @@ export function spellDamage(map, a, d, spellId) {
 }
 
 export const spellHit = (a, d) => Math.round(clamp(90 + (a.stats.int - d.stats.int) * 0.5, 50, 100));
-export const healAmount = (a) => Math.round(a.stats.int * 0.6 + 20);
+export const healAmount = (a, spellId = 'heal') => Math.round((a.stats.int * 0.6 + 20) * SPELLS[spellId].power);
 
 export function expFor(a, d, killed) {
   return Math.max(2, Math.min(60, 10 + (d.lvl - a.lvl) * 3 + (killed ? 25 : 0)));
@@ -179,6 +179,7 @@ function distanceField(map, foes, moveType) {
 }
 
 export function planAI(map, units, u) {
+  if (u.ai === 'peace') return null; // 不交战：原地不动、不主动攻击（如华容道放行的关羽）
   const foes = units.filter((o) => o.alive && isFoe(o, u));
   const friends = units.filter((o) => o.alive && !isFoe(o, u));
   if (!foes.length) return null;
@@ -193,7 +194,8 @@ export function planAI(map, units, u) {
       if (canAttackFrom(u, tile.x, tile.y, f)) {
         const d = physDamage(map, u, f);
         const counter = canAttackFrom(f, f.x, f.y, self) && d < f.hp ? physDamage(map, f, self) : 0;
-        consider(d + (d >= f.hp ? 80 : 0) + (f.leader ? 15 : 0) - counter * 0.4 + tdef, { tile, type: 'attack', target: f });
+        const focus = u.focus === f.id ? 300 : 0;
+        consider(d + (d >= f.hp ? 80 : 0) + (f.leader ? 15 : 0) + focus - counter * 0.4 + tdef, { tile, type: 'attack', target: f });
       }
       for (const s of spells) {
         if (SPELLS[s].kind !== 'damage' || dist(tile, f) > SPELLS[s].range) continue;
@@ -206,7 +208,7 @@ export function planAI(map, units, u) {
       for (const fr of friends) {
         const lost = fr.stats.hp - fr.hp;
         if (lost < fr.stats.hp * 0.4 || dist(tile, fr.x === u.x && fr.y === u.y ? tile : fr) > SPELLS[s].range) continue;
-        consider(Math.min(lost, healAmount(u)) * 0.9 + tdef, { tile, type: 'spell', spell: s, target: fr });
+        consider(Math.min(lost, healAmount(u, s)) * 0.9 + tdef, { tile, type: 'spell', spell: s, target: fr });
       }
     }
   }

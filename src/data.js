@@ -9,12 +9,18 @@ export const TERRAIN = {
   B: { name: '桥梁', color: 0x9a7448, cost: { foot: 1, horse: 1 }, def: 0, heal: 0 },
   C: { name: '城墙', color: 0x6d6a66, cost: { foot: 99, horse: 99 }, def: 0, heal: 0 },
   G: { name: '城池', color: 0xa89a82, cost: { foot: 1, horse: 1 }, def: 0.3, heal: 0.2 },
+  S: { name: '战船', color: 0x7a5432, cost: { foot: 1, horse: 2 }, def: 0.1, heal: 0, fire: 1.6 },
+  T: { name: '营寨', color: 0xa08458, cost: { foot: 1, horse: 1 }, def: 0.2, heal: 0.1, fire: 1.2 },
 };
 
 // 攻击范围：melee 上下左右；bow 距离2 + 斜角1
 export const RANGES = {
   melee: [[1, 0], [-1, 0], [0, 1], [0, -1]],
   bow: [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1]],
+  // 投石车：距离 2~3（不能攻击相邻）
+  far: [[2, 0], [-2, 0], [0, 2], [0, -2], [1, 1], [1, -1], [-1, 1], [-1, -1],
+    [3, 0], [-3, 0], [0, 3], [0, -3], [2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]],
+  none: [],
 };
 
 // 兵种：基础值(1级) + 成长
@@ -40,6 +46,21 @@ export const CLASSES = {
   taoist: { name: '道士', glyph: '道', move: 4, moveType: 'foot', range: 'melee', type: 'mage',
     base: { hp: 88, mp: 30, atk: 45, def: 46, int: 80, agi: 50 },
     grow: { hp: 7, mp: 4, atk: 1.5, def: 2, int: 3, agi: 2 }, spells: ['fire', 'heal'] },
+  archercav: { name: '弓骑', glyph: '骑', move: 6, moveType: 'horse', range: 'bow', type: 'bow',
+    base: { hp: 95, mp: 6, atk: 68, def: 50, int: 45, agi: 62 },
+    grow: { hp: 7.5, mp: 1, atk: 3, def: 2, int: 1.5, agi: 2.5 }, spells: [] },
+  fighter: { name: '武术家', glyph: '武', move: 5, moveType: 'foot', range: 'melee', type: 'foot',
+    base: { hp: 125, mp: 6, atk: 74, def: 54, int: 35, agi: 64 },
+    grow: { hp: 10, mp: 1, atk: 3.2, def: 2.2, int: 1, agi: 2.8 }, spells: [] },
+  catapult: { name: '投石车', glyph: '车', move: 3, moveType: 'foot', range: 'far', type: 'siege',
+    base: { hp: 90, mp: 0, atk: 78, def: 40, int: 30, agi: 30 },
+    grow: { hp: 7, mp: 0, atk: 3.2, def: 1.8, int: 1, agi: 1.2 }, spells: [] },
+  healer: { name: '风水士', glyph: '风', move: 4, moveType: 'foot', range: 'melee', type: 'mage',
+    base: { hp: 84, mp: 36, atk: 42, def: 46, int: 82, agi: 52 },
+    grow: { hp: 6.5, mp: 4.5, atk: 1.4, def: 2, int: 3.2, agi: 2 }, spells: ['heal', 'heal2', 'rock'] },
+  emperor: { name: '天子', glyph: '帝', move: 4, moveType: 'foot', range: 'none', type: 'noble',
+    base: { hp: 90, mp: 0, atk: 20, def: 50, int: 70, agi: 45 },
+    grow: { hp: 6, mp: 0, atk: 0.5, def: 2, int: 1, agi: 1.5 }, spells: [] },
 };
 
 // 兵种相克：攻击方类型 -> 被克制方类型
@@ -49,6 +70,7 @@ export const SPELLS = {
   fire: { name: '火计', mp: 6, range: 3, kind: 'damage', power: 1, color: 0xff6a1a, desc: '以火焚烧敌军，森林草原威力大增' },
   rock: { name: '落石', mp: 10, range: 3, kind: 'damage', power: 1.35, color: 0x9a8a70, desc: '滚落巨石，造成大量伤害' },
   heal: { name: '援队', mp: 8, range: 2, kind: 'heal', power: 1, color: 0x6ee08a, desc: '恢复友军兵力' },
+  heal2: { name: '大援队', mp: 14, range: 3, kind: 'heal', power: 1.7, color: 0x6ee08a, desc: '大幅恢复友军兵力' },
 };
 
 export const ITEMS = {

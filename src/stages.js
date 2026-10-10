@@ -1,176 +1,39 @@
-// 地图 18x13；units 中 player 单位的 id 会跨关卡继承等级与经验
-const P = (id, name, cls, lvl, x, y, extra = {}) => ({ id, name, cls, lvl, x, y, faction: 'player', ...extra });
-const E = (id, name, cls, lvl, x, y, extra = {}) => ({ id, name, cls, lvl, x, y, faction: 'enemy', ai: 'aggressive', ...extra });
-const A = (id, name, cls, lvl, x, y, extra = {}) => ({ id, name, cls, lvl, x, y, faction: 'ally', ai: 'aggressive', ...extra });
+// 关卡登记表：汇总各分组关卡，按 id 串联（含条件分支与红色指数分路）
+import groupA from './stages/a.js';
+import groupB from './stages/b.js';
+import groupC from './stages/c.js';
+import groupD from './stages/d.js';
+import groupE from './stages/e.js';
+import groupF from './stages/f.js';
+import { normalizeStage, FIRST_STAGE, ENDINGS, LEGACY, PLANNED_IDS } from './stageMeta.js';
 
-export const STAGES = [
-  {
-    title: '第一章 颍川之战',
-    turns: 20,
-    victoryText: '击败黄巾军首领 张宝',
-    victory: { type: 'boss', target: 'zhangbao' },
-    map: [
-      'MMFF,,......,,FMMM',
-      'MF,,....V....,,FMM',
-      'F,,..FF......,G,FM',
-      ',...FFF....WW,,,,F',
-      '....,F....WW..,,,,',
-      '..,,.....WW...F,,.',
-      '.,,,....BB....FF..',
-      '..,....WW.....,...',
-      '.V...WW....FF..,..',
-      '....WW....FFF.....',
-      ',..WW..,,....MM...',
-      ',,WW..,,,....MMM.F',
-      'MWW..,,,.....MMMFF',
-    ],
-    prologue: [
-      { who: '旁白', text: '中平元年，张角率太平道徒起事，头裹黄巾，天下震动。' },
-      { who: '旁白', text: '骑都尉曹操奉诏讨贼，率军进抵颍川。' },
-      { who: '曹操', side: 'player', text: '黄巾贼众虽多，不过乌合之众。诸将随我破敌！' },
-      { who: '夏侯惇', side: 'player', text: '孟德放心，看我先斩几个贼将！' },
-      { who: '张宝', side: 'enemy', text: '苍天已死，黄天当立！官军来得正好，教他们见识道法！' },
-    ],
-    units: [
-      P('caocao', '曹操', 'lord', 3, 15, 10, { leader: true, bonus: { atk: 4, int: 6 } }),
-      P('xiahoudun', '夏侯惇', 'cavalry', 3, 16, 9, { mark: '惇', bonus: { atk: 6 } }),
-      P('xiahouyuan', '夏侯渊', 'archer', 3, 16, 11, { mark: '渊', bonus: { atk: 4, agi: 4 } }),
-      P('caoren', '曹仁', 'infantry', 3, 12, 10, { mark: '仁', bonus: { def: 6 } }),
-      E('zhangbao', '张宝', 'taoist', 4, 14, 2, { leader: true, ai: 'hold', bonus: { int: 6 } }),
-      E('hj1', '黄巾兵', 'bandit', 2, 12, 4),
-      E('hj2', '黄巾兵', 'bandit', 2, 15, 4),
-      E('hj3', '黄巾兵', 'bandit', 2, 13, 6),
-      E('hj4', '黄巾兵', 'bandit', 2, 16, 6),
-      E('hj5', '黄巾兵', 'bandit', 1, 3, 5),
-      E('hj6', '黄巾兵', 'bandit', 2, 6, 3),
-      E('hj7', '黄巾弓兵', 'archer', 2, 11, 2, { ai: 'hold' }),
-      E('hj8', '黄巾术士', 'taoist', 2, 15, 1, { ai: 'hold' }),
-      E('hj9', '黄巾兵', 'bandit', 2, 8, 1, { ai: 'hold' }),
-    ],
-    events: [
-      { turn: 4, faction: 'enemy', units: [E('hjr1', '黄巾兵', 'bandit', 2, 0, 3), E('hjr2', '黄巾兵', 'bandit', 2, 1, 4)],
-        dialog: [{ who: '黄巾兵', side: 'enemy', text: '援军来了！包围官军！' }] },
-    ],
-    epilogue: [
-      { who: '张宝', side: 'enemy', text: '道法……竟敌不过官军……撤！' },
-      { who: '曹操', side: 'player', text: '颍川已定。听闻关东诸侯将会盟讨董，我军亦当前往。' },
-      { who: '旁白', text: '此时，颍川名士荀彧前来投奔。' },
-      { who: '荀彧', side: 'player', text: '明公雄才大略，彧愿效犬马之劳。' },
-    ],
-  },
-  {
-    title: '第二章 汜水关之战',
-    turns: 22,
-    victoryText: '击败守将 华雄',
-    victory: { type: 'boss', target: 'huaxiong' },
-    map: [
-      'MMMM,,GGGGG,,,MMMM',
-      'MMMCCCCCGCCCCCCMMM',
-      'MMF,,......,,,,FMM',
-      'MF,,..........,,FM',
-      'MF,....FF.....,,FM',
-      'M,....FFF......,,M',
-      'M,,.............,M',
-      'MM,,...MM....,,,MM',
-      'MM,....MM.....,,MM',
-      'MF,,..........,,FM',
-      'FF,,....V.....,FFF',
-      'F,,,..........,,FF',
-      'FF,,,........,,,FF',
-    ],
-    prologue: [
-      { who: '旁白', text: '初平元年，十八路诸侯会盟讨伐董卓，兵临汜水关。' },
-      { who: '华雄', side: 'enemy', text: '关东鼠辈，也敢来犯！某在此，谁敢叩关？' },
-      { who: '孙坚', side: 'ally', text: '江东孙文台在此！曹公，你我合力攻关！' },
-      { who: '荀彧', side: 'player', text: '华雄据关而守，城池易守难攻。宜先清剿关前之敌，再以火计削其兵力。' },
-      { who: '曹操', side: 'player', text: '好！全军进击，斩华雄于关前！' },
-    ],
-    units: [
-      P('caocao', '曹操', 'lord', 5, 8, 11, { leader: true, bonus: { atk: 4, int: 6 } }),
-      P('xiahoudun', '夏侯惇', 'cavalry', 5, 7, 10, { mark: '惇', bonus: { atk: 6 } }),
-      P('xiahouyuan', '夏侯渊', 'archer', 5, 9, 12, { mark: '渊', bonus: { atk: 4, agi: 4 } }),
-      P('caoren', '曹仁', 'infantry', 5, 9, 10, { mark: '仁', bonus: { def: 6 } }),
-      P('xunyu', '荀彧', 'strategist', 5, 7, 12, { bonus: { int: 8 } }),
-      A('sunjian', '孙坚', 'cavalry', 6, 3, 10, { bonus: { atk: 6 } }),
-      A('wu1', '孙家军', 'infantry', 4, 4, 11),
-      E('huaxiong', '华雄', 'cavalry', 8, 8, 1, { leader: true, ai: 'hold', bonus: { atk: 10, def: 6, hp: 40 } }),
-      E('huzhen', '胡轸', 'cavalry', 6, 6, 3),
-      E('lisu', '李肃', 'strategist', 6, 10, 2, { ai: 'hold' }),
-      E('xl1', '西凉骑兵', 'cavalry', 5, 9, 4),
-      E('xl2', '西凉步兵', 'infantry', 5, 4, 5),
-      E('xl3', '西凉步兵', 'infantry', 5, 13, 5),
-      E('xl4', '西凉弓兵', 'archer', 5, 7, 2, { ai: 'hold' }),
-      E('xl5', '西凉弓兵', 'archer', 5, 12, 3, { ai: 'hold' }),
-      E('xl6', '西凉步兵', 'infantry', 5, 11, 6),
-    ],
-    events: [
-      { turn: 4, faction: 'enemy', units: [E('xlr1', '伏兵', 'cavalry', 5, 2, 3), E('xlr2', '伏兵', 'cavalry', 5, 15, 3), E('xlr3', '伏兵', 'archer', 5, 1, 5)],
-        dialog: [{ who: '李肃', side: 'enemy', text: '伏兵尽出，截断联军退路！' }] },
-      { turn: 6, faction: 'enemy', units: [], setAi: { huaxiong: 'aggressive' },
-        dialog: [{ who: '华雄', side: 'enemy', text: '鼠辈纠缠不休！待某亲自出关斩尔等首级！' }] },
-    ],
-    epilogue: [
-      { who: '华雄', side: 'enemy', text: '怎……怎么可能……' },
-      { who: '孙坚', side: 'ally', text: '汜水关已破！曹公用兵，果然了得。' },
-      { who: '旁白', text: '然而诸侯各怀异心，联军终究瓦解。数年后，曹操据兖州，吕布乘虚袭取濮阳。' },
-      { who: '典韦', side: 'player', text: '俺典韦愿为主公护卫，谁敢近前，先吃俺一戟！' },
-    ],
-  },
-  {
-    title: '第三章 濮阳之战',
-    turns: 25,
-    victoryText: '击退 吕布',
-    victory: { type: 'boss', target: 'lvbu' },
-    map: [
-      'FF,,..G....G..,,FF',
-      'F,,.....VV.....,,F',
-      ',,....FF....FF...,',
-      ',.....FF....FF....',
-      '......,,....,,....',
-      'WWWBWWWWWWWWWWBWWW',
-      'WWWBWWWWWWWWWWBWWW',
-      '..,,......,,......',
-      '.,,..MM.......MM..',
-      '..,..MM..FF...MM.,',
-      '.....,...FF.....,,',
-      ',,..V..........,,F',
-      'F,,,.....,,....,FF',
-    ],
-    prologue: [
-      { who: '旁白', text: '兴平元年，吕布趁曹操东征徐州，袭取兖州濮阳。' },
-      { who: '吕布', side: 'enemy', text: '曹操！你的兖州，如今归我吕奉先了！' },
-      { who: '陈宫', side: 'enemy', text: '主公，曹军必经两座桥梁，可据河而守，以逸待劳。' },
-      { who: '曹操', side: 'player', text: '吕布勇冠三军，不可力敌。诸将务必结阵，集中兵力各个击破！' },
-      { who: '典韦', side: 'player', text: '主公莫慌，有俺在，吕布休想近身！' },
-    ],
-    units: [
-      P('caocao', '曹操', 'lord', 7, 8, 11, { leader: true, bonus: { atk: 4, int: 6 } }),
-      P('xiahoudun', '夏侯惇', 'cavalry', 7, 6, 10, { mark: '惇', bonus: { atk: 6 } }),
-      P('xiahouyuan', '夏侯渊', 'archer', 7, 10, 12, { mark: '渊', bonus: { atk: 4, agi: 4 } }),
-      P('caoren', '曹仁', 'infantry', 7, 10, 10, { mark: '仁', bonus: { def: 6 } }),
-      P('xunyu', '荀彧', 'strategist', 7, 7, 12, { bonus: { int: 8 } }),
-      P('dianwei', '典韦', 'infantry', 8, 9, 10, { bonus: { atk: 12, hp: 30 } }),
-      E('lvbu', '吕布', 'cavalry', 12, 8, 1, { leader: true, ai: 'hold', bonus: { atk: 22, def: 8, agi: 12, hp: 80 } }),
-      E('chengong', '陈宫', 'strategist', 9, 9, 0, { ai: 'hold', bonus: { int: 10 } }),
-      E('zhangliao', '张辽', 'cavalry', 9, 3, 3, { bonus: { atk: 8 } }),
-      E('gaoshun', '高顺', 'infantry', 9, 14, 4, { bonus: { def: 8 } }),
-      E('lb1', '陷阵营', 'infantry', 8, 3, 4, { ai: 'hold' }),
-      E('lb2', '陷阵营', 'infantry', 8, 15, 4, { ai: 'hold' }),
-      E('lb3', '并州骑兵', 'cavalry', 8, 7, 3),
-      E('lb4', '并州骑兵', 'cavalry', 8, 11, 3),
-      E('lb5', '并州弓兵', 'archer', 8, 2, 2, { ai: 'hold' }),
-      E('lb6', '并州弓兵', 'archer', 8, 15, 2, { ai: 'hold' }),
-    ],
-    events: [
-      { turn: 3, faction: 'enemy', units: [], setAi: { lvbu: 'aggressive', chengong: 'aggressive' },
-        dialog: [{ who: '吕布', side: 'enemy', text: '哈哈哈！谁能挡我方天画戟！赤兔，冲！' }] },
-      { turn: 6, faction: 'enemy', units: [E('lbr1', '并州骑兵', 'cavalry', 8, 0, 9), E('lbr2', '并州骑兵', 'cavalry', 8, 17, 8)],
-        dialog: [{ who: '陈宫', side: 'enemy', text: '左右两翼，夹击曹军本阵！' }] },
-    ],
-    epilogue: [
-      { who: '吕布', side: 'enemy', text: '可恶……曹操，今日暂且饶你！撤！' },
-      { who: '典韦', side: 'player', text: '主公，吕布逃了！' },
-      { who: '曹操', side: 'player', text: '兖州失而复得，诸君辛苦。天下大势，尚在吾辈掌中！' },
-    ],
-  },
-];
+export { FIRST_STAGE, ENDINGS, PLANNED_IDS };
+
+export const STAGES = [...groupA, ...groupB, ...groupC, ...groupD, ...groupE, ...groupF].map(normalizeStage);
+
+const BY_ID = new Map(STAGES.map((s) => [s.id, s]));
+
+
+export function getStage(id) {
+  if (typeof id === 'number') id = LEGACY[id];
+  return BY_ID.get(id);
+}
+
+// 红色指数：>= 3 忠臣线（黄），<= -3 奸雄线（橙），其余为中间路线（剧情同奸雄线）
+export function routeOf(red = 0) {
+  if (red >= 3) return 'loyal';
+  if (red <= -3) return 'villain';
+  return 'middle';
+}
+
+// 解析下一关：next 可以是字符串，或 { annihilate, retreat, <outcome>, default, route: { loyal, villain } }
+export function resolveNext(stage, outcome, annihilated, red) {
+  const n = stage.next;
+  if (!n || typeof n === 'string') return n;
+  if (n.route) {
+    const r = routeOf(red);
+    return r === 'loyal' ? n.route.loyal : n.route.villain;
+  }
+  if (annihilated && n.annihilate) return n.annihilate;
+  return n[outcome] || n.default;
+}

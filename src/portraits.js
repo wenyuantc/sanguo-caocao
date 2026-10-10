@@ -1,4 +1,5 @@
 import { C, kit, shade } from './heroSprites.js';
+import { getCharacter, skinOf, armorPalette, hexShade } from './characters.js';
 
 // 高清半身头像：逻辑 100x100，按 PT 倍生成贴图
 const PT = 4;
@@ -9,23 +10,9 @@ const SIDE = {
   none: { a: '#8a7a5a', d: '#4a3a24', l: '#d8c8a0', bg: ['#6a5a40', '#1a120a'] },
 };
 
-const LOOKS = {
-  曹操: { hat: 'crown', beard: 'goatee', brow: 0.18, cape: true },
-  夏侯惇: { hat: 'helmet', beard: 'mustache', brow: 0.3 },
-  夏侯渊: { hat: 'cap', beard: 'mustache', brow: 0.2 },
-  曹仁: { hat: 'helmet', beard: 'short', brow: 0.15 },
-  荀彧: { hat: 'scholar', robe: true, brow: 0.05, young: true },
-  典韦: { hat: 'helmet', beard: 'full', brow: 0.4, wide: true },
-  孙坚: { hat: 'helmet', beard: 'short', brow: 0.2, cape: true },
-  张宝: { hat: 'taoist', robe: true, robeColor: '#d6ae36', beard: 'long', brow: 0.3 },
-  华雄: { hat: 'helmet', beard: 'full', brow: 0.45, wide: true },
-  吕布: { hat: 'feather', brow: 0.35, young: true, cape: true },
-  陈宫: { hat: 'scholar', robe: true, beard: 'long', brow: 0.1 },
-  李肃: { hat: 'scholar', robe: true, beard: 'mustache', brow: 0.25 },
-};
-
 function lookFor(name) {
-  if (LOOKS[name]) return LOOKS[name];
+  const ch = getCharacter(name);
+  if (ch) return ch;
   if (name.includes('术士')) return { hat: 'taoist', robe: true, robeColor: '#d6ae36', beard: 'mustache', brow: 0.3 };
   if (name.includes('黄巾')) return { hat: 'turban', beard: 'stubble', brow: 0.35, cloth: true };
   if (name.includes('弓')) return { hat: 'cap', brow: 0.2 };
@@ -52,15 +39,23 @@ export function portraitTexture(scene, name, side) {
   ctx.lineTo(100, 100); ctx.lineTo(0, 100); ctx.fill();
   ctx.fillStyle = 'rgba(255,240,200,0.10)';
   ctx.beginPath(); ctx.arc(78, 22, 13, 0, Math.PI * 2); ctx.fill();
-  drawBust(k, L, S);
-  drawFace(k, L);
-  drawHat(k, L, S);
+  const saved = { skin: C.skin, skinD: C.skinD, hair: C.hair };
+  const skin = skinOf(L);
+  if (skin) [C.skin, C.skinD] = skin;
+  if (L.hairColor) C.hair = L.hairColor;
+  try {
+    drawBust(k, L, S);
+    drawFace(k, L);
+    drawHat(k, L, S);
+  } finally {
+    Object.assign(C, saved);
+  }
   tex.refresh();
   return key;
 }
 
 function drawBust({ ctx, grad, fill, ell, poly, line }, L, S) {
-  const P = L.cloth ? { a: '#9a7444', d: '#4e3418', l: '#d8bc8a' } : S;
+  const P = L.armor ? armorPalette(L.armor) : L.cloth ? { a: '#9a7444', d: '#4e3418', l: '#d8bc8a' } : S;
   if (L.cape) fill(grad(0, 70, 0, 100, C.red, C.redD), poly([8, 100], [18, 74], [82, 74], [92, 100]));
   if (L.robe) {
     const rc = L.robeColor || P.l;
@@ -94,7 +89,7 @@ function drawFace({ ctx, grad, fill, ell, poly, line }, L) {
   fill(C.skin, ell(50 - w, 47, 3.2, 5.6), C.ink, 0.6);
   fill(C.skin, ell(50 + w, 47, 3.2, 5.6), C.ink, 0.6);
   const fg = ctx.createRadialGradient(46, 44, 4, 50, 50, 28);
-  fg.addColorStop(0, '#fde6c8'); fg.addColorStop(0.7, C.skin); fg.addColorStop(1, C.skinD);
+  fg.addColorStop(0, skinOf(L) ? C.skin : '#fde6c8'); fg.addColorStop(0.7, C.skin); fg.addColorStop(1, C.skinD);
   const chin = L.young ? 71 : 73;
   fill(fg, () => {
     ctx.moveTo(50 - w, 36); ctx.quadraticCurveTo(50 - w, 60, 42, chin - 5); ctx.quadraticCurveTo(50, chin + 1, 58, chin - 5);
@@ -132,7 +127,7 @@ function drawFace({ ctx, grad, fill, ell, poly, line }, L) {
     fill('rgba(180,80,60,0.35)', ell(50, 64, 3, 1), null);
   };
   mouth();
-  const hair = L.beard === 'long' ? '#6a625a' : C.hair;
+  const hair = C.hair;
   const mustache = () => {
     ctx.lineCap = 'round';
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(50 + s * 0.8, 59.4); ctx.quadraticCurveTo(50 + s * 5, 58.6, 50 + s * 8, 63); ctx.strokeStyle = hair; ctx.lineWidth = 1.6; ctx.stroke(); }
@@ -159,7 +154,7 @@ function drawFace({ ctx, grad, fill, ell, poly, line }, L) {
       break;
     case 'long':
       mustache();
-      fill(grad(0, 64, 0, 96, '#8a8278', '#4a443e'), () => { ctx.moveTo(45, 65); ctx.quadraticCurveTo(50, 64, 55, 65); ctx.quadraticCurveTo(56, 82, 50, 96); ctx.quadraticCurveTo(44, 82, 45, 65); }, null);
+      fill(grad(0, 64, 0, 96, shade(L.hairColor || '#3a2c20', 1.15), hexShade(L.hairColor || '#3a2c20', 0.55)), () => { ctx.moveTo(45, 65); ctx.quadraticCurveTo(50, 64, 55, 65); ctx.quadraticCurveTo(56, 82, 50, 96); ctx.quadraticCurveTo(44, 82, 45, 65); }, null);
       break;
     case 'stubble':
       ctx.fillStyle = 'rgba(40,28,20,0.35)';
@@ -171,7 +166,7 @@ function drawFace({ ctx, grad, fill, ell, poly, line }, L) {
 }
 
 function drawHat({ ctx, grad, fill, ell, poly, line }, L, S) {
-  const P = L.cloth ? { a: '#9a7444', d: '#4e3418' } : S;
+  const P = L.armor ? armorPalette(L.armor) : L.cloth ? { a: '#9a7444', d: '#4e3418' } : S;
   const helmet = (main, dark) => {
     fill(grad(28, 0, 36, 0, shade(dark, 1.3), dark), poly([30, 36], [27, 60], [35, 62], [36, 37]));
     fill(grad(64, 0, 72, 0, dark, shade(dark, 1.3)), poly([70, 36], [73, 60], [65, 62], [64, 37]));
@@ -186,7 +181,7 @@ function drawHat({ ctx, grad, fill, ell, poly, line }, L, S) {
   };
   switch (L.hat) {
     case 'helmet':
-      helmet(P.a, P.d);
+      if (L.hatColor) helmet(L.hatColor, hexShade(L.hatColor, 0.45)); else helmet(P.a, P.d);
       fill(grad(0, 0, 0, 14, '#ff6a50', C.redD), () => { ctx.moveTo(50, 10); ctx.quadraticCurveTo(62, 0, 70, 8); ctx.quadraticCurveTo(60, 6, 50, 12); }, C.ink, 0.6);
       break;
     case 'crown':
@@ -226,6 +221,31 @@ function drawHat({ ctx, grad, fill, ell, poly, line }, L, S) {
       fill(C.hair, ell(50, 20, 8, 6));
       fill(grad(0, 6, 0, 22, '#fff08a', C.yellow, C.yellowD), poly([43, 22], [57, 22], [55, 8], [45, 8]), C.ink, 0.7);
       line(36, 15, 64, 15, 1.4, C.gold);
+      break;
+    case 'band': {
+      const hc = L.hatColor || '#b8302a';
+      fill(grad(0, 24, 0, 34, shade(hc, 1.2), hexShade(hc, 0.6)), poly([30, 28], [70, 26], [71, 33], [29, 35]), C.ink, 0.8);
+      line(70, 29, 82, 40, 3, hc); line(70, 31, 78, 46, 2.6, hc);
+      break;
+    }
+    case 'headscarf': {
+      const hc = L.hatColor || '#2f8a4a';
+      fill(grad(36, 10, 64, 38, shade(hc, 1.35), hc, hexShade(hc, 0.5)), ell(50, 38, 22.5, 21, 0, Math.PI, 0), C.ink, 1);
+      ctx.strokeStyle = hexShade(hc, 0.55); ctx.lineWidth = 0.8;
+      for (const ty of [24, 30]) { ctx.beginPath(); ctx.moveTo(30, ty + 6); ctx.quadraticCurveTo(50, ty - 4, 70, ty + 6); ctx.stroke(); }
+      fill(hexShade(hc, 0.65), poly([27, 34], [73, 34], [73, 39], [27, 39]), C.ink, 0.7);
+      fill(hc, () => { ctx.moveTo(70, 34); ctx.quadraticCurveTo(86, 40, 84, 62); ctx.lineTo(78, 60); ctx.quadraticCurveTo(80, 44, 68, 38); ctx.closePath(); }, C.ink, 0.6);
+      break;
+    }
+    case 'emperor':
+      fill(grad(0, 12, 0, 36, '#3a3430', '#0e0c0a'), poly([36, 36], [64, 36], [62, 16], [38, 16]), C.ink, 0.8);
+      fill(grad(0, 8, 0, 16, '#3a3430', '#141210'), poly([22, 16], [78, 16], [78, 10], [22, 10]), C.ink, 0.8);
+      fill(C.gold, poly([24, 16], [76, 16], [76, 17.5], [24, 17.5]), null);
+      for (let bx = 24; bx <= 76; bx += 4) {
+        if (bx > 34 && bx < 66) continue;
+        line(bx, 17, bx, 34, 0.5, '#e8d8a0', false);
+        for (const by of [22, 27, 32]) fill(by % 2 ? '#e84a3a' : '#f0d060', ell(bx, by, 1.1, 1.1), null);
+      }
       break;
     default:
   }

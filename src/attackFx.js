@@ -195,6 +195,45 @@ const STYLES = {
   },
 };
 
+// 新兵器复用 / 扩展
+STYLES.glaive = STYLES.halberd;
+STYLES.axe = STYLES.halberd;
+STYLES.twin = async (s, va, g, hit, crit) => {
+  await windup(s, va, g, 6, 90);
+  await charge(s, va, g, 0.48, 110);
+  s.time.delayedCall(70, hit);
+  await sweepArc(s, g.B.x, g.B.y, 20, g.ang - 1.7, g.ang + 0.9, 0xbfe4ff, 4, 140);
+  await sweepArc(s, g.B.x, g.B.y, 20, g.ang + 1.7, g.ang - 0.9, crit ? 0xffe05a : 0xbfe4ff, 4, 140);
+  await back(s, va, g);
+};
+STYLES.fist = async (s, va, g, hit, crit) => {
+  await windup(s, va, g, 5, 80);
+  await charge(s, va, g, 0.55, 90, 'Expo.easeIn');
+  for (let i = 0; i < (crit ? 3 : 2); i++) {
+    if (i === 0) hit();
+    ring(s, g.B.x + (i % 2 ? 5 : -5), g.B.y - 4, 0xffe8b0, 3, 18, 200, 3);
+    s.cameras.main.shake(60, 0.004);
+    await tween(s, { targets: va.c, x: va.c.x - g.ux * 5, y: va.c.y - g.uy * 5, duration: 70, yoyo: true });
+  }
+  await back(s, va, g);
+};
+STYLES.catapult = async (s, va, g, hit, crit, missed) => {
+  await tween(s, { targets: va.body, angle: -8, duration: 160, yoyo: true });
+  const rock = s.add.circle(g.A.x + 18, g.A.y - 22, crit ? 7 : 5.5, 0x8a7a62).setStrokeStyle(1.5, 0x3a2e20).setDepth(D);
+  const sx = rock.x, sy = rock.y, ex = missed ? g.B.x + g.ux * 26 : g.B.x, ey = missed ? g.B.y + g.uy * 26 : g.B.y;
+  const prog = { t: 0 };
+  await tween(s, {
+    targets: prog, t: 1, duration: 420 + g.len * 1.2, ease: 'Sine.easeIn',
+    onUpdate: () => rock.setPosition(lerp(sx, ex, prog.t), lerp(sy, ey, prog.t) - Math.sin(Math.PI * prog.t) * (50 + g.len * 0.3)).setAngle(prog.t * 540),
+  });
+  hit();
+  rock.destroy();
+  s.cameras.main.shake(crit ? 220 : 140, crit ? 0.012 : 0.007);
+  dust(s, ex, ey, crit ? 10 : 7, 30);
+  ring(s, ex, ey, 0xe8d8b0, 6, crit ? 38 : 28, 360, 3);
+  sparks(s, ex, ey, 0xd8c8a0, 8, 24);
+};
+
 // 播放一次攻击：attacker 攻击 defender，r 为结算结果 { hit, crit }
 export async function playAttack(s, attacker, defender, r, onImpact) {
   const va = s.views.get(attacker), vd = s.views.get(defender);

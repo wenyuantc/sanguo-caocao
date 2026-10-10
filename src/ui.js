@@ -70,15 +70,43 @@ export class DialogBox {
   }
 
   show(lines) {
+    // 对白行可带 ifFlag / unlessFlag，按剧情标记筛选
+    if (lines && this.scene.flagOk) lines = lines.filter((l) => this.scene.flagOk(l));
     if (!lines?.length) return Promise.resolve();
     this.lines = [...lines];
     this.root.setVisible(true);
     return new Promise((res) => { this.resolve = res; this.next(); });
   }
 
+  // 剧情选项：choices [{ text, red, flag, reply: [对白] }]
+  showChoices(line) {
+    const opts = line.choices;
+    this.choiceBox = this.scene.add.container(0, 0);
+    const w = 520, h = 46, x = (WIDTH - w) / 2, y0 = HEIGHT - 200 - opts.length * (h + 10);
+    opts.forEach((c, i) => {
+      const b = button(this.scene, x, y0 + i * (h + 10), w, h, c.text, () => {
+        this.choiceBox.destroy();
+        this.choiceBox = null;
+        this.onChoice?.(c);
+        if (c.reply) this.lines.unshift(...c.reply);
+        this.scene.time.delayedCall(0, () => this.next());
+      }, 19);
+      this.choiceBox.add(b);
+    });
+    this.root.add(this.choiceBox);
+  }
+
   next() {
-    if (this.typing) { this.typing.remove(); this.typing = null; this.bodyText.setText(this.full); return; }
+    if (this.choiceBox) return;
+    const cur = this.current;
+    if (this.typing) {
+      this.typing.remove(); this.typing = null; this.bodyText.setText(this.full);
+      if (cur?.choices && !cur.chosen) { cur.chosen = true; this.showChoices(cur); }
+      return;
+    }
+    if (cur?.choices && !cur.chosen) { cur.chosen = true; this.showChoices(cur); return; }
     const line = this.lines.shift();
+    this.current = line ? { ...line } : null;
     if (!line) { this.root.setVisible(false); this.resolve?.(); return; }
     this.portraitHolder.removeAll(true);
     const narr = line.who === '旁白';
@@ -92,7 +120,11 @@ export class DialogBox {
       delay: 28, repeat: this.full.length - 1,
       callback: () => {
         this.bodyText.setText(this.full.slice(0, ++i));
-        if (i >= this.full.length) this.typing = null;
+        if (i >= this.full.length) {
+          this.typing = null;
+          const c = this.current;
+          if (c?.choices && !c.chosen) { c.chosen = true; this.showChoices(c); }
+        }
       },
     });
   }

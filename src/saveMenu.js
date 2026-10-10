@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { WIDTH, HEIGHT, FONT, COLORS } from './config.js';
-import { STAGES } from './stages.js';
+import { getStage } from './stages.js';
 import { diffOf } from './data.js';
 import { panel, text, button } from './ui.js';
 import {
@@ -9,7 +9,7 @@ import {
 
 function describe(data) {
   if (!data) return { title: '— 空存档 —', sub: '' };
-  const stage = STAGES[data.stage];
+  const stage = getStage(data.stage);
   if (!stage) return { title: '已通关', sub: formatTime(data.savedAt) };
   const where = data.kind === 'battle' ? `第 ${data.turn} 回合` : '开战前';
   const lvl = data.summary?.lordLvl ? `　曹操 Lv${data.summary.lordLvl}` : '';
@@ -108,7 +108,7 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
       const data = row.auto ? readAuto() : slots[row.index];
       const y = y0 + 62 + i * (rowH + gap);
       const d = describe(data);
-      const canClick = mode === 'save' ? !row.auto : !!data && !!STAGES[data.stage];
+      const canClick = mode === 'save' ? !row.auto : !!data && !!getStage(data.stage);
       const g = scene.add.graphics();
       const draw = (hover) => {
         g.clear();

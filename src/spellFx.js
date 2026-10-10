@@ -2,7 +2,7 @@ import * as Phaser from 'phaser';
 import { tileCenter } from './unitView.js';
 import { text } from './ui.js';
 import { FONT } from './config.js';
-import { ITEMS } from './data.js';
+import { ITEMS, SPELLS } from './data.js';
 
 // 策略 / 道具特效：先生成高清特效贴图，再用补间组合
 const D = 720;
@@ -146,7 +146,9 @@ const SPELL_STYLE = {
 // 施法：脚下法阵 + 光晕 + 升腾光点 + 策略名
 export async function castFx(s, caster, spellId, target) {
   ensureTextures(s);
-  const st = SPELL_STYLE[spellId];
+  // 没有专属样式的策略（如大援队）按类型套用：回复类用援队样式，伤害类用火计样式
+  const sp = SPELLS[spellId];
+  const st = SPELL_STYLE[spellId] || { ...SPELL_STYLE[sp.kind === 'heal' ? 'heal' : 'fire'], name: sp.name };
   const v = s.views.get(caster);
   if (target && target !== caster) v.face(target);
   const p = tileCenter(caster.x, caster.y);
