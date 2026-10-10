@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "sanguo", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5188", "--strictPort"], "port": 5188 }
+    { "name": "sanguo", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5188", "--strictPort"], "port": 5188 },
+    { "name": "sanguo-alt", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5189", "--strictPort"], "port": 5189 }
   ]
 }

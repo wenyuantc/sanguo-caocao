@@ -12,7 +12,12 @@ export class Hud {
     const top = scene.add.graphics().setDepth(50);
     top.fillStyle(COLORS.panel, 1).fillRect(0, 0, WIDTH, MAP_Y);
     top.lineStyle(2, COLORS.gold, 1).lineBetween(0, MAP_Y - 1, WIDTH, MAP_Y - 1);
-    text(scene, 14, 8, stage.title, 22, '#e9c46a', FONT).setDepth(51);
+    // 章节与关序：分支关 no 形如 '忠1' / '奸1'
+    const no = typeof stage.no === 'string'
+      ? `${stage.no[0] === '忠' ? '忠臣线' : '奸雄线'} 第 ${stage.no.slice(1)} 关`
+      : `第 ${stage.no} 关`;
+    text(scene, 14, 2, `${stage.chapter}　${no}`, 12, '#b9a57a', FONT).setDepth(51);
+    text(scene, 14, 15, stage.title, 20, '#e9c46a', FONT).setDepth(51);
     const diff = scene.difficulty;
     text(scene, 250, 12, `［${diff.name}］`, 16, diff.color, FONT).setDepth(51);
     this.turnText = text(scene, 330, 10, '', 18, '#f1e3c2', FONT).setDepth(51);
