@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { WIDTH, HEIGHT, FONT, COLORS, FACTION_NAME } from './config.js';
 import { classOf } from './data.js';
+import { STATUS, STATUS_KEYS } from './status.js';
 import { panel, text, button } from './ui.js';
 
 const TABS = ['player', 'ally', 'enemy'];
@@ -79,7 +80,9 @@ export function openInfo(scene, { onPick, onClose }) {
         close();
         onPick(u);
       });
-      const status = u.faction === 'player' ? (u.acted ? '已行动' : '待命中') : STANCE[u.ai] || '进攻';
+      // 状态：行动 / 姿态，后附异常简称（如“待命中 毒麻”）
+      const ab = STATUS_KEYS.filter((k) => u.status?.[k]).map((k) => STATUS[k].short).join('');
+      const status = (u.faction === 'player' ? (u.acted ? '已行动' : '待命中') : STANCE[u.ai] || '进攻') + (ab ? ` ${ab}` : '');
       const cells = [u.name, classOf(u.cls, u.tier).name, `Lv ${u.lvl}`, `${u.hp} / ${u.stats.hp}`, `${u.mp} / ${u.stats.mp}`, status];
       const colors = ['#fff2cc', '#f1e3c2', '#f1e3c2', '#9ce0a8', '#9cc8ff', u.faction === 'player' && u.acted ? '#8a7a60' : '#f1e3c2'];
       list.add([g, zone, ...cells.map((s, k) => text(scene, lx + COLS_X[k], y + 4, s, 15, colors[k], k === 0 ? FONT : undefined))]);

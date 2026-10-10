@@ -2,6 +2,9 @@ import { COLS, ROWS } from './config.js';
 import { TERRAIN, RANGES, ADVANTAGE, SPELLS, SERIES, GRADE, STAT5, PROMOTE_LVL, classOf } from './data.js';
 import { GENERALS, isGeneral } from './generals.js';
 import { CLASS_BY_NAME } from './characters.js';
+import {
+  GUARD_TAKEN, STATUS_KEYS, effStats, moveBonus, canMove, canAct, canCast, canCounter, alwaysHit, has, hasBuff, applyStatus, applyBuff, cure,
+} from './status.js';
 
 export const key = (x, y) => y * COLS + x;
 export const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
@@ -66,6 +69,8 @@ export function createUnit(def, saved, diff) {
       : tierFor(role.cls, lvl, def.faction === 'player' ? PROMOTE_LVL : gateOf(diff)),
     exp: saved?.exp || 0,
     ai,
+    status: {},
+    buffs: {},
     mult: hard ? diff.mult : null,
     acted: false,
     moved: false,
@@ -79,7 +84,8 @@ export function createUnit(def, saved, diff) {
 
 // 读取战斗中存档的单位：兵种以总表 / 登记表为准，缺 tier 时我军视为一阶、其他按等级定阶，能力按新公式重算
 export function restoreUnit(saved, diff) {
-  const u = { ...saved, ...roleOf(saved) };
+  // 旧存档没有异常 / 增减益：视为无状态
+  const u = { ...saved, ...roleOf(saved), status: { ...saved.status }, buffs: { ...saved.buffs } };
   u.tier = Math.min(saved.tier || (u.faction === 'player' ? 1 : tierFor(u.cls, u.lvl, gateOf(diff))), SERIES[u.cls].tiers.length);
   u.stats = calcStats(u);
   u.hp = Math.min(u.hp, u.stats.hp);
@@ -110,17 +116,22 @@ export function promoteBlock(u) {
   return null;
 }
 
-// 转职：升一阶、重算能力、兵力与策略值回满；返回能力差值与新习得的策略（策略按阶级习得的接口）
+// 单位已掌握的策略：本系列习得表中等级、阶级都已达到的策略 id
+export function knownSpells(u) {
+  return SERIES[u.cls].spells.filter((e) => e.lvl <= u.lvl && e.tier <= (u.tier || 1)).map((e) => e.id);
+}
+
+// 转职：升一阶、重算能力、兵力与策略值回满；返回能力差值与新习得的策略（补学已达等级的高阶策略）
 export function promote(u) {
   const old = u.stats;
-  const oldSpells = classOf(u.cls, u.tier).spells;
+  const oldSpells = knownSpells(u);
   u.tier += 1;
   u.stats = calcStats(u);
   u.hp = u.stats.hp;
   u.mp = u.stats.mp;
   const diff = {};
   for (const k of Object.keys(old)) diff[k] = u.stats[k] - old[k];
-  const learned = classOf(u.cls, u.tier).spells.filter((sp) => !oldSpells.includes(sp));
+  const learned = knownSpells(u).filter((sp) => !oldSpells.includes(sp));
   return { diff, learned };
 }
 
@@ -128,9 +139,11 @@ export function terrainAt(map, x, y) {
   return TERRAIN[map[y][x]];
 }
 
-// Dijkstra 计算可移动范围；敌对单位阻挡，友方可穿过但不可停留
+// Dijkstra 计算可移动范围；敌对单位阻挡，友方可穿过但不可停留；麻痹 / 混乱时只有原地，强行使移动力 +2
 export function reachable(map, units, u) {
   const cls = classOf(u.cls, u.tier);
+  if (!canMove(u)) return new Map([[key(u.x, u.y), { x: u.x, y: u.y, cost: 0, prev: null }]]);
+  const move = cls.move + moveBonus(u);
   const occ = new Map();
   for (const o of units) if (o.alive) occ.set(key(o.x, o.y), o);
   const best = new Map([[key(u.x, u.y), { x: u.x, y: u.y, cost: 0, prev: null }]]);
@@ -144,7 +157,7 @@ export function reachable(map, units, u) {
       const o = occ.get(key(nx, ny));
       if (o && isFoe(o, u)) continue;
       const c = cur.cost + terrainAt(map, nx, ny).cost[cls.moveType];
-      if (c > cls.move) continue;
+      if (c > move) continue;
       const k = key(nx, ny);
       if (best.has(k) && best.get(k).cost <= c) continue;
       const node = { x: nx, y: ny, cost: c, prev: cur };
@@ -178,8 +191,10 @@ export function attackTiles(u, x = u.x, y = u.y) {
   return attackOffsets(u).map(([dx, dy]) => ({ x: x + dx, y: y + dy })).filter((p) => inMap(p.x, p.y));
 }
 
+// 策略射程内的格子；全图策略为全部格子，自身策略只有所在格
 export function spellTiles(u, spellId, x = u.x, y = u.y) {
-  const r = SPELLS[spellId].range;
+  const sp = SPELLS[spellId];
+  const r = sp.range === 'map' ? COLS + ROWS : sp.range;
   const out = [];
   for (let dy = -r; dy <= r; dy++)
     for (let dx = -r; dx <= r; dx++)
@@ -187,13 +202,16 @@ export function spellTiles(u, spellId, x = u.x, y = u.y) {
   return out;
 }
 
+
 // ---------- 战斗计算 ----------
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// 主将（曹操）与关卡 protect 单位（u.guard）受到的伤害倍率（自行设计）：
-// 原版三阶射程（连弩 2~4、霹雳车 4~5、步兵周围 8 格）让能打到主将的敌人成倍增加，而关卡站位按旧射程设计
-export const GUARD_TAKEN = 0.7;
+// 主将（曹操）与关卡 protect 单位（u.guard）受到的伤害倍率 GUARD_TAKEN 定义在 status.js（中毒扣血同样使用）
+export { GUARD_TAKEN };
+// 策略伤害另行减轻（自行设计）：原版策略多为范围攻击，开局密集站位时主将常被波及
+export const GUARD_SPELL_TAKEN = 0.4;
 const taken = (d) => (d.guard ? GUARD_TAKEN : 1);
+const spellTaken = (d) => (d.guard ? GUARD_SPELL_TAKEN : 1);
 
 export function affinity(a, d) {
   const ta = classOf(a.cls, a.tier).type, td = classOf(d.cls, d.tier).type;
@@ -203,19 +221,21 @@ export function affinity(a, d) {
 }
 
 // 物理：攻击对防御；命中看双方爆发之差，会心看双方士气之差（系数自行设计，量级与旧公式接近）
+// 能力一律取 effStats（套用增减益）；混乱的目标必中
 export function physDamage(map, a, d) {
   const t = terrainAt(map, d.x, d.y);
-  const base = (a.stats.atk - d.stats.def * 0.5) * 0.75;
+  const base = (effStats(a).atk - effStats(d).def * 0.5) * 0.75;
   const lvl = 1 + (a.lvl - d.lvl) * 0.03;
   return Math.max(5, Math.round(base * lvl * affinity(a, d) * (1 - t.def) * taken(d)));
 }
 
 export function hitRate(map, a, d) {
+  if (alwaysHit(d)) return 100;
   const t = terrainAt(map, d.x, d.y);
-  return Math.round(clamp(92 + (a.stats.burst - d.stats.burst) * 0.8 - t.def * 40, 55, 100));
+  return Math.round(clamp(92 + (effStats(a).burst - effStats(d).burst) * 0.8 - t.def * 40, 55, 100));
 }
 
-export const critRate = (a, d) => Math.round(clamp(4 + (a.stats.morale - d.stats.morale) * 0.3, 2, 25));
+export const critRate = (a, d) => Math.round(clamp(4 + (effStats(a).morale - effStats(d).morale) * 0.3, 2, 25));
 
 export function rollAttack(map, a, d) {
   const hit = Math.random() * 100 < hitRate(map, a, d);
@@ -224,17 +244,154 @@ export function rollAttack(map, a, d) {
   return { hit, crit, dmg };
 }
 
-// 策略：精神对精神；成功率看双方“精神 + 士气”之差（具体公式由策略子任务细化）
-export function spellDamage(map, a, d, spellId) {
+// ---------- 策略 ----------
+// 策略伤害的全局系数（自行设计，校准用）：原版公式 × SPELL_SCALE，使量级与物理伤害相当
+export const SPELL_SCALE = 2;
+// 范围策略对每个目标的威力系数（自行设计）：范围越大单体威力越低，避免一次施放重创密集站位的主将身边部队
+export const AREA_SCALE = { cross: 0.4, square: 0.35 };
+// 原版伤害公式（research spells.md §2.1）：x = 施策者等级 + (施策者精神 − 目标精神) / 3
+const FORMULA = {
+  a: (x) => (x + 5) * 0.7 + 14,
+  b: (x) => (x + 5) * 0.9 + 18,
+  c: (x, ge) => (x + 1) / 2 + (ge ? 12 : 13),
+  d: (x) => x * 1.2 + 30,
+  e: (x) => (x + 4) * 0.4 + 8,
+  f: (x) => x / 5 + 5,
+};
+const spellX = (a, d) => a.lvl + (effStats(a).int - effStats(d).int) / 3;
+
+// 野外地形（砂暴）、水边地形（水系）、山林地形（地系）
+const WILD = new Set(['.', ',', 'F', 'M']);
+const WET = new Set(['W', 'B', 'S']);
+const ROUGH = new Set(['M', 'F']);
+const nearAny = (map, x, y, set) => [[0, 0], ...RANGES.cross].some(([dx, dy]) => inMap(x + dx, y + dy) && set.has(map[y + dy][x + dx]));
+export const isWild = (map, x, y) => WILD.has(map[y][x]);
+
+// 地形限制（自行设计，参考 research P5）：可以施放时返回 null，否则返回中文原因；以目标（范围中心）所在格判断
+export function spellBlock(map, spellId, x, y) {
   const sp = SPELLS[spellId];
-  const t = terrainAt(map, d.x, d.y);
-  const fire = spellId === 'fire' ? t.fire || 1 : 1;
-  const base = (a.stats.int - d.stats.int * 0.5) * 0.65 + 14;
-  return Math.max(5, Math.round(base * sp.power * fire * (1 - t.def * 0.5) * taken(d)));
+  const c = map[y][x];
+  if (sp.area === 'map') return WILD.has(c) ? null : '砂暴只能攻击身处野外的敌军';
+  if (sp.elem === 'fire' && (c === 'W' || c === 'B')) return '火系策略无法攻击河流、桥梁上的目标';
+  if (sp.elem === 'water' && !nearAny(map, x, y, WET)) return '水系策略需目标处在河流、桥梁、战船上或旁边';
+  if (sp.elem === 'earth' && !nearAny(map, x, y, ROUGH)) return '地系策略需目标处在山地、森林上或旁边';
+  if (sp.elem === 'wind' && c === 'G') return '风系策略无法攻击城池内的目标';
+  return null;
 }
 
-export const spellHit = (a, d) => Math.round(clamp(90 + (a.stats.int + a.stats.morale - d.stats.int - d.stats.morale) * 0.3, 50, 100));
-export const healAmount = (a, spellId = 'heal') => Math.round((a.stats.int * 0.5 + 16) * SPELLS[spellId].power);
+// 能否以 o 为目标（范围中心）：敌对 / 友方 / 自身；回归只能对已行动、未混乱的其他我军
+export function spellTargetOk(a, spellId, o) {
+  const sp = SPELLS[spellId];
+  if (!o?.alive) return false;
+  if (sp.target === 'self') return o === a;
+  if (sp.target === 'foe') return isFoe(o, a);
+  if (sp.special === 'again') return o !== a && o.faction === 'player' && a.faction === 'player' && o.acted && canAct(o); // 混乱中的部队不能再行动
+  return !isFoe(o, a);
+}
+
+// 范围格：以 c 为中心（全图策略为全部野外格）
+const AREA = { cross: [[0, 0], ...RANGES.cross], square: [[0, 0], ...RANGES.around] };
+export function areaTiles(map, spellId, c) {
+  const sp = SPELLS[spellId];
+  if (sp.area === 'map') {
+    const out = [];
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (WILD.has(map[y][x])) out.push({ x, y });
+    return out;
+  }
+  return (AREA[sp.area] || [[0, 0]]).map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy })).filter((p) => inMap(p.x, p.y));
+}
+
+// 受影响的单位：范围内全部合法目标（敌对策略只打敌人，友方策略只作用于友方）
+export function spellVictims(map, units, a, spellId, c) {
+  const sp = SPELLS[spellId];
+  if (sp.target === 'self') return [a];
+  if (!sp.area) return [c];
+  const side = (o) => o.alive && (sp.target === 'foe' ? isFoe(o, a) : !isFoe(o, a));
+  if (sp.area === 'map') return units.filter((o) => side(o) && WILD.has(map[o.y][o.x]));
+  const offs = AREA[sp.area];
+  return units.filter((o) => side(o) && offs.some(([dx, dy]) => o.x === c.x + dx && o.y === c.y + dy));
+}
+
+// 预测伤害（确定性，AI 与 HUD 共用）：公式 × SPELL_SCALE × 范围系数 × 地形防御（减半计）× 主将保护（策略为 GUARD_SPELL_TAKEN）；火系乘地形易燃倍率；
+// 诱惑由舞娘施放伤害加倍；目标为西凉骑兵 +10%；海啸 / 晕眩的伤害等于目标当前兵力（主将仍按保护倍率）
+export function spellDamage(map, a, d, spellId) {
+  const sp = SPELLS[spellId];
+  if (sp.formula === 'kill') return Math.max(1, Math.round(d.hp * spellTaken(d)));
+  const t = terrainAt(map, d.x, d.y);
+  let m = SPELL_SCALE * (AREA_SCALE[sp.area] || 1) * (1 - t.def * 0.5) * spellTaken(d);
+  if (sp.elem === 'fire') m *= t.fire || 1;
+  if (sp.special === 'drain' && a.cls === 'dancer') m *= 2;
+  if (d.cls === 'xiliang') m *= 1.1;
+  return Math.max(1, Math.round(FORMULA[sp.formula](spellX(a, d), effStats(a).int >= effStats(d).int) * m));
+}
+
+// 谍报吸取的策略值：(L+Δ+1)/2+12，不超过目标现有策略值
+export const spellDrainMp = (a, d) => Math.min(d.mp, Math.max(1, Math.round((spellX(a, d) + 1) / 2 + 12)));
+
+// 成功率：对敌策略看双方“精神 + 士气”之差，再乘策略的成功率系数（海啸、晕眩低）；混乱的目标必中；友方策略必中
+export function spellHit(a, d, spellId) {
+  const sp = SPELLS[spellId];
+  if (sp.target !== 'foe' || alwaysHit(d)) return 100;
+  const ea = effStats(a), ed = effStats(d);
+  const base = clamp(90 + (ea.int + ea.morale - ed.int - ed.morale) * 0.3, 50, 100);
+  return Math.round(base * (sp.hitMod || 1));
+}
+
+// 回复量（research P3）：小补给 / 援队 40 + 精神 / 10；大补给 / 援军 / 输送 70 + 精神 / 2
+export function healAmount(a, spellId) {
+  const int = effStats(a).int;
+  return Math.round(SPELLS[spellId].heal === 'big' ? 70 + int / 2 : 40 + int / 10);
+}
+
+// 结算策略（不修改单位）：返回 { caster, spellId, center, effects: [{ u, hit, dmg?, heal?, mp?, mpDrain?, status?, buff?, cure?, again? }], self }
+// 随后用 applySpell 写入；actions.js 在两者之间播放特效，Node 模拟脚本直接连用
+export function resolveSpell(map, units, a, spellId, t, rng = Math.random) {
+  const sp = SPELLS[spellId];
+  const res = { caster: a, spellId, center: { x: t.x, y: t.y }, effects: [], self: {} };
+  for (const v of spellVictims(map, units, a, spellId, t)) {
+    const e = { u: v, hit: rng() * 100 < spellHit(a, v, spellId) };
+    res.effects.push(e);
+    if (!e.hit) continue;
+    if (sp.cat === 'damage') {
+      const base = spellDamage(map, a, v, spellId);
+      e.dmg = Math.min(v.hp, sp.formula === 'kill' ? base : Math.max(1, Math.round(base * (0.9 + rng() * 0.2))));
+      if (sp.special === 'drain') res.self.hp = (res.self.hp || 0) + e.dmg;
+    }
+    if (sp.status) e.status = sp.status === 'random' ? STATUS_KEYS[Math.floor(rng() * STATUS_KEYS.length)] : sp.status;
+    if (sp.special === 'drainMp') { e.mpDrain = spellDrainMp(a, v); res.self.mp = (res.self.mp || 0) + e.mpDrain; }
+    if (sp.buff) e.buff = sp.buff;
+    if (sp.cat === 'heal') e.heal = Math.min(v.stats.hp - v.hp, healAmount(a, spellId));
+    if (sp.mpGain) e.mp = Math.min(v.stats.mp - v.mp, sp.mpGain);
+    if (sp.cure) e.cure = sp.cure;
+    if (sp.special === 'again') e.again = true;
+    if (sp.special === 'meditate') { e.dmg = Math.min(v.hp - 1, 50); e.mp = Math.min(v.stats.mp - v.mp, 25); }
+  }
+  return res;
+}
+
+// 写入策略结算：扣施策者策略值，依次套用伤害 / 回复 / 异常 / 增减益 / 解除 / 再行动；记录实际解除的异常与作用的能力项
+export function applySpell(res) {
+  const a = res.caster;
+  a.mp = Math.max(0, a.mp - SPELLS[res.spellId].mp);
+  for (const e of res.effects) {
+    const v = e.u;
+    if (!e.hit) continue;
+    if (e.dmg) v.hp = Math.max(0, v.hp - e.dmg);
+    if (e.heal) v.hp = Math.min(v.stats.hp, v.hp + e.heal);
+    if (e.mp) v.mp = Math.min(v.stats.mp, v.mp + e.mp);
+    if (e.mpDrain) v.mp = Math.max(0, v.mp - e.mpDrain);
+    if (v.hp <= 0) continue;
+    if (e.status) applyStatus(v, e.status);
+    if (e.buff) e.buffKeys = applyBuff(v, e.buff);
+    if (e.cure) e.cured = cure(v, e.cure);
+    if (e.again) v.acted = false;
+  }
+  // 吸取：施策者按实际回复量记回 res.self（供浮字显示）
+  if (a.alive && a.hp > 0) {
+    if (res.self.hp) { const h = Math.min(a.stats.hp - a.hp, res.self.hp); a.hp += h; res.self.hp = h; }
+    if (res.self.mp) { const m = Math.min(a.stats.mp - a.mp, res.self.mp); a.mp += m; res.self.mp = m; }
+  }
+}
 
 export function expFor(a, d, killed) {
   return Math.max(2, Math.min(60, 10 + (d.lvl - a.lvl) * 3 + (killed ? 25 : 0)));
@@ -260,10 +417,11 @@ function distanceField(map, foes, moveType) {
   return field;
 }
 
-// 威胁图：每格能被多少个敌人在本回合移动后攻击到（用于受保护单位的 AI 避险）
+// 威胁图：每格能被多少个敌人在本回合移动后攻击到（用于受保护单位的 AI 避险）；混乱的敌人不算
 function dangerMap(map, units, foes) {
   const field = new Array(COLS * ROWS).fill(0);
   for (const f of foes) {
+    if (!canAct(f)) continue;
     const hit = new Set();
     for (const t of reachable(map, units, f).values()) for (const a of attackTiles(f, t.x, t.y)) hit.add(key(a.x, a.y));
     for (const k of hit) field[k] += 1;
@@ -271,14 +429,87 @@ function dangerMap(map, units, foes) {
   return field;
 }
 
+// 辅助类策略（减益、增益、解除、回复策略值）的计分上限（自行设计）：避免敌人只施放辅助策略而不攻击
+export const AUX_CAP = 40;
+// 异常策略的计分上限：可略高于辅助类，但低于主力伤害策略
+export const STATUS_CAP = 90;
+// 异常的价值（按目标威胁估算）：混乱使其一回合无法行动，麻痹只限制移动，中毒按约 3 回合的扣血，禁咒只对会策略的目标有价值
+function statusValue(v, key) {
+  if (has(v, key)) return 0;
+  const st = effStats(v);
+  const threat = Math.max(st.atk, knownSpells(v).length ? st.int : 0) * 0.35;
+  const lead = v.leader ? 1.3 : 1;
+  const val = {
+    confuse: threat * 1.5 + 10,
+    paralyze: threat * 0.4 + 8,
+    poison: Math.min(v.hp - 1, v.stats.hp * 0.1 * 3) * 0.6,
+    silence: knownSpells(v).length && v.mp >= 6 ? st.int * 0.35 : 2,
+    random: threat * 0.5 + 8,
+  }[key];
+  return Math.max(0, val) * lead;
+}
+const nearFoe = (v, foes, r = 6) => foes.some((f) => dist(f, v) <= r);
+
+// 以 c 为中心施放策略的得分（不含站位加成）；不值得施放时返回 0
+function spellScore(map, units, u, id, c, foes) {
+  const sp = SPELLS[id];
+  const victims = spellVictims(map, units, u, id, c);
+  let score = 0, aux = 0, stat = 0;
+  for (const v of victims) {
+    const hit = spellHit(u, v, id) / 100;
+    if (sp.cat === 'damage') {
+      const d = spellDamage(map, u, v, id);
+      const kill = d >= v.hp;
+      score += (Math.min(d, v.hp) * (sp.formula === 'kill' ? 0.6 : 0.95) + (kill ? 80 : 0) + (u.focus === v.id ? 300 : 0)) * hit;
+      if (sp.status && !kill) stat += statusValue(v, sp.status) * hit;
+      if (sp.special === 'drain') score += Math.min(d, u.stats.hp - u.hp) * 0.3 * hit;
+    } else if (sp.cat === 'status') stat += statusValue(v, sp.status) * hit;
+    else if (sp.special === 'drainMp') aux += (knownSpells(v).length ? spellDrainMp(u, v) : 0) * 0.8 * hit;
+    else if (sp.cat === 'debuff') aux += hasBuff(v, sp.buff) || !nearFoe(v, [u], 8) ? 0 : 11 * hit * (v.leader ? 1.5 : 1);
+    else if (sp.cat === 'heal') {
+      const lost = v.stats.hp - v.hp;
+      if (lost >= v.stats.hp * (sp.area ? 0.25 : 0.4)) score += Math.min(lost, healAmount(u, id)) * 0.9 + (v.hp < v.stats.hp * 0.35 ? 20 : 0);
+    } else if (sp.cat === 'cure') {
+      for (const k of STATUS_KEYS) if (has(v, k)) aux += Math.min(30, statusValue({ ...v, status: {} }, k)) + (v.hp < v.stats.hp * 0.35 ? 10 : 0);
+    } else if (sp.cat === 'mp') {
+      if (knownSpells(v).length && v.mp < v.stats.mp * 0.3) aux += Math.min(sp.mpGain, v.stats.mp - v.mp) * 0.5;
+    } else if (sp.cat === 'buff') {
+      if (!hasBuff(v, sp.buff) && nearFoe(v, foes)) aux += (sp.buff.stat === 'all' ? 25 : sp.buff.stat === 'move' ? 6 : 12) + (v.leader ? 4 : 0);
+    } else if (sp.special === 'meditate') {
+      if (u.mp < u.stats.mp * 0.3 && u.hp > 50 + u.stats.hp * 0.3) aux += 12;
+    }
+  }
+  return score + Math.min(stat, STATUS_CAP) + Math.min(aux, AUX_CAP);
+}
+
+// AI 可用的策略：已掌握、策略值足够、未被禁咒；回归不由 AI 使用
+export function castable(u) {
+  if (!canCast(u)) return [];
+  return knownSpells(u).filter((id) => u.mp >= SPELLS[id].mp && SPELLS[id].special !== 'again');
+}
+
 export function planAI(map, units, u) {
   if (u.ai === 'peace') return null; // 不交战：原地不动、不主动攻击（如华容道放行的关羽）
+  if (!canAct(u)) return null; // 混乱：不能行动
   const foes = units.filter((o) => o.alive && isFoe(o, u));
   const friends = units.filter((o) => o.alive && !isFoe(o, u));
   if (!foes.length) return null;
   const tiles = [...reachable(map, units, u).values()];
   const danger = u.guard ? dangerMap(map, units, foes) : null;
-  const spells = classOf(u.cls, u.tier).spells.filter((s) => u.mp >= SPELLS[s].mp);
+  const reach = Math.max(...tiles.map((t) => dist(t, u)));
+  // 先按“策略 × 目标”计分（与站位无关），再按站位检查射程
+  const plans = [];
+  for (const id of castable(u)) {
+    const sp = SPELLS[id];
+    let centers = sp.target === 'self' ? [u] : sp.target === 'foe' ? foes : friends;
+    if (sp.area === 'map') centers = centers.filter((c) => isWild(map, c.x, c.y)).slice(0, 1);
+    for (const c of centers) {
+      if (sp.range !== 'map' && c !== u && dist(c, u) > reach + sp.range) continue;
+      if (sp.target === 'foe' && spellBlock(map, id, c.x, c.y)) continue;
+      const score = spellScore(map, units, u, id, c, foes);
+      if (score > 0) plans.push({ id, c, score, range: sp.range });
+    }
+  }
   let best = null;
   const consider = (score, plan) => { if (!best || score > best.score) best = { score, ...plan }; };
   for (const tile of tiles) {
@@ -286,25 +517,15 @@ export function planAI(map, units, u) {
     const tdef = terrainAt(map, tile.x, tile.y).def * 30 - (danger ? danger[key(tile.x, tile.y)] * 25 : 0);
     const self = { ...u, x: tile.x, y: tile.y };
     for (const f of foes) {
-      if (canAttackFrom(u, tile.x, tile.y, f)) {
-        const d = physDamage(map, u, f);
-        const counter = canAttackFrom(f, f.x, f.y, self) && d < f.hp ? physDamage(map, f, self) : 0;
-        const focus = u.focus === f.id ? 300 : 0;
-        consider(d + (d >= f.hp ? 80 : 0) + (f.leader ? 15 : 0) + focus - counter * 0.4 + tdef, { tile, type: 'attack', target: f });
-      }
-      for (const s of spells) {
-        if (SPELLS[s].kind !== 'damage' || dist(tile, f) > SPELLS[s].range) continue;
-        const d = spellDamage(map, u, f, s);
-        consider(d * 0.95 + (d >= f.hp ? 80 : 0) + tdef, { tile, type: 'spell', spell: s, target: f });
-      }
+      if (!canAttackFrom(u, tile.x, tile.y, f)) continue;
+      const d = physDamage(map, u, f);
+      const counter = canCounter(f) && canAttackFrom(f, f.x, f.y, self) && d < f.hp ? physDamage(map, f, self) : 0;
+      const focus = u.focus === f.id ? 300 : 0;
+      consider(d + (d >= f.hp ? 80 : 0) + (f.leader ? 15 : 0) + focus - counter * 0.4 + tdef, { tile, type: 'attack', target: f });
     }
-    for (const s of spells) {
-      if (SPELLS[s].kind !== 'heal') continue;
-      for (const fr of friends) {
-        const lost = fr.stats.hp - fr.hp;
-        if (lost < fr.stats.hp * 0.4 || dist(tile, fr.x === u.x && fr.y === u.y ? tile : fr) > SPELLS[s].range) continue;
-        consider(Math.min(lost, healAmount(u, s)) * 0.9 + tdef, { tile, type: 'spell', spell: s, target: fr });
-      }
+    for (const p of plans) {
+      if (p.range !== 'map' && p.c !== u && dist(tile, p.c) > p.range) continue;
+      consider(p.score + tdef, { tile, type: 'spell', spell: p.id, target: p.c });
     }
   }
   if (best) return best;

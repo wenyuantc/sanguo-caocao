@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { TILE, MAP_X, MAP_Y, COLORS, FONT } from './config.js';
 import { unitTexture, TEX, LW, LH, PAD, ANCHOR_X, FEET_Y } from './heroSprites.js';
+import { STATUS, STATUS_KEYS } from './status.js';
 
 export const tileCenter = (x, y) => ({ x: MAP_X + x * TILE + TILE / 2, y: MAP_Y + y * TILE + TILE / 2 });
 
@@ -33,8 +34,11 @@ export class UnitView {
     this.body.add([g, this.sprite, tag, name, this.tierMark]);
     this.drawTier();
     this.hpBar = scene.add.graphics();
-    this.c.add([this.body, this.hpBar]);
+    // 状态图标：在姓名牌的另一侧竖排（异常为彩色圆徽章，增益 / 减益为上 / 下箭头）
+    this.statusMark = scene.add.container(unit.faction === 'enemy' ? -17 : 17, -20);
+    this.c.add([this.body, this.hpBar, this.statusMark]);
     this.updateHp();
+    this.updateStatus();
     this.idle = scene.tweens.add({ targets: this.body, y: -2, yoyo: true, repeat: -1, duration: 600 + Math.random() * 300, ease: 'Sine.easeInOut' });
   }
 
@@ -54,6 +58,31 @@ export class UnitView {
     this.sprite.setTexture(unitTexture(this.scene, this.unit));
     this.drawTier();
     this.updateHp();
+    this.updateStatus();
+  }
+
+  updateStatus() {
+    const m = this.statusMark;
+    if (!m.active) return;
+    m.removeAll(true);
+    const u = this.unit;
+    let y = 0;
+    for (const k of STATUS_KEYS) {
+      if (!u.status?.[k]) continue;
+      const g = this.scene.add.graphics();
+      g.fillStyle(STATUS[k].color, 1).fillCircle(0, y, 5.5);
+      g.lineStyle(1, 0x1a1008, 1).strokeCircle(0, y, 5.5);
+      const t = this.scene.add.text(0, y, STATUS[k].short, { fontFamily: FONT, fontSize: '9px', color: '#1a1008' }).setOrigin(0.5);
+      m.add([g, t]);
+      y += 12;
+    }
+    const b = Object.values(u.buffs || {}).filter(Boolean);
+    const up = b.some((v) => v.add || v.mult > 1), down = b.some((v) => v.mult < 1);
+    for (const [on, ch, col] of [[up, '▲', '#9ce07a'], [down, '▼', '#ff7a6a']]) {
+      if (!on) continue;
+      m.add(this.scene.add.text(0, y, ch, { fontFamily: FONT, fontSize: '10px', color: col }).setOrigin(0.5).setStroke('#1a1008', 3));
+      y += 11;
+    }
   }
 
   // 兵力条平滑过渡

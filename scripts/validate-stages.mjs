@@ -8,7 +8,8 @@ const STAGES = groups.length
   ? (await Promise.all(groups.map((g) => import(`../src/stages/${g}.js`)))).flatMap((m) => m.default).map(normalizeStage)
   : (await import('../src/stages.js')).STAGES;
 const getStage = (id) => STAGES.find((s) => s.id === id);
-import { TERRAIN, SERIES, RANGES, classOf } from '../src/data.js';
+import { TERRAIN, SERIES, RANGES, classOf, SPELLS, ITEMS, DIFFICULTIES, LOOT } from '../src/data.js';
+import { STATUS } from '../src/status.js';
 import { CHARACTERS, CLASS_BY_NAME } from '../src/characters.js';
 import { GENERALS } from '../src/generals.js';
 import { roleOf } from '../src/logic.js';
@@ -192,6 +193,33 @@ if (!groups.length) {
 // 兵种登记：武将总表与按名字登记的兵种必须存在
 for (const [id, g] of Object.entries(GENERALS)) if (!SERIES[g.cls]) errors.push(`[generals] ${id} 兵种不存在：${g.cls}`);
 for (const [name, c] of Object.entries(CLASS_BY_NAME)) if (!SERIES[c]) errors.push(`[characters] ${name} 兵种不存在：${c}`);
+
+// 策略表与习得表、道具表
+const CATS = ['damage', 'status', 'debuff', 'buff', 'heal', 'mp', 'cure', 'special'];
+for (const [id, sp] of Object.entries(SPELLS)) {
+  const e = (m) => errors.push(`[spells] ${id} ${m}`);
+  if (!sp.name || !sp.desc || typeof sp.mp !== 'number') e('缺少 name / desc / mp');
+  if (!CATS.includes(sp.cat)) e(`类别错误：${sp.cat}`);
+  if (!['foe', 'ally', 'self'].includes(sp.target)) e(`目标类型错误：${sp.target}`);
+  if (![0, 'cross', 'square', 'map'].includes(sp.area)) e(`范围错误：${sp.area}`);
+  if (!(sp.range === 'map' || (Number.isInteger(sp.range) && sp.range >= 0))) e(`射程错误：${sp.range}`);
+  if (sp.cat === 'damage' && !['a', 'b', 'c', 'd', 'e', 'f', 'kill'].includes(sp.formula)) e(`伤害公式错误：${sp.formula}`);
+  if (sp.status && sp.status !== 'random' && !STATUS[sp.status]) e(`异常不存在：${sp.status}`);
+  if (sp.buff && !(['atk', 'int', 'def', 'burst', 'morale', 'power', 'all'].includes(sp.buff.stat) && sp.buff.mult > 0)
+    && !(sp.buff.stat === 'move' && sp.buff.add)) e(`增减益错误：${JSON.stringify(sp.buff)}`);
+  if (sp.cure && sp.cure !== 'all' && !STATUS[sp.cure]) e(`解除的异常不存在：${sp.cure}`);
+}
+for (const [id, it] of Object.entries(ITEMS)) if (it.cure && it.cure !== 'all' && !STATUS[it.cure]) errors.push(`[items] ${id} 解除的异常不存在：${it.cure}`);
+for (const [cls, s] of Object.entries(SERIES)) {
+  for (const l of s.spells) {
+    if (!SPELLS[l.id]) errors.push(`[series] ${cls} 习得的策略不存在：${l.id}`);
+    if (!(l.tier >= 1 && l.tier <= s.tiers.length)) errors.push(`[series] ${cls} 策略 ${l.id} 阶级超出范围：${l.tier}`);
+  }
+}
+for (const [id, d] of Object.entries(DIFFICULTIES)) {
+  for (const k of [...Object.keys(d.items), ...Object.keys(d.reward)]) if (!ITEMS[k]) errors.push(`[difficulty] ${id} 道具不存在：${k}`);
+}
+for (const k of LOOT) if (!ITEMS[k]) errors.push(`[loot] 道具不存在：${k}`);
 
 console.log(`共 ${STAGES.length} 关`);
 warns.forEach((w) => console.log('警告', w));

@@ -12,7 +12,9 @@ src/
 ├── main.js             # new Phaser.Game({ scene: [TitleScene, BattleScene, EndingScene] })
 ├── config.js           # TILE/COLS/ROWS/MAP_X/MAP_Y/WIDTH/HEIGHT、字体、COLORS、RES + hiDpi()
 ├── data.js             # 静态规则表：TERRAIN、RANGES、SERIES（兵种系列与阶级）/ classOf、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
-├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、AI 决策（不依赖 Phaser）
+├── spells.js           # 策略表 SPELLS 与各系列习得表 SPELL_LEARN（纯数据，data.js 再导出）
+├── status.js           # 异常状态与增减益：effStats、tickStatus、各种判定（纯函数）
+├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、策略结算、AI 决策（不依赖 Phaser）
 ├── actions.js          # 作用于场景的异步战斗行动：doAttack/doSpell/doItem/killUnit/runAI
 ├── stageMeta.js        # normalizeStage、PLANNED_IDS、FIRST_STAGE、ENDINGS（不依赖 Phaser，校验脚本也会用）
 ├── stages.js           # 汇总 stages/a..f.js → STAGES、getStage、routeOf、resolveNext
@@ -48,7 +50,7 @@ GQ.md                        # 与 1998 原版对照的关卡清单
 ## 依赖方向
 
 ```
-data.js、config.js、stageMeta.js        （底层表，不导入其他游戏代码）
+spells.js → data.js → status.js、config.js、stageMeta.js        （底层表，不导入其他游戏代码）
         ↑
 logic.js（规则）   stages/*.js（数据）   characters.js（外形）
         ↑
@@ -57,9 +59,9 @@ actions.js、ui.js、hud.js、unitView.js、*Fx.js、heroSprites.js、portraits.
 scenes/*.js
 ```
 
-- `logic.js` 只导入 `config.js`、`data.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
+- `logic.js` 只导入 `config.js`、`data.js`、`status.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
   （AI 决策和 HUD 攻击预测调用的是同一批函数）。
-- `stageMeta.js`、`stages/*.js`、`data.js`、`characters.js`、`generals.js`、`deploy.js` 必须能被 Node 直接导入：
+- `stageMeta.js`、`stages/*.js`、`spells.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`deploy.js` 必须能被 Node 直接导入：
   `scripts/validate-stages.mjs` 会直接 import 它们。这些文件里不要导入 `phaser`，也不要访问 `window`/`localStorage`。
 - 只有场景负责把各模块串起来。
 
@@ -71,7 +73,9 @@ scenes/*.js
 |------|------|
 | 新关卡 | 所属组的 `src/stages/<a-f>.js`（见 `docs/STAGE_GUIDE.md` §1）；id 必须在 `PLANNED_IDS` 中 |
 | 新的具名武将外形 | 首次引入该人物的组的 `src/characters/extra_<组>.js` |
-| 新兵种/地形/策略/道具/难度 | `src/data.js` 中对应的表（绘制补在 `heroSprites.js`/`mapRender.js`/`spellFx.js`） |
+| 新兵种/地形/道具/难度 | `src/data.js` 中对应的表（绘制补在 `heroSprites.js`/`mapRender.js`/`spellFx.js`） |
+| 新策略 / 习得调整 | `src/spells.js` 的 `SPELLS` / `SPELL_LEARN`；新效果类型在 `logic.js` 的 `resolveSpell` / `applySpell` 与 `spellFx.js` 的 `hitFx` 中补充 |
+| 新异常 / 增减益 | `src/status.js`（`STATUS`、`tickStatus`、判定函数），图标在 `unitView.updateStatus` |
 | 新规则或公式 | `src/logic.js` 中导出的纯函数 |
 | 新的带动画的战斗行动 | `src/actions.js`（async，接收场景 `s`） |
 | 新的可复用控件 | `src/ui.js` 中的工厂函数 `(scene, x, y, ...)` |

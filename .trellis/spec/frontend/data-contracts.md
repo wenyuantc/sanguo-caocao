@@ -13,15 +13,31 @@
 |----|----------|
 | `TERRAIN[字符]` | `{ name, color, cost: { foot, horse }, def, heal, fire? }`，cost 为 `99` 表示不可通行 |
 | `RANGES[名称]` | `[dx, dy]` 偏移数组：`cross` 十字、`around` 周围 8 格、`ring2`、`r23`、`r24`、`line2`、`ring4`、`r45`、`none`；旧名 `melee`/`bow`/`far` 为别名 |
-| `SERIES[cls]` | 兵种系列：`{ name, moveType: 'foot'|'horse', type, tiers: [{ name, glyph, move, range }], grow: { atk, int, def, burst, morale }（成长档字母）, hp: [基础, 每级], mp: [基础, 每级], spells }`；可转职系列 3 阶，特殊兵种 1 阶 |
-| `classOf(cls, tier)` | 按阶级取兵种视图 `{ name, glyph, move, moveType, range, type, spells, tier, tiers, series }`（缓存对象，只读）。按单位取兵种信息一律用 `classOf(u.cls, u.tier)` |
+| `SERIES[cls]` | 兵种系列：`{ name, moveType: 'foot'|'horse', type, tiers: [{ name, glyph, move, range }], grow: { atk, int, def, burst, morale }（成长档字母）, hp: [基础, 每级], mp: [基础, 每级], spells: [{ id, lvl, tier }] }`；可转职系列 3 阶，特殊兵种 1 阶；`spells` 由 `spells.js` 的 `SPELL_LEARN` 填入 |
+| `classOf(cls, tier)` | 按阶级取兵种视图 `{ name, glyph, move, moveType, range, type, spells, tier, tiers, series }`（缓存对象，只读；`spells` 为该阶级以下可习得的策略 id，不看等级）。按单位取兵种信息一律用 `classOf(u.cls, u.tier)`；单位实际掌握的策略用 `knownSpells(u)`（等级、阶级都达到） |
 | `CLASSES[cls]` | 兼容视图，等于 `classOf(cls, 1)`；新代码不要用 |
 | `GRADE` / `STAT5` / `STAT_NAME` | 成长档 `{ S: 4, A: 3, B: 2, C: 1 }`；五项能力 key 列表与中文名 |
 | `PROMOTE_LVL` | 转职等级 `[15, 30]` |
 | `ADVANTAGE` | `{ horse: 'foot', foot: 'bow', bow: 'horse' }`，按兵种的 `type` 索引 |
-| `SPELLS[id]` | `{ name, mp, range, kind: 'damage'|'heal', power, color, desc }` |
-| `ITEMS[id]` | `{ name, desc, hp?, mp?, promote? }`（`seal` 印绶：`promote: true`，按转职处理；`SEAL_FROM` 起每关胜利奖励 1 个） |
+| `SPELLS[id]`（`src/spells.js`，data.js 再导出） | `{ name, cat, elem?, formula?, mp, range, area, target, status?, buff?, special?, heal?, mpGain?, cure?, hitMod?, color, desc }`，见下方“策略” |
+| `ITEMS[id]` | `{ name, desc, hp?, mp?, full?: 'hp'|'mp', cure?: 状态名|'all', promote? }`：bean 豆、rice 米、peach 桃、water 神秘水、wine 神秘酒、antidote 解毒药、plaster 膏药、stimulant 兴奋剂、cough 止咳药、panacea 万能药、seal 印绶（`promote: true`，`SEAL_FROM` 起每关胜利奖励 1 个）；`LOOT` 为每关胜利轮流获得的战利品 |
 | `DIFFICULTIES[id]` | `{ name, color, lvl, mult: Stats|null, aggressive, tierLvl: [二阶, 三阶], items, reward, desc[] }`（`tierLvl`：敌军 / 友军自动定阶门槛，普通 `[20, 35]`，困难 / 地狱 `[15, 30]`）；通过 `diffOf(id)` 读取（找不到时退回 `normal`） |
+
+### 策略（`SPELLS`）
+
+- `cat`：`damage` 伤害 / `status` 异常 / `debuff` 减益 / `buff` 增益 / `heal` 回复兵力 / `mp` 回复策略值 / `cure` 解除异常 / `special`（回归、冥想）。
+- `elem`：`fire` / `water` / `earth` / `wind`（决定地形限制与特效）；`formula`：`a`~`f` 为原版伤害公式类别，`kill` 为目标全部兵力，`drainMp` 为谍报吸取量。
+- `range`：射程（曼哈顿距离，`'map'` 为全图）；`area`：`0` 单体、`'cross'` 十字 5 格、`'square'` 3×3、`'map'` 全图野外；`target`：`'foe'` / `'ally'` / `'self'`。
+- `status`：附加异常（`'random'` 为随机一种）；`buff`：`{ stat: 'atk'|'int'|'def'|'burst'|'morale'|'power'|'all'|'move', mult? , add? }`（`power` 对文官作用于精神、对武将作用于攻击）；`special`：`'drain'` 吸取兵力、`'drainMp'`、`'again'`、`'meditate'`；`heal`：`'small'`/`'big'`；`hitMod`：成功率系数。
+- 结算一律走 `resolveSpell(map, units, a, id, t, rng)`（不修改单位，返回 `{ caster, spellId, center, effects: [{ u, hit, dmg?, heal?, mp?, mpDrain?, status?, buff?, cure?, again? }], self }`）→ `applySpell(res)`（写入并记录 `buffKeys` / `cured`）。`actions.doSpell` 在两者之间播放特效；Node 模拟脚本直接连用。
+- 预测函数：`spellDamage(map, a, d, id)`、`spellHit(a, d, id)`、`healAmount(a, id)`、`spellDrainMp(a, d)`；限制与目标：`spellBlock(map, id, x, y)`（地形限制，返回中文原因或 null）、`spellTargetOk(a, id, o)`、`spellVictims(map, units, a, id, c)`、`areaTiles(map, id, c)`。
+
+### 状态（`src/status.js`，纯函数）
+
+- `u.status = { poison?, paralyze?, confuse?, silence?: 剩余回合 }`；`u.buffs = { atk?|int?|def?|burst?|morale?: { mult, turns }, move?: { add, turns } }`。两者随战斗中存档保存，旧存档缺失时 `restoreUnit` 补为 `{}`。
+- `applyStatus` / `cure(u, key|'all')` / `applyBuff`（同一能力只刷新不叠加）；`tickStatus(u, rng)` 在所属阵营阶段开始时调用，返回 `[{ type: 'poison'|'recover'|'expire', … }]`。
+- 判定：`canMove`（麻痹 / 混乱时 false）、`canAct`（混乱 false）、`canCast`（禁咒 / 混乱 false）、`canCounter`（混乱 false）、`alwaysHit`（目标混乱）。
+- 战斗公式一律读 `effStats(u)`（套用增减益后的五项），不要直接读 `u.stats` 的五项；移动力加 `moveBonus(u)`。
 
 `Stats` = `{ hp, mp, atk, int, def, burst, morale }`（攻击、精神、防御、爆发、士气）；`bonus` / 难度 `mult` 使用同样的 key（关卡数据中的旧字段 `bonus.agi` 视为 `burst`）。新增兵种/策略/地形时，要填齐已有条目的**全部**字段；
 使用方直接按字段取值，不做空值检查（例如 `terrainAt(map, x, y).cost[cls.moveType]`）。
@@ -37,6 +53,7 @@
   cls, gradeMod, bonus, // roleOf(def)：我军武将取 generals.js；其他按 CLASS_BY_NAME / 同名武将 / 黄巾映射覆盖
   lvl,            // max(def.lvl, roster 中的 lvl)，敌军再加 difficulty.lvl
   guard?,         // 主将 / 受保护单位（BattleScene.markGuard）
+  status, buffs,  // 异常与增减益（见上方“状态”），新单位为 {}
   tier,           // 1~3：我军取 roster 的 tier（缺省 1）；无 roster 记录的我军 tierFor(cls, lvl)（15/30）；敌军 / 友军 tierFor(cls, lvl, diff.tierLvl)
   exp,            // 0..99，仅我军使用
   ai,             // 'aggressive' | 'hold' | 'peace'
@@ -61,8 +78,9 @@
 - `rollAttack()` 返回 `{ hit, crit, dmg }`；预测函数（`physDamage`、`hitRate`、`spellDamage`、
   `spellHit`、`healAmount`）是确定性的，AI 和 HUD 共用。
 - `planAI()` 返回 `null` 或 `{ score, tile, type: 'attack'|'spell'|'wait', target?, spell? }`。
-- 主将保护：`u.guard`（曹操与关卡 `protect` 单位，由 `BattleScene.markGuard` 设置并随存档保存）受到的物理与策略伤害乘 `GUARD_TAKEN`（0.7）；`planAI` 对 guard 单位按威胁图（每格可被几个敌人打到）扣分避险。
-- 战斗公式：物理伤害看攻击对防御；命中看双方爆发之差，会心看双方士气之差；策略成功率看双方“精神 + 士气”之差。
+- 主将保护：`u.guard`（曹操与关卡 `protect` 单位，由 `BattleScene.markGuard` 设置并随存档保存）受到的物理伤害与中毒扣血乘 `GUARD_TAKEN`（0.7，定义在 status.js、logic.js 再导出），策略伤害乘 `GUARD_SPELL_TAKEN`（0.4）；`planAI` 对 guard 单位按威胁图（每格可被几个敌人打到）扣分避险。
+- 战斗公式：物理伤害看攻击对防御；命中看双方爆发之差，会心看双方士气之差；策略伤害 = 原版公式（`x = 等级 + (精神差) / 3`）× `SPELL_SCALE`（2）× `AREA_SCALE`（十字 0.4、方形 0.35）× 地形；策略成功率看双方“精神 + 士气”之差再乘 `hitMod`；混乱的目标必中。
+- AI 策略计分：伤害按期望伤害与击破计分；异常按目标威胁计分，上限 `STATUS_CAP`；增益 / 减益 / 解除 / 回复策略值上限 `AUX_CAP`，防止只放辅助策略不攻击。AI 不使用回归，不使用受地形限制的策略。
 
 ## 关卡与存档结构
 

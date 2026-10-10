@@ -1,6 +1,7 @@
 import { PANEL_X, WIDTH, HEIGHT, MAP_Y, COLORS, FONT, FACTION_NAME } from './config.js';
 import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
-import { GUARD_TAKEN } from './logic.js';
+import { GUARD_TAKEN, GUARD_SPELL_TAKEN } from './logic.js';
+import { effStats, moveBonus, statusList } from './status.js';
 import { panel, text, portrait, button } from './ui.js';
 
 const PW = WIDTH - PANEL_X;
@@ -65,8 +66,13 @@ export class Hud {
     this.redText.setText(`红色指数 ${red > 0 ? '+' : ''}${red}`).setColor(color);
   }
 
+  // 只显示数量大于 0 的道具，超出顶栏宽度时以“…”省略
   setItems(items) {
-    this.itemText.setText('军需：' + Object.entries(items).map(([k, n]) => `${ITEMS[k].name}×${n}`).join('  '));
+    const parts = Object.keys(ITEMS).filter((k) => items[k] > 0).map((k) => `${ITEMS[k].name}×${items[k]}`);
+    const t = this.itemText;
+    let n = parts.length;
+    t.setText('军需：' + (parts.join(' ') || '无'));
+    while (n > 1 && t.width > 310) t.setText(`军需：${parts.slice(0, --n).join(' ')} …`);
   }
 
   log(msg) {
@@ -104,17 +110,27 @@ export class Hud {
     bar(94, '兵力', u.hp, u.stats.hp, 0x4cd964);
     bar(116, '策略', u.mp, u.stats.mp, 0x4a9df0);
     items.push(bars);
-    const st = u.stats;
-    // 五项能力 + 移动（三列），地形单独一行
-    const rows = [...STAT5.map((k) => [STAT_NAME[k], st[k]]), ['移动', cls.move]];
-    rows.forEach(([k, v], i) => {
-      const x = (i % 3) * 100, y = 142 + Math.floor(i / 3) * 24;
-      items.push(text(s, x, y, k, 15, '#e9c46a', FONT), text(s, x + 38, y, String(v), 15, '#f6ecd2'));
+    // 五项能力 + 移动（三列，套用增减益：上升绿色、下降红色），地形单独一行
+    const st = effStats(u);
+    const col = (v, base) => (v > base ? '#9ce0a8' : v < base ? '#ff8a7a' : '#f6ecd2');
+    const mv = cls.move + moveBonus(u);
+    const rows = [...STAT5.map((k) => [STAT_NAME[k], st[k], u.stats[k]]), ['移动', mv, cls.move]];
+    rows.forEach(([k, v, base], i) => {
+      const x = (i % 3) * 100, y = 140 + Math.floor(i / 3) * 22;
+      items.push(text(s, x, y, k, 15, '#e9c46a', FONT), text(s, x + 38, y, String(v), 15, col(v, base)));
     });
-    items.push(text(s, 0, 190, '地形', 15, '#e9c46a', FONT),
-      text(s, 38, 190, terrain ? `${terrain.name} ${Math.round(terrain.def * 100)}%` : '-', 15, '#f6ecd2'));
+    items.push(text(s, 0, 184, '地形', 15, '#e9c46a', FONT),
+      text(s, 38, 184, terrain ? `${terrain.name} ${Math.round(terrain.def * 100)}%` : '-', 15, '#f6ecd2'));
     const status = u.faction === 'player' ? (u.acted ? '已行动' : '待命中') : u.ai === 'aggressive' ? '进攻' : '固守';
-    items.push(text(s, 0, 216, `状态：${status}${u.guard ? `　主将·受到伤害 −${Math.round((1 - GUARD_TAKEN) * 100)}%` : ''}`, 14, '#bfae88'));
+    items.push(text(s, 0, 204, `状态：${status}${u.guard ? `　主将·受物理伤害 −${Math.round((1 - GUARD_TAKEN) * 100)}%，策略 −${Math.round((1 - GUARD_SPELL_TAKEN) * 100)}%` : ''}`, 14, '#bfae88'));
+    // 异常与增减益（含剩余回合）
+    let x = 0;
+    for (const e of statusList(u)) {
+      if (x > 250) { items.push(text(s, x, 222, '…', 13, '#bfae88')); break; }
+      const t = text(s, x, 222, e.text, 13, e.color);
+      items.push(t);
+      x += t.width + 8;
+    }
     this.info.add(items);
   }
 

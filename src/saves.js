@@ -45,8 +45,16 @@ export function formatTime(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// 旧存档的道具（豆 / 麦 / 酒）：带 wheat 键的为旧格式，麦 → 米，酒（策略 +20）→ 神秘水
+export function migrateItems(items = {}) {
+  if (!('wheat' in items)) return { ...items };
+  const { wheat, wine, ...rest } = items;
+  return { ...rest, rice: (rest.rice || 0) + (wheat || 0), water: (rest.water || 0) + (wine || 0) };
+}
+
 // 读取存档：写入全局状态后进入战场
 export function applyLoad(scene, data) {
+  data = { ...data, items: migrateItems(data.items) };
   // 旧存档的 roster 没有 tier（阶级）：视为一阶
   const roster = Object.fromEntries(Object.entries(data.roster || {}).map(([id, r]) => [id, { ...r, tier: r.tier || 1 }]));
   scene.registry.set('roster', roster);

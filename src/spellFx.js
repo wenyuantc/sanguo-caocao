@@ -1,8 +1,8 @@
 import * as Phaser from 'phaser';
 import { tileCenter } from './unitView.js';
 import { text } from './ui.js';
-import { FONT } from './config.js';
-import { ITEMS, SPELLS } from './data.js';
+import { FONT, TILE, COLS, ROWS, MAP_X, MAP_Y } from './config.js';
+import { ITEMS, SPELLS, TERRAIN } from './data.js';
 
 // 策略 / 道具特效：先生成高清特效贴图，再用补间组合
 const D = 720;
@@ -83,7 +83,7 @@ export function ensureTextures(s) {
     }
     ctx.strokeStyle = '#8a3a1e'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(5.5, 12.5); ctx.quadraticCurveTo(12, 15, 18.5, 12.5); ctx.stroke();
   });
-  canvasTex(s, 'fx-wheat', 24, 24, (ctx) => {
+  canvasTex(s, 'fx-rice', 24, 24, (ctx) => {
     for (const [x0, x1] of [[12, 6], [12, 12], [12, 18], [12, 9], [12, 15]]) {
       ctx.strokeStyle = '#b08a30'; ctx.lineWidth = 0.9;
       ctx.beginPath(); ctx.moveTo(12, 23); ctx.quadraticCurveTo(x0, 14, x1, 7); ctx.stroke();
@@ -122,6 +122,49 @@ export function ensureTextures(s) {
     ctx.beginPath(); ctx.moveTo(8, 11); ctx.quadraticCurveTo(12, 2, 16, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#7a1008'; ctx.font = 'bold 6px "STKaiti","KaiTi",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('印', 12, 16.5);
   });
+  // 浪头：月牙形浪峰，蓝白渐变
+  canvasTex(s, 'fx-wave', 40, 30, (ctx) => {
+    ctx.beginPath();
+    ctx.moveTo(2, 29); ctx.quadraticCurveTo(4, 8, 22, 3); ctx.quadraticCurveTo(36, 1, 38, 10);
+    ctx.quadraticCurveTo(30, 6, 26, 12); ctx.quadraticCurveTo(22, 20, 30, 29); ctx.closePath();
+    const g = ctx.createLinearGradient(0, 0, 0, 30);
+    g.addColorStop(0, '#f0fbff'); g.addColorStop(0.3, '#8ad0ff'); g.addColorStop(1, 'rgba(30,100,200,0.85)');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(6, 20); ctx.quadraticCurveTo(10, 8, 24, 5); ctx.stroke();
+  });
+  // 桃
+  canvasTex(s, 'fx-peach', 24, 24, (ctx) => {
+    ctx.fillStyle = '#5aa83a'; ctx.strokeStyle = '#2a5a18'; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.ellipse(16, 5, 5, 2.4, -0.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const g = ctx.createRadialGradient(9, 11, 1, 12, 14, 11);
+    g.addColorStop(0, '#fff0d8'); g.addColorStop(0.45, '#ffa080'); g.addColorStop(1, '#d8404a');
+    ctx.fillStyle = g; ctx.strokeStyle = '#7a1a20'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(12, 6); ctx.bezierCurveTo(20, 4, 23, 14, 18, 20); ctx.quadraticCurveTo(12, 24, 6, 20);
+    ctx.bezierCurveTo(1, 14, 4, 4, 12, 6); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(150,30,40,0.5)'; ctx.beginPath(); ctx.moveTo(12, 7); ctx.quadraticCurveTo(10, 14, 12, 21); ctx.stroke();
+  });
+  // 神秘水：蓝色琉璃瓶
+  canvasTex(s, 'fx-water', 24, 24, (ctx) => {
+    const g = ctx.createLinearGradient(5, 0, 19, 0);
+    g.addColorStop(0, '#2a5ab0'); g.addColorStop(0.4, '#8ad0ff'); g.addColorStop(1, '#1a3a80');
+    ctx.fillStyle = g; ctx.strokeStyle = '#0a1a40'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(10, 3); ctx.lineTo(14, 3); ctx.lineTo(14, 8); ctx.quadraticCurveTo(21, 11, 19, 19);
+    ctx.quadraticCurveTo(12, 24, 5, 19); ctx.quadraticCurveTo(3, 11, 10, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c8a070'; ctx.fillRect(9.5, 1.5, 5, 3); ctx.strokeRect(9.5, 1.5, 5, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.ellipse(8.5, 14, 1.2, 3.4, 0.2, 0, Math.PI * 2); ctx.fill();
+  });
+  // 药包：解毒药 / 膏药 / 兴奋剂 / 止咳药 / 万能药，纸包 + 彩色签字
+  for (const [id, ch, color] of [['antidote', '解', '#3a9a3a'], ['plaster', '膏', '#c8a020'], ['stimulant', '兴', '#a040c8'], ['cough', '咳', '#4a6ab8'], ['panacea', '万', '#c83030']]) {
+    canvasTex(s, `fx-${id}`, 24, 24, (ctx) => {
+      ctx.fillStyle = '#f0e2c0'; ctx.strokeStyle = '#6a4a20'; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(4, 7); ctx.lineTo(12, 3); ctx.lineTo(20, 7); ctx.lineTo(20, 20); ctx.lineTo(4, 20); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(106,74,32,0.5)'; ctx.beginPath(); ctx.moveTo(4, 7); ctx.lineTo(20, 7); ctx.stroke();
+      ctx.fillStyle = color; ctx.fillRect(7.5, 9, 9, 9);
+      ctx.fillStyle = '#fff6e0'; ctx.font = 'bold 7px "STKaiti","KaiTi",serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ch, 12, 13.8);
+      ctx.strokeStyle = '#8a3a1e'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(12, 3); ctx.lineTo(12, 0.8); ctx.stroke();
+    });
+  }
   // 道具碎粒
   canvasTex(s, 'fx-beanlet', 8, 8, (ctx) => {
     ctx.fillStyle = '#6ac048'; ctx.strokeStyle = '#2a5a18'; ctx.lineWidth = 0.6;
@@ -149,18 +192,15 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const img = (s, key, x, y, scale = 1, depth = D) => s.add.image(x, y, key).setScale(scale / R).setDepth(depth);
 const fadeOut = (s, o, ms, extra = {}) => s.tweens.add({ targets: o, alpha: 0, duration: ms, ...extra, onComplete: () => o.destroy() });
 
-const SPELL_STYLE = {
-  fire: { color: 0xff7a2a, css: '#ffb070', name: '火计' },
-  rock: { color: 0xd8c098, css: '#e8d4a8', name: '落石' },
-  heal: { color: 0x7dffa0, css: '#a8ffc0', name: '援队' },
-};
+// 0xRRGGBB → '#rrggbb'（提亮，用作字样颜色）
+const css = (c) => `#${[c >> 16, (c >> 8) & 255, c & 255].map((v) => Math.round(v + (255 - v) * 0.35).toString(16).padStart(2, '0')).join('')}`;
 
 // 施法：脚下法阵 + 光晕 + 升腾光点 + 策略名
 export async function castFx(s, caster, spellId, target) {
   ensureTextures(s);
-  // 没有专属样式的策略（如大援队）按类型套用：回复类用援队样式，伤害类用火计样式
+  // 法阵颜色按策略的主色（元素 / 类别）
   const sp = SPELLS[spellId];
-  const st = SPELL_STYLE[spellId] || { ...SPELL_STYLE[sp.kind === 'heal' ? 'heal' : 'fire'], name: sp.name };
+  const st = { color: sp.color, css: css(sp.color), name: sp.name };
   const v = s.views.get(caster);
   if (target && target !== caster) v.face(target);
   const p = tileCenter(caster.x, caster.y);
@@ -279,47 +319,286 @@ async function heal(s, p, color = 0x7dffa0, small = false) {
   await delay(s, 520);
 }
 
-// 策略命中特效；返回时为结算时刻，余下效果继续播放
-export async function spellFx(s, spellId, target, opts = {}) {
+// 策略命中特效：按元素 / 类别选择样式，范围策略在每个目标处同时播放；返回时为结算时刻，余下效果继续播放
+export async function spellFx(s, res) {
   ensureTextures(s);
-  const p = tileCenter(target.x, target.y);
-  if (spellId === 'fire') await fire(s, p, opts.strong);
-  else if (spellId === 'rock') await rock(s, p);
-  else await heal(s, p);
-  if (opts.failed) {
-    for (let i = 0; i < 5; i++) {
-      const sm = img(s, 'fx-smoke', p.x + rand(-12, 12), p.y + rand(-10, 8), 1).setTint(0xcfd8e0);
-      s.tweens.add({ targets: sm, scale: 2.2 / R, alpha: 0, duration: 600, onComplete: () => sm.destroy() });
-    }
+  const sp = SPELLS[res.spellId];
+  const from = tileCenter(res.caster.x, res.caster.y);
+  const spots = res.effects.length ? res.effects : [{ u: res.center, hit: true }];
+  if (sp.area === 'map') await sandstorm(s);
+  await Promise.all(spots.map((e, i) => delay(s, i * 70).then(() => {
+    const p = tileCenter(e.u.x, e.u.y);
+    const strong = sp.elem === 'fire' && (TERRAIN[s.map[e.u.y][e.u.x]].fire || 1) > 1;
+    return hitFx(s, sp, p, from, strong).then(() => { if (!e.hit) failPuff(s, p); });
+  })));
+}
+
+function hitFx(s, sp, p, from, strong) {
+  if (sp.elem === 'fire') return fire(s, p, strong);
+  if (sp.elem === 'water') return wave(s, p, sp.formula === 'kill');
+  if (sp.elem === 'earth') return rock(s, p);
+  if (sp.elem === 'wind') return whirl(s, p);
+  if (sp.special === 'drain' || sp.special === 'drainMp') return drain(s, p, from, sp.color);
+  if (sp.formula === 'kill') return swirl(s, p, 0x8a40ff, true);
+  if (sp.status === 'poison') return poisonFog(s, p);
+  if (sp.status === 'paralyze') return bolt(s, p);
+  if (sp.status === 'confuse') return swirl(s, p, 0xb070ff);
+  if (sp.status === 'silence') return runes(s, p);
+  if (sp.status === 'random') return Promise.all([swirl(s, p, 0xd0a0ff), runes(s, p)]);
+  if (sp.cat === 'debuff') return aura(s, p, false);
+  if (sp.cat === 'buff') return aura(s, p, true);
+  return heal(s, p, sp.color, sp.cat !== 'heal');
+}
+
+// 计策被识破：白烟散开
+function failPuff(s, p) {
+  for (let i = 0; i < 5; i++) {
+    const sm = img(s, 'fx-smoke', p.x + rand(-12, 12), p.y + rand(-10, 8), 1).setTint(0xcfd8e0);
+    s.tweens.add({ targets: sm, scale: 2.2 / R, alpha: 0, duration: 600, onComplete: () => sm.destroy() });
   }
 }
 
+// 水：浪头从一侧卷来拍下，水花四溅
+async function wave(s, p, big) {
+  const sc = big ? 1.5 : 1.1;
+  const base = img(s, 'fx-glow', p.x, p.y + 10, 1, D - 2).setTint(0x3f9cff).setBlendMode(ADD).setAlpha(0);
+  s.tweens.add({ targets: base, alpha: 0.6, scale: 3.2 / R, duration: 300, yoyo: true, hold: 300, onComplete: () => base.destroy() });
+  const w = img(s, 'fx-wave', p.x - 34, p.y + 10, sc * 0.6).setOrigin(0.5, 1).setAlpha(0.95);
+  await tween(s, { targets: w, x: p.x - 6, scaleY: (sc * 1.3) / R, scaleX: sc / R, duration: 260, ease: 'Quad.easeOut' });
+  s.cameras.main.shake(100, big ? 0.008 : 0.004);
+  s.tweens.add({ targets: w, x: p.x + 16, scaleY: (sc * 0.4) / R, alpha: 0, duration: 380, ease: 'Quad.easeIn', onComplete: () => w.destroy() });
+  for (let i = 0; i < (big ? 18 : 12); i++) {
+    const d = img(s, 'fx-drop', p.x + rand(-10, 14), p.y + rand(0, 10), rand(0.8, 1.3));
+    const dx = rand(-30, 30), up = rand(18, 40);
+    s.tweens.add({ targets: d, x: d.x + dx, duration: 620 });
+    s.tweens.add({ targets: d, y: d.y - up, duration: 300, ease: 'Quad.easeOut', yoyo: true, onComplete: () => d.destroy() });
+  }
+  for (let i = 0; i < 2; i++) {
+    const r = s.add.ellipse(p.x, p.y + 16, 10, 4).setStrokeStyle(1.5, 0xa8dcff, 1).setDepth(9);
+    s.tweens.add({ targets: r, scaleX: 5, scaleY: 5, alpha: 0, delay: i * 180, duration: 700, onComplete: () => r.destroy() });
+  }
+  await delay(s, 120);
+}
+
+// 风：几道旋转的气流环自下而上收拢，卷起尘土与落叶
+async function whirl(s, p) {
+  const rings = [];
+  for (let i = 0; i < 5; i++) {
+    const g = s.add.graphics().setDepth(D).setPosition(p.x, p.y + 14 - i * 9).setAlpha(0);
+    const rw = 10 + i * 4;
+    g.lineStyle(2, i % 2 ? 0xe0fff0 : 0x9ae8c8, 0.9).strokeEllipse(0, 0, rw * 2, rw * 0.6);
+    rings.push(g);
+    s.tweens.add({ targets: g, alpha: 0.9, delay: i * 50, duration: 150 });
+    s.tweens.add({ targets: g, scaleX: { from: 1, to: -1 }, delay: i * 50, duration: 160, yoyo: true, repeat: 3 });
+  }
+  for (let i = 0; i < 10; i++) {
+    const a0 = rand(0, Math.PI * 2);
+    const o = i % 2 ? img(s, 'fx-leaf', p.x, p.y, rand(0.9, 1.2)) : img(s, 'fx-smoke', p.x, p.y, 0.6).setTint(0xe8dcc0);
+    const prog = { t: 0 };
+    s.tweens.add({
+      targets: prog, t: 1, delay: i * 40, duration: 800,
+      onUpdate: () => o.setPosition(p.x + Math.cos(a0 + prog.t * 9) * (8 + prog.t * 14), p.y + 16 - prog.t * 50).setAlpha(Math.sin(Math.PI * prog.t)),
+      onComplete: () => o.destroy(),
+    });
+  }
+  await delay(s, 520);
+  rings.forEach((g) => fadeOut(s, g, 300, { y: g.y - 10 }));
+}
+
+// 毒：绿色毒雾翻涌、气泡上浮
+async function poisonFog(s, p) {
+  for (let i = 0; i < 9; i++) {
+    const sm = img(s, 'fx-smoke', p.x + rand(-16, 16), p.y + rand(0, 16), rand(0.6, 1)).setTint(i % 2 ? 0x6ad040 : 0x3a8a20).setAlpha(0);
+    s.tweens.add({ targets: sm, alpha: 0.85, scale: rand(1.8, 2.4) / R, x: sm.x + rand(-10, 10), y: sm.y - rand(6, 18), delay: i * 50, duration: 500 });
+    fadeOut(s, sm, 500, { delay: 700 + i * 30 });
+  }
+  for (let i = 0; i < 8; i++) {
+    const b = s.add.circle(p.x + rand(-14, 14), p.y + rand(4, 16), rand(1.5, 3)).setStrokeStyle(1, 0xb8ff90, 1).setDepth(D + 1);
+    b.isFilled = false;
+    s.tweens.add({ targets: b, y: b.y - rand(24, 40), alpha: 0, delay: 200 + i * 60, duration: 700, onComplete: () => b.destroy() });
+  }
+  await delay(s, 520);
+}
+
+// 麻痹：黄色闪电劈下，电光闪烁
+async function bolt(s, p) {
+  const g = s.add.graphics().setDepth(D + 2);
+  const flash = img(s, 'fx-glow', p.x, p.y, 1.4, D + 1).setTint(0xffe040).setBlendMode(ADD).setAlpha(0);
+  for (let k = 0; k < 3; k++) {
+    g.clear();
+    let x = p.x + rand(-6, 6), y = p.y - 90;
+    const pts = [[x, y]];
+    while (y < p.y + 6) { y += rand(10, 16); x += rand(-9, 9); pts.push([x, y]); }
+    for (const [w, c, a] of [[5, 0xffe040, 0.5], [2, 0xfffbe0, 1]]) {
+      g.lineStyle(w, c, a).beginPath();
+      pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.strokePath();
+    }
+    flash.setAlpha(0.9).setScale(rand(2.4, 3.2) / R);
+    if (k === 0) s.cameras.main.flash(80, 255, 240, 150);
+    await delay(s, 90);
+    g.clear();
+    flash.setAlpha(0.3);
+    await delay(s, 50);
+  }
+  g.destroy();
+  fadeOut(s, flash, 300);
+  for (let i = 0; i < 8; i++) {
+    const sp = img(s, 'fx-spark', p.x + rand(-14, 14), p.y + rand(-14, 12), rand(0.4, 0.7)).setTint(0xffe040).setBlendMode(ADD);
+    s.tweens.add({ targets: sp, alpha: { from: 1, to: 0 }, duration: 120, yoyo: true, repeat: 2, onComplete: () => sp.destroy() });
+  }
+}
+
+// 混乱 / 晕眩：头顶紫色漩涡与环绕的星光；dark 时加暗色冲击
+async function swirl(s, p, color, dark = false) {
+  const g = s.add.graphics().setDepth(D + 2).setPosition(p.x, p.y - 26).setScale(0.2);
+  g.lineStyle(2, color, 1).beginPath();
+  for (let i = 0; i <= 60; i++) {
+    const a = i * 0.32, r = i * 0.28;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.5;
+    if (i) g.lineTo(x, y); else g.moveTo(x, y);
+  }
+  g.strokePath();
+  s.tweens.add({ targets: g, scale: 1, duration: 260, ease: 'Back.easeOut' });
+  s.tweens.add({ targets: g, angle: 720, duration: 1100 });
+  const stars = [];
+  for (let i = 0; i < 3; i++) {
+    const st = img(s, 'fx-spark', p.x, p.y - 26, 0.8, D + 3).setTint(0xfff2a0).setBlendMode(ADD);
+    stars.push(st);
+    const prog = { t: 0 };
+    s.tweens.add({ targets: prog, t: 1, duration: 1000, onUpdate: () => st.setPosition(p.x + Math.cos(prog.t * 12 + i * 2.1) * 16, p.y - 26 + Math.sin(prog.t * 12 + i * 2.1) * 6) });
+  }
+  if (dark) {
+    const d = img(s, 'fx-glow', p.x, p.y, 1, D - 1).setTint(0x2a0a40).setAlpha(0.9);
+    s.tweens.add({ targets: d, scale: 4 / R, alpha: 0, duration: 700, onComplete: () => d.destroy() });
+    s.cameras.main.shake(140, 0.006);
+  }
+  await delay(s, 520);
+  s.time.delayedCall(600, () => { fadeOut(s, g, 250); stars.forEach((st) => fadeOut(s, st, 250)); });
+}
+
+// 禁咒：封印符文环绕收拢
+async function runes(s, p) {
+  const ring = s.add.graphics().setDepth(D + 1).setPosition(p.x, p.y);
+  ring.lineStyle(1.5, 0xb8c0e8, 0.9).strokeCircle(0, 0, 28).strokeCircle(0, 0, 22);
+  ring.setScale(0.3).setAlpha(0);
+  s.tweens.add({ targets: ring, scale: 1, alpha: 1, duration: 260 });
+  s.tweens.add({ targets: ring, angle: -180, duration: 1100 });
+  const marks = [];
+  for (let i = 0; i < 6; i++) {
+    const t = text(s, p.x, p.y, '封', 13, '#d8dcff', FONT).setOrigin(0.5).setStroke('#1a1a3a', 3).setDepth(D + 2).setAlpha(0);
+    marks.push(t);
+    const prog = { t: 0 };
+    s.tweens.add({
+      targets: prog, t: 1, duration: 900,
+      onUpdate: () => {
+        const a = (Math.PI * 2 * i) / 6 + prog.t * 3, r = 32 - prog.t * 22;
+        t.setPosition(p.x + Math.cos(a) * r, p.y + Math.sin(a) * r * 0.7).setAlpha(Math.min(1, prog.t * 4) * (1 - prog.t * 0.6));
+      },
+      onComplete: () => t.destroy(),
+    });
+  }
+  await delay(s, 700);
+  const seal = img(s, 'fx-glow', p.x, p.y, 1.2, D + 1).setTint(0x9aa8ff).setBlendMode(ADD);
+  s.tweens.add({ targets: seal, scale: 2.6 / R, alpha: 0, duration: 400, onComplete: () => seal.destroy() });
+  fadeOut(s, ring, 300);
+}
+
+// 增益：金色光环与上升箭头；减益：黑气自上而下压落、下坠箭头
+async function aura(s, p, up) {
+  const color = up ? 0xffd36a : 0x6a2a8a;
+  const glow = img(s, 'fx-glow', p.x, p.y + 4, 1.4, up ? D : D - 1).setTint(color).setBlendMode(up ? ADD : Phaser.BlendModes.NORMAL).setAlpha(0);
+  s.tweens.add({ targets: glow, alpha: up ? 0.75 : 0.6, scale: 3 / R, duration: 300, yoyo: true, hold: 300, onComplete: () => glow.destroy() });
+  const halo = s.add.ellipse(p.x, p.y + 17, 12, 5).setStrokeStyle(2, up ? 0xfff2a0 : 0x9a5ac8, 1).setDepth(9);
+  s.tweens.add({ targets: halo, scaleX: up ? 4 : 0.5, scaleY: up ? 4 : 0.5, alpha: 0, duration: 700, onComplete: () => halo.destroy() });
+  for (let i = 0; i < 4; i++) {
+    const x = p.x + (i - 1.5) * 10;
+    const t = text(s, x, up ? p.y + 10 : p.y - 40, up ? '▲' : '▼', 14, up ? '#ffe08a' : '#c08ae0', FONT).setOrigin(0.5).setStroke('#1a1008', 3).setDepth(D + 2).setAlpha(0);
+    s.tweens.add({ targets: t, y: t.y + (up ? -34 : 34), alpha: { from: 1, to: 0 }, delay: i * 90, duration: 700, onComplete: () => t.destroy() });
+  }
+  if (!up) {
+    for (let i = 0; i < 7; i++) {
+      const sm = img(s, 'fx-smoke', p.x + rand(-14, 14), p.y - 40, rand(0.7, 1)).setTint(0x2a1a30);
+      s.tweens.add({ targets: sm, y: p.y + rand(4, 16), scale: 1.8 / R, alpha: 0, delay: i * 60, duration: 700, onComplete: () => sm.destroy() });
+    }
+  }
+  await delay(s, 480);
+}
+
+// 吸取：光点由目标流向施策者
+async function drain(s, p, from, color) {
+  const g = img(s, 'fx-glow', p.x, p.y, 1.2, D + 1).setTint(color).setBlendMode(ADD);
+  s.tweens.add({ targets: g, scale: 2.6 / R, alpha: 0, duration: 600, onComplete: () => g.destroy() });
+  for (let i = 0; i < 14; i++) {
+    const o = img(s, 'fx-spark', p.x + rand(-8, 8), p.y + rand(-8, 8), rand(0.5, 0.9), D + 2).setTint(i % 2 ? color : 0xffffff).setBlendMode(ADD);
+    const sx = o.x, sy = o.y, lift = rand(10, 30);
+    const prog = { t: 0 };
+    s.tweens.add({
+      targets: prog, t: 1, delay: i * 40, duration: 520, ease: 'Sine.easeIn',
+      onUpdate: () => o.setPosition(sx + (from.x - sx) * prog.t, sy + (from.y - sy) * prog.t - Math.sin(Math.PI * prog.t) * lift),
+      onComplete: () => o.destroy(),
+    });
+  }
+  await delay(s, 420);
+  const got = img(s, 'fx-glow', from.x, from.y, 1, D + 1).setTint(color).setBlendMode(ADD);
+  s.tweens.add({ targets: got, scale: 2.4 / R, alpha: 0, duration: 500, onComplete: () => got.destroy() });
+}
+
+// 砂暴：全图黄沙横扫、镜头震动
+async function sandstorm(s) {
+  const w = COLS * TILE, h = ROWS * TILE;
+  const veil = s.add.rectangle(MAP_X, MAP_Y, w, h, 0xc8a060, 0).setOrigin(0).setDepth(D - 3);
+  s.tweens.add({ targets: veil, fillAlpha: 0.38, duration: 400, yoyo: true, hold: 700, onComplete: () => veil.destroy() });
+  s.cameras.main.shake(900, 0.005);
+  for (let i = 0; i < 60; i++) {
+    const y = MAP_Y + rand(0, h), len = rand(30, 90);
+    const st = s.add.rectangle(MAP_X - len, y, len, rand(1.5, 3), i % 3 ? 0xe8d0a0 : 0xa88050, 0.8).setOrigin(0, 0.5).setDepth(D + 5);
+    s.tweens.add({ targets: st, x: MAP_X + w + len, delay: rand(0, 900), duration: rand(500, 800), onComplete: () => st.destroy() });
+  }
+  for (let i = 0; i < 24; i++) {
+    const sm = img(s, 'fx-smoke', MAP_X + rand(0, w), MAP_Y + rand(0, h), rand(1.5, 2.5), D + 4).setTint(0xd8b880).setAlpha(0);
+    s.tweens.add({ targets: sm, alpha: 0.7, x: sm.x + rand(60, 140), delay: rand(0, 600), duration: 700, yoyo: true, onComplete: () => sm.destroy() });
+  }
+  await delay(s, 600);
+}
+
+// aura：回复光效样式（leaf 叶片飞旋、grain 米粒升腾、bubble 气泡上浮、spark 解除异常的光点）
 const ITEM_STYLE = {
-  bean: { color: 0x7dffa0, css: '#a8ffc0', bit: 'fx-beanlet' },
-  wheat: { color: 0xffd860, css: '#ffe08a', bit: 'fx-grain' },
-  wine: { color: 0x7ac8ff, css: '#a8dcff', bit: 'fx-drop' },
+  bean: { color: 0x7dffa0, css: '#a8ffc0', bit: 'fx-beanlet', aura: 'leaf' },
+  rice: { color: 0xffd860, css: '#ffe08a', bit: 'fx-grain', aura: 'grain' },
+  peach: { color: 0xffa0a0, css: '#ffc8c0', bit: 'fx-beanlet', aura: 'leaf' },
+  water: { color: 0x7ac8ff, css: '#a8dcff', bit: 'fx-drop', aura: 'bubble' },
+  wine: { color: 0x7ac8ff, css: '#a8dcff', bit: 'fx-drop', aura: 'bubble' },
+  antidote: { color: 0x9ce07a, css: '#c0f0a0', bit: 'fx-spark', aura: 'spark' },
+  plaster: { color: 0xffe07a, css: '#fff0a8', bit: 'fx-spark', aura: 'spark' },
+  stimulant: { color: 0xd0a8ff, css: '#e0c8ff', bit: 'fx-spark', aura: 'spark' },
+  cough: { color: 0xc8c8f0, css: '#e0e0ff', bit: 'fx-spark', aura: 'spark' },
+  panacea: { color: 0xfff2a0, css: '#fff6c8', bit: 'fx-spark', aura: 'spark' },
 };
 
-// 道具专属回复光效：豆=叶片飞旋，麦=麦粒升腾，酒=气泡上浮
+// 道具专属回复光效：豆 / 桃 = 叶片飞旋，米 = 米粒升腾，神秘水 / 神秘酒 = 气泡上浮，药 = 光点升腾
 function itemAura(s, p, itemId, color) {
+  const kind = ITEM_STYLE[itemId].aura;
   for (let i = 0; i < 10; i++) {
     const a0 = (Math.PI * 2 * i) / 10;
     let o;
-    if (itemId === 'wine') {
+    if (kind === 'bubble') {
       o = s.add.circle(p.x, p.y, rand(2, 3.5)).setStrokeStyle(1, 0xd8f0ff, 0.95).setDepth(D);
       o.isFilled = false;
+    } else if (kind === 'spark') {
+      o = img(s, 'fx-spark', p.x, p.y, rand(0.5, 0.8)).setTint(color).setBlendMode(ADD);
     } else {
-      o = img(s, itemId === 'bean' ? 'fx-leaf' : 'fx-grain', p.x, p.y, rand(0.9, 1.3));
+      o = img(s, kind === 'leaf' ? 'fx-leaf' : 'fx-grain', p.x, p.y, rand(0.9, 1.3));
     }
     o.setAlpha(0);
     const prog = { t: 0 };
     s.tweens.add({
       targets: prog, t: 1, delay: 150 + i * 45, duration: 850,
       onUpdate: () => {
-        const r = itemId === 'wine' ? 10 + Math.sin(prog.t * 9 + i) * 3 : 18 * (1 - prog.t * 0.5);
-        const ang = a0 + prog.t * (itemId === 'bean' ? 5 : 2);
+        const r = kind === 'bubble' ? 10 + Math.sin(prog.t * 9 + i) * 3 : 18 * (1 - prog.t * 0.5);
+        const ang = a0 + prog.t * (kind === 'leaf' ? 5 : 2);
         o.setPosition(p.x + Math.cos(ang) * r, p.y + 16 - prog.t * 48).setAlpha(Math.sin(Math.PI * prog.t));
-        if (itemId !== 'wine') o.setAngle(prog.t * 360 + i * 36);
+        if (kind !== 'bubble') o.setAngle(prog.t * 360 + i * 36);
       },
       onComplete: () => o.destroy(),
     });
@@ -380,7 +659,7 @@ export async function itemFx(s, user, itemId, target) {
       .then(() => tween(s, { targets: bit, x: b.x, y: b.y + 2, scale: 0.2 / R, alpha: 0.3, delay: i * 15, duration: 280, ease: 'Quad.easeIn' }))
       .then(() => bit.destroy());
   }
-  if (itemId === 'wine') {
+  if (st.aura === 'bubble') {
     const ripple = s.add.ellipse(b.x, b.y + 16, 8, 3).setStrokeStyle(1.5, 0xa8dcff, 1).setDepth(9);
     s.tweens.add({ targets: ripple, scaleX: 5, scaleY: 5, alpha: 0, duration: 700, onComplete: () => ripple.destroy() });
   }

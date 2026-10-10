@@ -14,7 +14,7 @@
 | `difficulty` | `'normal' \| 'hard' \| 'hell'` | `TitleScene.chooseDifficulty`、`applyLoad` |
 | `roster` | `{ [我军单位id]: { lvl, exp, cls, tier } }`（`tier` 阶级 1~3，旧存档缺失时 `applyLoad` 补为 1；`cls` 仅作记录，兵种以武将总表为准） | `BattleScene.victory`、`applyLoad` |
 | `joined` | `[武将id]`，已加入的武将（仅 `generals.js` 中的武将） | 新游戏（`[]`）、`BattleScene.victory`、`applyLoad`（旧存档缺失时用 `roster` 的键推导） |
-| `items` | `{ bean, wheat, wine, seal? }` 数量（`seal` 印绶从 `SEAL_FROM` 关起每关胜利 +1） | 新游戏、`victory`（加上 `difficulty.reward` 与印绶）、`applyLoad` |
+| `items` | `{ [道具id]: 数量 }`（id 见 data-contracts 的 `ITEMS`；`seal` 印绶从 `SEAL_FROM` 关起每关胜利 +1，另按关序轮流获得一件 `LOOT` 战利品） | 新游戏、`victory`（加上 `difficulty.reward`、印绶与战利品）、`applyLoad`（`migrateItems` 迁移旧道具） |
 | `red` | 整数，红色指数 | `applyChoice`、`victory`、`applyLoad` |
 | `flags` | `{ [标记名]: true }` | `setFlag`、`applyLoad` |
 
@@ -57,7 +57,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 | `sanguo-save` | 单个自动存档，每关胜利后由 `victory()` 写入，`kind: 'stage'` |
 
 - 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、回合、道具、红色指数、标记、roster、
-  `joined`、`firedEvents`，以及**去掉 `stats` 的** `units`（`units.map(({ stats, ...u }) => u)`，单位自带 `tier`）；读档时用 `restoreUnit` 重新计算属性
+  `joined`、`firedEvents`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
   （旧存档单位缺 `tier` 时我军视为一阶、其他按难度门槛定阶，兵种按武将总表 / 登记表覆盖）。
   不要持久化派生数据或 Phaser 对象。
 - 只有在我军阶段、`state` 为 `'idle'`/`'move'` 时才允许存档（`openSave`）。
@@ -67,6 +67,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 - 自动存档（`writeAuto`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`。
 - `getStage(id)` 仍通过 `LEGACY`（`stageMeta.js`）兼容旧存档中的数字关卡下标；导入校验 `validSave`
   的关卡字段同样接受非空字符串 id 或非负整数。
+- 兼容旧道具：`migrateItems` 只处理带 `wheat` 键的旧格式（麦 → 米 `rice`，旧酒 `wine`（策略 +20）→ 神秘水 `water`）；新格式的 `wine` 是神秘酒，不再迁移。
 - 兼容旧存档：没有 `joined` 时 `applyLoad` 用 `roster` 中属于武将总表的键推导；`roster` 条目没有 `tier`
   时补为 1。我军武将的兵种始终取总表（`deploy.js` / `roleOf`），不读 `roster.cls`。
 
