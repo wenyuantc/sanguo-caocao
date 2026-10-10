@@ -10,6 +10,7 @@ const STAGES = groups.length
 const getStage = (id) => STAGES.find((s) => s.id === id);
 import { TERRAIN, CLASSES, RANGES } from '../src/data.js';
 import { CHARACTERS } from '../src/characters.js';
+import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
 
 const COLS = 18, ROWS = 13;
 const errors = [], warns = [];
@@ -77,6 +78,33 @@ for (const s of STAGES) {
   for (const r of s.victoryFlags || []) {
     if (!all.some((u) => u.id === r.unit)) err(s, `victoryFlags 单位不存在：${r.unit}`);
     if (typeof r.alive !== 'boolean' || !r.flag) err(s, 'victoryFlags 需要 { unit, alive: true|false, flag }');
+  }
+  // 出阵覆盖（可选）：deploy: { max, required: [id], slots: [[x,y]] }
+  if (s.deploy) {
+    const d = s.deploy;
+    const slots = d.slots || player.map((u) => [u.x, u.y]);
+    if (d.slots) {
+      const seen = new Set();
+      for (const [x, y] of d.slots) {
+        const k = `${x},${y}`, t = terr(x, y);
+        if (!t || t.cost.foot >= 99) err(s, `deploy.slots 出阵位置不可通行 (${k})`);
+        if (seen.has(k)) err(s, `deploy.slots 出阵位置重复 (${k})`);
+        seen.add(k);
+        const o = s.units.find((u) => u.faction !== 'player' && !u.ifFlag && u.x === x && u.y === y);
+        if (o) err(s, `deploy.slots 出阵位置与 ${o.name} 重叠 (${k})`);
+      }
+    }
+    if (d.max != null && !(Number.isInteger(d.max) && d.max >= 1 && d.max <= slots.length)) err(s, `deploy.max 应为 1~${slots.length} 的整数`);
+    for (const id of d.required || []) if (!player.some((u) => u.id === id)) err(s, `deploy.required 不是本关预设我军单位：${id}`);
+    if (new Set(['caocao', ...(d.required || [])]).size > (d.max ?? slots.length)) err(s, 'deploy.required 人数超过出阵上限');
+  }
+  // 出阵推导：必须出阵人数不超过上限，默认阵容与预设我军一致
+  if (player.some((u) => u.id === 'caocao')) {
+    const plan = planDeploy(s);
+    if (plan.fixed.length + plan.required.size > plan.max) err(s, `必须出阵 ${plan.fixed.length + plan.required.size} 人，超过出阵上限 ${plan.max}`);
+    const defs = buildPlayerDefs(plan, plan.defaults);
+    const base = player.filter((u) => !u.ifFlag);
+    if (!s.deploy && (defs.length !== base.length || defs.some((d, i) => d !== base[i]))) err(s, '默认出阵阵容与预设我军不一致');
   }
   // 事件
   for (const e of s.events) {

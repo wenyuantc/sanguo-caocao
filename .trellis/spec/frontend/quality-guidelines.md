@@ -49,6 +49,22 @@ npm run dev                               # 手动检查受影响的流程
 - 依赖说明：`package-lock.json` 被 git 忽略，所以 `AGENTS.md` 中的 `npm ci` 在新克隆的仓库上会失败；
   在此问题解决前请使用 `npm install`。
 
+### 浏览器自动回归（57 关，每关两回合）
+
+在预览浏览器里用 `window.game`（`main.js` 为调试暴露）写脚本驱动。已踩过的坑：
+
+- **后台节流**：预览面板隐藏时浏览器暂停 rAF，定时器最快每秒一次。必须手动驱动循环，并放宽单帧时长上限，否则游戏时间几乎不走：
+  ```js
+  let last = performance.now();
+  setInterval(() => { const n = performance.now(); game.step(n, Math.min(1000, n - last)); last = n; }, 16);
+  ```
+  再配合 `s.tweens.timeScale = s.time.timeScale = 10~15` 加速动画。
+- **会阻塞流程的界面**：对白（`dialog.root.visible`）、选项（`dialog.choiceBox`）、整备界面（`s.modal` 为 true）都会停住流程。回归脚本要用一个独立的定时器（约 50ms 一次）持续推进：推进对白、选第一个选项、点整备界面的“出阵”按钮（按 `label.text` 去掉空格后等于 `'出阵'` 查找）。剧情事件可能在我军行动中途弹出对白，只在两次行动之间推进对白的脚本会卡住。
+- **整备卡片的点击区域**：`prep.js` 把所有卡片的元素平铺在同一个 `list` 容器里。要模拟点击某张卡片，先找到 22px 的名字文字，再取左上角坐标为 `(文字x − 104, 文字y − 10)` 的 `Zone`。不要取“同时包含名字和 Zone 的容器”的第一个 Zone，那是第一张卡片（曹操，锁定）。
+- **判读结果**：回归脚本不操作我军，所以需要保护单位的关卡（如 `xiandi`、`z_maicheng`）可能在第 2 回合判负。这类关卡要看布局判断玩家能否救援，不能直接当缺陷；判断能否打赢时，用 `planAI` 驱动我军完整对战。
+- **重载**：修改 `src/` 会触发 Vite 整页重载，脚本状态全部丢失。长时间回归期间不要改代码；按 6~12 关一批运行，每批结束立刻读取结果。
+- **记录项**：每关记录回合、阶段、是否结束、新增错误数（包装 `console.error`，并监听 `error` / `unhandledrejection`），整批结束后记录 `performance.memory.usedJSHeapSize`，确认内存不持续增长。
+
 ## 评审清单
 
 - [ ] 改动只在任务涉及的文件 / 所属关卡组范围内。

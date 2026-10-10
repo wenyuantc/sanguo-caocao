@@ -21,8 +21,12 @@ src/
 │   └── a.js … f.js     # 每组关卡一个文件（A–F），default 导出关卡对象数组
 ├── characters.js       # 按中文名登记的外形表 BASE + 合并 extra_a..f；颜色工具函数
 ├── characters/extra_<组>.js  # 各组补充的武将外形（default 导出对象）
+├── generals.js         # 武将总表 GENERALS（默认兵种、bonus、阵亡/离队标记、joinAt），纯数据
+├── deploy.js           # 出阵推导 planDeploy / buildPlayerDefs（纯函数，不依赖 Phaser）
 ├── saves.js            # localStorage 存档位/自动存档、导出导入、applyLoad
 ├── saveMenu.js         # 存档/读档弹窗 UI（openSaveMenu）
+├── prep.js             # 出阵整备弹窗 UI（openPrep）
+├── infoPanel.js        # 部队情报弹窗 UI（openInfo）
 ├── ui.js               # panel/text/button/portrait/DialogBox/floatText/wait
 ├── hud.js              # class Hud：顶栏、右侧面板、日志、横幅
 ├── unitView.js         # class UnitView：单个单位的容器、兵力条、移动/受击补间；tileCenter
@@ -55,7 +59,7 @@ scenes/*.js
 
 - `logic.js` 只导入 `config.js` 和 `data.js`；保持不依赖 Phaser、不访问场景，规则才能复用
   （AI 决策和 HUD 攻击预测调用的是同一批函数）。
-- `stageMeta.js`、`stages/*.js`、`data.js`、`characters.js` 必须能被 Node 直接导入：
+- `stageMeta.js`、`stages/*.js`、`data.js`、`characters.js`、`generals.js`、`deploy.js` 必须能被 Node 直接导入：
   `scripts/validate-stages.mjs` 会直接 import 它们。这些文件里不要导入 `phaser`，也不要访问 `window`/`localStorage`。
 - 只有场景负责把各模块串起来。
 

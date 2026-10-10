@@ -1,4 +1,6 @@
 // 存档：100 个手动存档位 + 1 个自动存档（每章胜利后写入）
+import { isGeneral } from './generals.js';
+
 const SLOT_KEY = 'sanguo-slots';
 const AUTO_KEY = 'sanguo-save';
 export const SLOT_COUNT = 100;
@@ -46,6 +48,8 @@ export function formatTime(ts) {
 // 读取存档：写入全局状态后进入战场
 export function applyLoad(scene, data) {
   scene.registry.set('roster', data.roster || {});
+  // 旧存档没有加入记录：用 roster 中的武将推导
+  scene.registry.set('joined', Array.isArray(data.joined) ? data.joined.filter(isGeneral) : Object.keys(data.roster || {}).filter(isGeneral));
   scene.registry.set('items', data.items);
   scene.registry.set('difficulty', data.difficulty || 'normal');
   scene.registry.set('red', data.red ?? 0);
@@ -75,8 +79,10 @@ export function exportSlot(i) {
   download({ app: FILE_TAG, version: 1, type: 'single', exportedAt: Date.now(), save: listSlots()[i] }, `曹操传-存档${String(i + 1).padStart(3, '0')}-${stamp()}.json`);
 }
 
-const validSave = (d) => d && typeof d === 'object' && Number.isInteger(d.stage) && d.stage >= 0
-  && d.items && typeof d.items === 'object' && (d.kind === 'stage' || (d.kind === 'battle' && Array.isArray(d.units)));
+// 关卡字段：当前存档为字符串关卡 id，旧存档为数字下标
+const validStage = (v) => (typeof v === 'string' && v.length > 0) || (Number.isInteger(v) && v >= 0);
+const validSave = (d) => d && typeof d === 'object' && validStage(d.stage)
+  && d.items && typeof d.items === 'object' && (d.joined == null || Array.isArray(d.joined)) && (d.kind === 'stage' || (d.kind === 'battle' && Array.isArray(d.units)));
 
 // 解析导入文件，返回导入计划（不写入）；格式错误时抛出中文错误信息
 export function planImport(textContent) {

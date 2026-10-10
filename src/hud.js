@@ -18,6 +18,7 @@ export class Hud {
     this.turnText = text(scene, 330, 10, '', 18, '#f1e3c2', FONT).setDepth(51);
     this.itemText = text(scene, 560, 11, '', 16, '#d8c8a0').setDepth(51);
     this.redText = text(scene, WIDTH - 16, 11, '', 16, '#ff6a5a', FONT).setOrigin(1, 0).setDepth(51);
+    this.infoBtn = button(scene, 880, 5, 84, 30, '部　队', () => scene.openInfo(), 16).setDepth(52);
 
     // 右侧面板
     panel(scene, PANEL_X + 4, MAP_Y + 4, PW - 8, HEIGHT - MAP_Y - 8).setDepth(50);
@@ -49,6 +50,7 @@ export class Hud {
     this.turnText.setText(`第 ${turn} / ${max} 回合　${FACTION_NAME[phase]}阶段`);
     this.endBtn.setDisabled(phase !== 'player');
     this.saveBtn.setDisabled(phase !== 'player');
+    this.infoBtn.setDisabled(phase !== 'player');
   }
 
   // 红色指数：黄=忠臣、红=中立、橙=奸雄

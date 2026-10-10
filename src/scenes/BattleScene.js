@@ -13,6 +13,10 @@ import { DialogBox, button, wait, text } from '../ui.js';
 import { doAttack, doSpell, doItem, runAI } from '../actions.js';
 import { writeAuto, applyLoad } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
+import { isGeneral } from '../generals.js';
+import { planDeploy, buildPlayerDefs } from '../deploy.js';
+import { openPrep } from '../prep.js';
+import { openInfo } from '../infoPanel.js';
 import { ensureTextures } from '../spellFx.js';
 import { playDuel } from '../duel.js';
 
@@ -51,9 +55,19 @@ export class BattleScene extends Phaser.Scene {
     this.items = { ...(load?.items || this.registry.get('items') || this.difficulty.items) };
     this.red = load?.red ?? this.registry.get('red') ?? 0;
     this.flags = { ...(load?.flags || this.registry.get('flags') || {}) };
-    this.units = load
-      ? load.units.map((u) => ({ ...u, stats: calcStats(u.cls, u.lvl, u.bonus, u.mult) }))
-      : stage.units.filter((d) => this.flagOk(d)).map((d) => createUnit(d, d.faction === 'player' ? roster[d.id] : null, this.difficulty));
+    // applyLoad 已把存档中的 joined 写入 registry（旧存档按 roster 推导）
+    const joined = this.registry.get('joined') || Object.keys(roster).filter(isGeneral);
+    this.deployPlan = null;
+    if (load) {
+      this.joined = [...joined];
+      this.units = load.units.map((u) => ({ ...u, stats: calcStats(u.cls, u.lvl, u.bonus, u.mult) }));
+    } else {
+      // 新战斗：先按默认阵容生成我军（开场剧情时显示），整备确认后再按选择重建
+      this.deployPlan = planDeploy(stage, { roster, joined, flags: this.flags });
+      this.joined = this.deployPlan.joined;
+      const others = stage.units.filter((d) => d.faction !== 'player' && this.flagOk(d)).map((d) => createUnit(d, null, this.difficulty));
+      this.units = [...this.playerUnits(this.deployPlan.defaults), ...others];
+    }
     this.views = new Map();
     this.units.filter((u) => u.alive).forEach((u) => this.views.set(u, new UnitView(this, u)));
     this.hl = this.add.graphics().setDepth(5);
@@ -77,8 +91,54 @@ export class BattleScene extends Phaser.Scene {
   async start() {
     if (this.load) return this.resume();
     await this.dialog.show(this.stage.prologue);
+    await this.startPrep();
     await this.hud.banner(`${this.stage.chapter}　${this.stage.name}`);
     await this.startPhase('player');
+  }
+
+  // ---------- 出阵整备 ----------
+  playerUnits(ids) {
+    const roster = this.registry.get('roster') || {};
+    return buildPlayerDefs(this.deployPlan, ids).map((d) => createUnit(d, roster[d.id], this.difficulty));
+  }
+
+  // 开场剧情后选择出阵武将；阵容与默认不同时重建我军单位与视图
+  async startPrep() {
+    const plan = this.deployPlan;
+    if (!plan) return;
+    this.modal = true;
+    const ids = await new Promise((r) => openPrep(this, plan, r));
+    this.modal = false;
+    const cur = this.units.filter((u) => u.faction === 'player' && isGeneral(u.id)).map((u) => u.id);
+    if (ids.length === cur.length && ids.every((id) => cur.includes(id))) return;
+    for (const u of this.units.filter((o) => o.faction === 'player')) {
+      const v = this.views.get(u);
+      v.idle?.remove();
+      v.c.destroy();
+      this.views.delete(u);
+    }
+    const players = this.playerUnits(ids);
+    this.units = [...players, ...this.units.filter((u) => u.faction !== 'player')];
+    players.forEach((u) => this.views.set(u, new UnitView(this, u)));
+  }
+
+  // 部队情报
+  openInfo() {
+    if (this.modal || this.over || this.dialog.root.visible) return;
+    if (this.phase !== 'player' || !['idle', 'move'].includes(this.state)) {
+      this.hud.log('请在我军阶段查看部队情报');
+      return;
+    }
+    this.clearSelection();
+    this.state = 'idle';
+    this.modal = true;
+    openInfo(this, { onPick: (u) => this.focusUnit(u), onClose: () => { this.modal = false; } });
+  }
+
+  // 光标移到单位并在右侧面板显示其信息
+  focusUnit(u) {
+    this.setCursor(u.x, u.y);
+    this.hud.showUnit(u, terrainAt(this.map, u.x, u.y));
   }
 
   // ---------- 存档 ----------
@@ -102,6 +162,7 @@ export class BattleScene extends Phaser.Scene {
       turn: this.turn,
       items: { ...this.items },
       roster: this.registry.get('roster') || {},
+      joined: [...this.joined],
       firedEvents: [...this.firedEvents],
       units: this.units.map(({ stats, ...u }) => u),
       summary: { lordLvl: lord.lvl },
@@ -336,8 +397,10 @@ export class BattleScene extends Phaser.Scene {
     const eps = this.stage.epilogues || {};
     await this.dialog.show((annihilated && eps.annihilate) || eps[outcome] || this.stage.epilogue);
     const roster = this.registry.get('roster') || {};
-    for (const u of this.units) if (u.faction === 'player') roster[u.id] = { lvl: u.lvl, exp: u.exp };
+    for (const u of this.units) if (u.faction === 'player') roster[u.id] = { lvl: u.lvl, exp: u.exp, cls: u.cls };
     this.registry.set('roster', roster);
+    const joined = [...new Set([...this.joined, ...this.units.filter((u) => u.faction === 'player' && isGeneral(u.id)).map((u) => u.id)])];
+    this.registry.set('joined', joined);
     this.registry.set('red', this.red);
     // 过关奖励补给
     const items = { ...this.items };
@@ -345,7 +408,7 @@ export class BattleScene extends Phaser.Scene {
     this.registry.set('items', items);
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
     writeAuto({
-      stage: next, roster, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
+      stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       summary: { lordLvl: this.units.find((u) => u.id === 'caocao').lvl },
     });
     if (next && getStage(next)) this.scene.start('Battle', { stage: next });

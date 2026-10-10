@@ -79,6 +79,7 @@ export class TitleScene extends Phaser.Scene {
         close();
         this.registry.set('difficulty', id);
         this.registry.set('roster', {});
+        this.registry.set('joined', []);
         this.registry.set('items', { ...d.items });
         this.registry.set('red', 0);
         this.registry.set('flags', {});

@@ -40,7 +40,8 @@ export default [
 | 字段 | 读取位置 |
 |------|----------|
 | `map`（13 行 × 18 字符） | `drawMap`、`terrainAt`、`reachable`；字符是 `data.js` 中 `TERRAIN` 的 key |
-| `units` | `BattleScene.create` → `createUnit(def, roster[id], difficulty)`；先按 `flagOk`（`ifFlag`/`unlessFlag`）过滤 |
+| `units` | 敌军/友军：`BattleScene.create` → `createUnit(def, null, difficulty)`；我军：`deploy.planDeploy` 推导出阵位置、上限、必须 / 不可出阵，整备后 `buildPlayerDefs` → `createUnit(def, roster[id], difficulty)`。都先按 `flagOk`（`ifFlag`/`unlessFlag`）过滤 |
+| `deploy`（可选） | `planDeploy`：`{ max?, required?, slots? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式 |
 | `victory[]` | `checkEnd`（`boss`/`all`/`reach`）、`nextPhase`（`survive`）、`drawGoals`（`reach` 目标格） |
 | `protect`、`escape`、`victoryFlags` | `checkEnd`、`tryEscape`、`victory()` |
 | `events[]` | `fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
@@ -50,6 +51,10 @@ export default [
 
 `firedEvents` 记录的是下标，并且会写入战斗中存档，所以**在已发布的关卡中重排或插入事件，会破坏该关的
 战斗中存档**。新事件请追加在末尾。
+
+出阵推导依赖关卡数据：预设我军单位的站位就是出阵位置；胜负条件、`protect`、`escape`、`victoryFlags`、
+事件（duel / onDeath / setAi）中的我军 id，以及 `side: 'player'` 对白的发言人都会被列为必须出阵；事件 `units`
+里的我军武将在该关不可出阵。修改这些字段会改变整备界面的可选范围；新增可加入的武将要登记到 `src/generals.js`。
 
 ## 对白行
 

@@ -1,0 +1,140 @@
+// 出阵推导：根据关卡预设我军、武将总表与战役状态，推导出阵位置、上限、必须出阵 / 不可出阵与候选名单
+// 纯函数，不依赖 Phaser（Node 可直接导入）
+import { TERRAIN, CLASSES } from './data.js';
+import { GENERALS, isGeneral } from './generals.js';
+import { getStage } from './stages.js';
+
+const flagOk = (d, flags) => (!d.ifFlag || flags[d.ifFlag]) && (!d.unlessFlag || !flags[d.unlessFlag]);
+const nextIds = (n) => (!n ? [] : typeof n === 'string' ? [n] : Object.entries(n).flatMap(([k, v]) => (k === 'route' ? Object.values(v) : [v])));
+
+// 从 from 关沿 next 能否走到 to 关（含 from 本身）
+function reaches(from, to) {
+  const seen = new Set();
+  const q = [from];
+  while (q.length) {
+    const id = q.shift();
+    if (id === to) return true;
+    if (seen.has(id) || !getStage(id)) continue;
+    seen.add(id);
+    q.push(...nextIds(getStage(id).next));
+  }
+  return false;
+}
+
+// joinAt 指定的关卡（分路线时任一路线）已到达或已经过
+const joinReached = (g, stageId) => {
+  if (!g.joinAt) return false;
+  const at = typeof g.joinAt === 'string' ? [g.joinAt] : Object.values(g.joinAt);
+  return at.some((id) => reaches(id, stageId));
+};
+
+// 关卡中与我军武将相关、因而必须出阵的单位 id（胜负条件、撤离、事件、对白发言人）
+function storyIds(stage, presetOk, flags) {
+  const ids = new Set();
+  for (const c of stage.victory) {
+    if (c.type === 'boss') ids.add(c.target);
+    if (c.type === 'reach' && c.unit !== 'any') ids.add(c.unit);
+  }
+  (stage.protect || []).forEach((id) => ids.add(id));
+  (stage.escape?.units || []).forEach((id) => ids.add(id));
+  (stage.victoryFlags || []).forEach((r) => ids.add(r.unit));
+  for (const ev of stage.events) {
+    if (ev.duel) { ids.add(ev.duel.a); ids.add(ev.duel.b); }
+    if (ev.onDeath) ids.add(ev.onDeath);
+    Object.keys(ev.setAi || {}).forEach((id) => ids.add(id));
+  }
+  // 对白中我方发言的武将（按名字对应到预设我军单位）
+  const byName = new Map(presetOk.map((d) => [d.name, d.id]));
+  const scan = (lines) => (lines || []).forEach((l) => {
+    if (!flagOk(l, flags)) return;
+    if (l.side === 'player' && byName.has(l.who)) ids.add(byName.get(l.who));
+    (l.choices || []).forEach((c) => scan(c.reply));
+  });
+  [stage.prologue, stage.epilogue, ...Object.values(stage.epilogues || {}), ...stage.events.flatMap((e) => [e.dialog, e.after])].forEach(scan);
+  return ids;
+}
+
+export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {}) {
+  const preset = stage.units.filter((d) => d.faction === 'player');
+  const presetOk = preset.filter((d) => flagOk(d, flags));
+  const defsById = Object.fromEntries(presetOk.map((d) => [d.id, d]));
+  const fixed = presetOk.filter((d) => !isGeneral(d.id));
+
+  // 不可出阵：已阵亡 / 离队、被剧情标记排除的预设武将、本关事件中途生成（或作为敌军 / 友军登场）的武将
+  const blocked = new Set();
+  for (const [id, g] of Object.entries(GENERALS)) if (g.gone && flags[g.gone]) blocked.add(id);
+  for (const d of preset) if (isGeneral(d.id) && !defsById[d.id]) blocked.add(d.id);
+  for (const u of [...stage.units, ...stage.events.flatMap((e) => e.units || [])]) {
+    if (isGeneral(u.id) && !defsById[u.id]) blocked.add(u.id);
+  }
+
+  const presetGenerals = presetOk.filter((d) => isGeneral(d.id) && !blocked.has(d.id)).map((d) => d.id);
+  const allJoined = new Set([...joined.filter(isGeneral), ...presetGenerals]);
+  for (const [id, g] of Object.entries(GENERALS)) if (joinReached(g, stage.id)) allJoined.add(id);
+
+  const lord = defsById.caocao;
+  const poolIds = [...presetGenerals, ...Object.keys(GENERALS).filter((id) => allJoined.has(id) && !blocked.has(id) && !defsById[id])];
+  const pool = poolIds.map((id) => {
+    const def = defsById[id], saved = roster[id], g = GENERALS[id];
+    const floor = def ? def.lvl : Math.max(1, lord.lvl - 1);
+    return {
+      id,
+      name: def?.name || g.name,
+      cls: def?.cls || saved?.cls || g.cls,
+      floor,
+      lvl: Math.max(floor, saved?.lvl || 0),
+      bonus: def ? def.bonus : g.bonus,
+      preset: !!def,
+    };
+  });
+
+  const ov = stage.deploy || {};
+  const required = new Set(['caocao']);
+  const reqSrc = ov.required || [...storyIds(stage, presetOk, flags)];
+  for (const id of reqSrc) if (poolIds.includes(id)) required.add(id);
+
+  const seen = new Set();
+  const slots = (ov.slots || preset.map((d) => [d.x, d.y])).filter(([x, y]) => !seen.has(`${x},${y}`) && seen.add(`${x},${y}`));
+  const max = Math.min(ov.max ?? slots.length, slots.length);
+  const room = max - fixed.length;
+  // 默认阵容 = 预设阵容（超出上限时先去掉非必须出阵的武将）
+  const defaults = [...presetGenerals, ...[...required].filter((id) => !presetGenerals.includes(id))];
+  while (defaults.length > room) {
+    const i = defaults.findLastIndex((id) => !required.has(id));
+    if (i < 0) break;
+    defaults.splice(i, 1);
+  }
+
+  // 临时成员的展示信息（整备界面锁定显示）
+  const fixedCards = fixed.map((d) => ({ id: d.id, name: d.name, cls: d.cls, bonus: d.bonus, lvl: Math.max(d.lvl, roster[d.id]?.lvl || 0), fixed: true }));
+  return { stageId: stage.id, map: stage.map, slots, max, required, blocked, pool, fixed, fixedCards, defaults, defsById, joined: [...allJoined] };
+}
+
+// 按选择生成我军单位定义（与关卡 P(...) 结构一致）：临时成员与预设武将站原位，其余依次填入空出的位置
+export function buildPlayerDefs(plan, selectedIds) {
+  const used = new Set();
+  const k = (x, y) => `${x},${y}`;
+  const inSlots = (x, y) => plan.slots.some(([sx, sy]) => sx === x && sy === y);
+  const defs = [];
+  const rest = [];
+  for (const d of plan.fixed) { defs.push(d); used.add(k(d.x, d.y)); }
+  for (const id of selectedIds) {
+    const d = plan.defsById[id];
+    if (d && inSlots(d.x, d.y) && !used.has(k(d.x, d.y))) { defs.push(d); used.add(k(d.x, d.y)); }
+    else rest.push(id);
+  }
+  for (const id of rest) {
+    const p = plan.pool.find((o) => o.id === id);
+    const move = CLASSES[p.cls].moveType;
+    const free = plan.slots.filter(([x, y]) => !used.has(k(x, y)));
+    const slot = free.find(([x, y]) => TERRAIN[plan.map[y][x]].cost[move] < 99) || free[0];
+    if (!slot) continue;
+    used.add(k(slot[0], slot[1]));
+    const g = GENERALS[id];
+    const base = plan.defsById[id] || { id, name: p.name, faction: 'player', bonus: p.bonus, ...(g?.mark && { mark: g.mark }) };
+    defs.push({ ...base, cls: p.cls, lvl: p.floor, x: slot[0], y: slot[1] });
+  }
+  // 按站位顺序排列（默认阵容时与关卡预设顺序一致）
+  const order = (d) => plan.slots.findIndex(([x, y]) => x === d.x && y === d.y);
+  return defs.sort((a, b) => order(a) - order(b));
+}
