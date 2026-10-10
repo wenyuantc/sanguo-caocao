@@ -136,7 +136,8 @@ export function openPrep(scene, plan, onConfirm) {
     let tx = x + 10;
     if (o.icon) { parts.push(scene.add.image(x + 6 + (rh - 12) / 2, y + rh / 2, o.icon).setScale((rh - 12) / 72)); tx = x + rh + 2; }
     parts.push(text(scene, tx, y + (o.sub ? 4 : rh / 2 - 10), o.title, 16, o.color || '#f1e3c2', FONT));
-    if (o.sub) parts.push(text(scene, tx, y + rh - 20, o.sub, 12, '#bfae88'));
+    if (o.sub && o.wrap) parts.push(text(scene, tx, y + 26, o.sub, 12, '#bfae88').setWordWrapWidth(x + rw - (o.btn ? 76 : 10) - tx));
+    else if (o.sub) parts.push(text(scene, tx, y + rh - 20, o.sub, 12, '#bfae88'));
     if (o.right) parts.push(text(scene, x + rw - (o.btn ? 76 : 10), y + rh / 2 - 9, o.right, 14, o.rightColor || '#e9c46a').setOrigin(1, 0));
     if (o.btn) parts.push(button(scene, x + rw - 68, y + (rh - 28) / 2, 60, 28, o.btn, o.onBtn, 14).setDisabled(!!o.btnOff));
     list.add(parts);
@@ -226,8 +227,11 @@ export function openPrep(scene, plan, onConfirm) {
   // ---------- 装备页 ----------
   const equipTo = (c, s, uid) => {
     const r = roster();
+    toast.setText('');
     for (const [gid, e] of Object.entries(r)) {
-      if (e.equip?.[s] === uid && uid != null) r[gid] = { ...e, equip: { ...e.equip, [s]: null } };
+      if (gid === c.id || uid == null || e.equip?.[s] !== uid) continue;
+      r[gid] = { ...e, equip: { ...e.equip, [s]: null } };
+      toast.setText(`已从${nameOf(gid)}处取来，${nameOf(gid)}的${SLOT_NAME[s]}栏现为空`);
     }
     const e = r[c.id] || {};
     r[c.id] = { ...e, equip: { weapon: null, armor: null, acc: null, ...e.equip, [s]: uid } };
@@ -247,7 +251,7 @@ export function openPrep(scene, plan, onConfirm) {
       row(mx, my + 186 + i * 74, 326, 68, {
         icon: e ? gearIcon(it.id) : null,
         title: `${SLOT_NAME[s]}：${e ? gearName(it) : '（空）'}`, color: e?.treasure ? '#ffd36a' : '#f1e3c2',
-        sub: e ? `${gearDesc(it.id, it.lvl)}${lv}`.slice(0, 30) : '点选后从右侧背包装备', active: s === slot,
+        sub: e ? `${gearDesc(it.id, it.lvl)}${lv}` : '点选后从右侧背包装备', wrap: true, active: s === slot,
         btn: e ? '卸下' : null, onBtn: () => equipTo(c, s, null),
         onClick: () => { slot = s; pages.bag = 0; refresh(); },
       });
