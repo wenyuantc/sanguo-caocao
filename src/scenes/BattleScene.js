@@ -5,8 +5,10 @@ import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf } from '../data
 import {
   createUnit, restoreUnit, promoteBlock, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt,
   physDamage, hitRate, spellDamage, spellHit, healAmount, spellBlock, spellTargetOk, spellVictims,
-  areaTiles, spellDrainMp, usableSpells, spellCost, counterOk, tickGear,
+  areaTiles, spellDrainMp, usableSpells, spellCost, counterOk, tickGear, spellUsable, gemSpells,
 } from '../logic.js';
+import { WEATHERS, weatherOf, stepWeather, stageWeather, validIdx, weatherSpellIdx } from '../weather.js';
+import { WeatherFx } from '../weatherFx.js';
 import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, has } from '../status.js';
 import { drawMap } from '../mapRender.js';
 import { UnitView } from '../unitView.js';
@@ -55,6 +57,12 @@ export class BattleScene extends Phaser.Scene {
     this.map = stage.map;
     this.map.forEach((r, i) => r.length !== COLS && console.warn('地图行长度错误', i, r));
     drawMap(this, this.map);
+    // 天气：类别取关卡设定，序号开局取起始值，读档取存档值（旧存档缺失时取起始值）
+    const wt = stageWeather(stage);
+    this.weatherType = wt.type;
+    this.weatherIdx = validIdx(this.load?.weatherIdx) ? this.load.weatherIdx : wt.start;
+    this.weatherFx = new WeatherFx(this);
+    this.weatherFx.set(this.weather);
     const roster = this.registry.get('roster') || {};
     const load = this.load;
     this.difficultyId = load?.difficulty || this.registry.get('difficulty') || 'normal';
@@ -91,6 +99,7 @@ export class BattleScene extends Phaser.Scene {
     this.cursor = this.add.graphics().setDepth(6);
     this.hud = new Hud(this, stage);
     this.hud.setItems(this.items);
+    this.hud.setWeather(this.weather, this.weatherType);
     this.dialog = new DialogBox(this);
     this.turn = load?.turn ?? 1;
     this.firedEvents = new Set(load?.firedEvents || []);
@@ -111,6 +120,22 @@ export class BattleScene extends Phaser.Scene {
     await this.startPrep();
     await this.hud.banner(`${this.stage.chapter}　${this.stage.name}`);
     await this.startPhase('player');
+  }
+
+  // 当前天气（0 晴 / 1 阴 / 2 雨 / 3 豪雨 / 4 雪）
+  get weather() {
+    return weatherOf(this.weatherType, this.weatherIdx);
+  }
+
+  // 改变天气序号；实际天气改变时播放切换动画、更新顶部栏并记日志，返回是否改变
+  async changeWeather(idx) {
+    const old = this.weather;
+    this.weatherIdx = idx;
+    if (this.weather === old) return false;
+    this.hud.setWeather(this.weather, this.weatherType);
+    this.hud.log(`天气由${WEATHERS[old]}转为${WEATHERS[this.weather]}`);
+    await this.weatherFx.transition(this.weather);
+    return true;
   }
 
   markGuard(u) {
@@ -204,6 +229,7 @@ export class BattleScene extends Phaser.Scene {
       roster: this.registry.get('roster') || {},
       joined: [...this.joined],
       firedEvents: [...this.firedEvents],
+      weatherIdx: this.weatherIdx,
       units: this.units.map(({ stats, ...u }) => ({
         ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits },
       })),
@@ -257,6 +283,8 @@ export class BattleScene extends Phaser.Scene {
     this.phase = faction;
     this.state = 'busy';
     this.hud.setTurn(this.turn, this.stage.turns, faction);
+    // 第 2 回合起，每到我军阶段开始天气随机变化一次（research weather.md §3）
+    if (faction === 'player' && this.turn > 1) await this.changeWeather(stepWeather(this.weatherIdx));
     const mine = this.units.filter((u) => u.alive && u.faction === faction);
     if (faction !== 'player' && !mine.length && faction === 'ally') return this.nextPhase();
     await this.hud.banner(`第${this.turn}回合　${{ player: '我军', ally: '友军', enemy: '敌军' }[faction]}阶段`,
@@ -701,7 +729,7 @@ export class BattleScene extends Phaser.Scene {
     this.setCursor(u.x, u.y);
     this.hud.forecast('');
     const foes = attackTiles(u).some((t) => { const o = this.unitAt(t.x, t.y); return o && isFoe(o, u); });
-    const spells = usableSpells(this.units, u);
+    const spells = this.menuSpells(u);
     const hasItem = Object.entries(this.items).some(([id, n]) => n > 0 && !ITEMS[id]?.fruit);
     const silent = has(u, 'silence') ? `${u.name}处于禁咒状态，无法使用策略` : '';
     this.buildMenu([
@@ -712,19 +740,27 @@ export class BattleScene extends Phaser.Scene {
     ]);
   }
 
-  // 策略列表分页显示（每页 10 个）；鼠标移到策略上显示说明
+  // 策略菜单列出的策略：可用策略（含遁甲天书借用）+ 装备了宝玉但未习得的四神（置灰说明等级）
+  menuSpells(u) {
+    const known = usableSpells(this.units, u);
+    return [...known, ...gemSpells(u, known)];
+  }
+
+  // 策略列表分页显示（每页 10 个）；鼠标移到策略上显示说明，不可用时置灰并说明原因（天气、宝玉、等级、策略值）
   spellMenu(page = 0) {
     const u = this.sel.unit;
-    const spells = usableSpells(this.units, u);
+    const spells = this.menuSpells(u);
+    const known = usableSpells(this.units, u);
     const PER = 10, pages = Math.ceil(spells.length / PER);
     const entries = spells.slice(page * PER, (page + 1) * PER).map((id) => {
       const sp = SPELLS[id], mp = spellCost(u, id);
-      return [`${sp.name} ${mp}`, () => this.startTarget('spell', id), u.mp < mp, null, `【${sp.name}】策略值 ${mp}　${sp.desc}`];
+      const { ok, reason } = spellUsable(id, u, this.weather, { known });
+      return [`${sp.name} ${mp}`, () => this.startTarget('spell', id), !ok, null, `【${sp.name}】策略值 ${mp}　${sp.desc}${ok ? '' : `\n不可用：${reason}`}`];
     });
     if (pages > 1) entries.push([`下一页 ${page + 1}/${pages}`, () => this.spellMenu((page + 1) % pages)]);
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}　共 ${spells.length} 种策略\n将鼠标移到策略上查看说明`);
+    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}　天气 ${WEATHERS[this.weather]}　共 ${spells.length} 种策略\n将鼠标移到策略上查看说明`);
   }
 
   // 道具目标格：自身与上下左右
@@ -810,7 +846,10 @@ export class BattleScene extends Phaser.Scene {
     const one = victims.includes(o) ? o : victims[0];
     if (!one) return `${head}范围内没有可作用的目标`;
     const parts = [];
-    if (sp.cat === 'damage') parts.push(sp.formula === 'kill' ? '兵力全失' : `伤害 ${spellDamage(this.map, u, one, id)}`);
+    if (sp.setWeather) return `【${sp.name}】天气：${WEATHERS[this.weather]} → ${WEATHERS[weatherOf(this.weatherType, weatherSpellIdx(this.weatherType, this.weatherIdx, sp.setWeather))]}　必定成功`;
+    if (sp.strikes) parts.push(`雷击 ${sp.strikes} 次，每次伤害约 ${spellDamage(this.map, u, one, id)}`);
+    else if (sp.cat === 'damage') parts.push(sp.formula === 'kill' ? '兵力全失' : `伤害 ${spellDamage(this.map, u, one, id)}`);
+    if (sp.special === 'xuanwu') parts.push('随机陷入异常或能力下降（不分敌我）');
     if (sp.status) parts.push(sp.status === 'random' ? '随机异常' : STATUS[sp.status].name);
     if (sp.special === 'drain') parts.push('吸取兵力');
     if (sp.special === 'drainMp') parts.push(`吸取策略 ${spellDrainMp(u, one)}`);

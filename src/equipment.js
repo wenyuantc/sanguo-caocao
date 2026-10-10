@@ -145,7 +145,7 @@ export const EQUIP = {
   // 豆袋：兵力降到六成以下时自动吃一颗军需中的豆（触发线自行设计）
   doudai: treasure('bag', '豆袋', 0, [{ type: 'autoBean', below: 0.6 }]),
   yuxi: treasure('seal', '玉玺', 0, [{ type: 'alwaysCrit' }]),
-  // 四神宝玉：使用四神的前提，天气系统由后续子任务实现，本任务只作为可装备的宝物存在
+  // 四神宝玉：使用四神的前提（另需习得等级与天气条件，见 spells.js / logic.spellUsable）
   jade_qinglong: treasure('jade', '青龙宝玉', 0, [{ type: 'fourGod', god: '青龙' }], null, ['mountstrat']),
   jade_zhuque: treasure('jade', '朱雀宝玉', 0, [{ type: 'fourGod', god: '朱雀' }], null, ['strategist']),
   jade_xuanwu: treasure('jade', '玄武宝玉', 0, [{ type: 'fourGod', god: '玄武' }], null, ['taoist']),
@@ -171,7 +171,7 @@ const FX_DESC = {
   allTerrain: () => '可通行地形的移动消耗都为 1', range: () => '攻击范围扩大为周围两格', expPerTurn: (e) => `每回合获得经验 ${e.v}`,
   expMul: () => '获得经验 ×1.5', cureEachTurn: () => '每回合解除异常状态', mpEachTurn: (e) => `每回合恢复策略值 ${e.v}`,
   copySpells: () => '可使用相邻友军会的策略', weaponExpPerTurn: (e) => `每回合武器经验 +${e.v}`, armorExpPerTurn: (e) => `每回合护具经验 +${e.v}`,
-  autoBean: () => '兵力不足六成时自动吃豆', alwaysCrit: () => '每次攻击都是会心一击', fourGod: (e) => `召唤${e.god}的前提（需天气，暂不生效）`,
+  autoBean: () => '兵力不足六成时自动吃豆', alwaysCrit: () => '每次攻击都是会心一击', fourGod: (e) => `可以使用四神「${e.god}」（需达到习得等级）`,
 };
 const STAT_LABEL = { hp: '兵力', mp: '策略', atk: '攻击', int: '精神', def: '防御', burst: '爆发', morale: '士气' };
 

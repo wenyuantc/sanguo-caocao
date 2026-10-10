@@ -15,6 +15,7 @@ import { GENERALS } from '../src/generals.js';
 import { roleOf } from '../src/logic.js';
 import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
 import { EQUIP, REWARDS, DROPS, SHOP_UNLOCK, STARTER_TREASURES, ITEM_PRICE, gearDesc } from '../src/equipment.js';
+import { TABLE, STAGE_WEATHER, SET_WEATHER, stageWeather, validIdx } from '../src/weather.js';
 
 const COLS = 18, ROWS = 13;
 const errors = [], warns = [];
@@ -33,6 +34,10 @@ for (const s of STAGES) {
     if (row.length !== COLS) err(s, `地图第 ${y} 行长度 ${row.length}（应为 ${COLS}）：${row}`);
     for (const ch of row) if (!TERRAIN[ch]) err(s, `地图第 ${y} 行含未知地形字符 '${ch}'`);
   });
+  // 天气：关卡 weather 字段（可选）或原版映射，类别 0~4、起始序号 0~5
+  const wt = stageWeather(s);
+  if (!TABLE[wt.type] || !validIdx(wt.start)) err(s, `天气设定错误：${JSON.stringify(wt)}（type 0~4，start 0~5）`);
+  if (!s.weather && !STAGE_WEATHER[s.id]) warn(s, '没有原版天气映射，使用默认天气（普通类别、开局晴）');
   const terr = (x, y) => TERRAIN[s.map[y]?.[x]];
   // 单位
   const all = [...s.units, ...s.events.flatMap((e) => e.units || [])];
@@ -204,7 +209,10 @@ for (const [id, sp] of Object.entries(SPELLS)) {
   if (!['foe', 'ally', 'self'].includes(sp.target)) e(`目标类型错误：${sp.target}`);
   if (![0, 'cross', 'square', 'map'].includes(sp.area)) e(`范围错误：${sp.area}`);
   if (!(sp.range === 'map' || (Number.isInteger(sp.range) && sp.range >= 0))) e(`射程错误：${sp.range}`);
-  if (sp.cat === 'damage' && !['a', 'b', 'c', 'd', 'e', 'f', 'kill'].includes(sp.formula)) e(`伤害公式错误：${sp.formula}`);
+  if (sp.cat === 'damage' && !['a', 'b', 'c', 'd', 'e', 'f', 'g', 'kill'].includes(sp.formula)) e(`伤害公式错误：${sp.formula}`);
+  if (sp.weather && !['bad', 'sun', 'cloud'].includes(sp.weather)) e(`天气条件错误：${sp.weather}`);
+  if (sp.setWeather && !(sp.setWeather in SET_WEATHER)) e(`天气策略错误：${sp.setWeather}`);
+  if (sp.needGem && EQUIP[sp.needGem]?.kind !== 'jade') e(`需要的宝玉不存在：${sp.needGem}`);
   if (sp.status && sp.status !== 'random' && !STATUS[sp.status]) e(`异常不存在：${sp.status}`);
   if (sp.buff && !(['atk', 'int', 'def', 'burst', 'morale', 'power', 'all'].includes(sp.buff.stat) && sp.buff.mult > 0)
     && !(sp.buff.stat === 'move' && sp.buff.add)) e(`增减益错误：${JSON.stringify(sp.buff)}`);
@@ -221,6 +229,7 @@ for (const [id, d] of Object.entries(DIFFICULTIES)) {
   for (const k of [...Object.keys(d.items), ...Object.keys(d.reward)]) if (!ITEMS[k]) errors.push(`[difficulty] ${id} 道具不存在：${k}`);
 }
 for (const k of LOOT) if (!ITEMS[k]) errors.push(`[loot] 道具不存在：${k}`);
+for (const id of Object.keys(STAGE_WEATHER)) if (!PLANNED_IDS.includes(id)) errors.push(`[weather] 天气映射的关卡不存在：${id}`);
 
 // 装备：数量（普通 37 / 宝物 50）、可装备系列、特效说明、射程；奖励 / 掉落 / 商店引用的关卡与物品
 const eqErr = (m) => errors.push(`[equipment] ${m}`);

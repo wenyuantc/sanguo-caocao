@@ -411,16 +411,98 @@ export async function spellFx(s, res) {
   ensureTextures(s);
   const sp = SPELLS[res.spellId];
   const from = tileCenter(res.caster.x, res.caster.y);
+  if (sp.special === 'thunder') return thunder(s, res);
   const spots = res.effects.length ? res.effects : [{ u: res.center, hit: true }];
-  if (sp.area === 'map') await sandstorm(s);
-  await Promise.all(spots.map((e, i) => delay(s, i * 70).then(() => {
+  if (sp.area === 'map' && sp.target === 'foe') await sandstorm(s);
+  if (sp.special === 'zhuque') await firebird(s, from, tileCenter(res.center.x, res.center.y));
+  if (sp.special === 'xuanwu') await blackMist(s);
+  if (sp.special === 'baihu') await tigerAura(s, from);
+  // 全图策略目标多，缩短逐个播放的间隔
+  const gap = sp.area === 'map' ? 25 : 70;
+  await Promise.all(spots.map((e, i) => delay(s, i * gap).then(() => {
     const p = tileCenter(e.u.x, e.u.y);
     const strong = sp.elem === 'fire' && (TERRAIN[s.map[e.u.y][e.u.x]].fire || 1) > 1;
-    return hitFx(s, sp, p, from, strong).then(() => { if (!e.hit) failPuff(s, p); });
+    const fx = sp.special === 'xuanwu' ? xuanwuHit(s, p, e) : hitFx(s, sp, p, from, strong);
+    return fx.then(() => { if (!e.hit) failPuff(s, p); });
   })));
 }
 
+// 玄武：按抽中的效果播放对应的异常 / 减益特效
+function xuanwuHit(s, p, e) {
+  const st = { poison: poisonFog, paralyze: bolt, confuse: (sc, q) => swirl(sc, q, 0xb070ff), silence: runes }[e.status];
+  return st ? st(s, p) : aura(s, p, false);
+}
+
+// 全图半透明遮罩（四神用）
+function mapVeil(s, color, alpha, ms, hold) {
+  const veil = s.add.rectangle(MAP_X, MAP_Y, COLS * TILE, ROWS * TILE, color, 0).setOrigin(0).setDepth(D - 3);
+  s.tweens.add({ targets: veil, fillAlpha: alpha, duration: ms, yoyo: true, hold, onComplete: () => veil.destroy() });
+}
+
+// 青龙：天色转暗，雷电依次劈向各次雷击的目标
+async function thunder(s, res) {
+  mapVeil(s, 0x0a1428, 0.45, 300, 400 + res.strikes.length * 260);
+  await delay(s, 300);
+  for (const st of res.strikes) {
+    const p = tileCenter(st.u.x, st.u.y);
+    await bolt(s, p, 0x9ad8ff);
+    if (!st.hit) failPuff(s, p);
+    await delay(s, 60);
+  }
+}
+
+// 朱雀：火鸟自施策者处腾空，飞抵目标上空后俯冲
+async function firebird(s, from, to) {
+  const bird = s.add.container(from.x, from.y - 20).setDepth(D + 6);
+  const core = img(s, 'fx-glow', 0, 0, 1.6, D).setTint(0xff6a1a).setBlendMode(ADD);
+  const wings = [-1, 1].map((k) => img(s, 'fx-flame', k * 12, 2, 0.9, D).setTint(0xffd0a0).setAngle(k * 70).setOrigin(0.5, 1));
+  bird.add([core, ...wings]);
+  const flap = s.tweens.add({ targets: wings, scaleY: 0.5 / R, duration: 120, yoyo: true, repeat: -1 });
+  const prog = { t: 0 }, peak = Math.min(from.y, to.y) - 90;
+  let lastTrail = 0;
+  await tween(s, {
+    targets: prog, t: 1, duration: 700, ease: 'Sine.easeIn',
+    onUpdate: () => {
+      const t = prog.t;
+      bird.setPosition(from.x + (to.x - from.x) * t, (1 - t) * (1 - t) * (from.y - 20) + 2 * (1 - t) * t * peak + t * t * to.y);
+      if (s.time.now - lastTrail > 30) {
+        lastTrail = s.time.now;
+        const tr = img(s, 'fx-spark', bird.x, bird.y, rand(0.5, 0.9), D + 5).setTint(0xffa040).setBlendMode(ADD);
+        s.tweens.add({ targets: tr, alpha: 0, y: tr.y + rand(4, 14), duration: 380, onComplete: () => tr.destroy() });
+      }
+    },
+  });
+  flap.stop();
+  bird.destroy();
+  s.cameras.main.flash(120, 255, 150, 60);
+  s.cameras.main.shake(160, 0.008);
+}
+
+// 玄武：黑雾笼罩全图
+async function blackMist(s) {
+  mapVeil(s, 0x1a0e2a, 0.5, 400, 900);
+  s.cameras.main.shake(500, 0.004);
+  for (let i = 0; i < 24; i++) {
+    const sm = img(s, 'fx-smoke', MAP_X + rand(0, COLS * TILE), MAP_Y + rand(0, ROWS * TILE), rand(1.8, 2.8), D - 2).setTint(0x2a1a40).setAlpha(0);
+    s.tweens.add({ targets: sm, alpha: 0.8, x: sm.x + rand(-40, 40), delay: rand(0, 500), duration: 700, yoyo: true, onComplete: () => sm.destroy() });
+  }
+  await delay(s, 600);
+}
+
+// 白虎：施策者处白光扩散，全图泛起白光
+async function tigerAura(s, from) {
+  mapVeil(s, 0xf0f6ff, 0.3, 350, 500);
+  for (let i = 0; i < 3; i++) {
+    const halo = s.add.ellipse(from.x, from.y + 17, 14, 6).setStrokeStyle(3, 0xf0f6ff, 1).setDepth(D);
+    s.tweens.add({ targets: halo, scaleX: 30, scaleY: 30, alpha: 0, delay: i * 180, duration: 900, onComplete: () => halo.destroy() });
+  }
+  const g = img(s, 'fx-glow', from.x, from.y, 2, D + 1).setTint(0xffffff).setBlendMode(ADD);
+  s.tweens.add({ targets: g, scale: 6 / R, alpha: 0, duration: 700, onComplete: () => g.destroy() });
+  await delay(s, 500);
+}
+
 function hitFx(s, sp, p, from, strong) {
+  if (sp.special === 'zhuque') return fire(s, p, true);
   if (sp.elem === 'fire') return fire(s, p, strong);
   if (sp.elem === 'water') return wave(s, p, sp.formula === 'kill');
   if (sp.elem === 'earth') return rock(s, p);
@@ -507,16 +589,16 @@ async function poisonFog(s, p) {
   await delay(s, 520);
 }
 
-// 麻痹：黄色闪电劈下，电光闪烁
-async function bolt(s, p) {
+// 麻痹：黄色闪电劈下，电光闪烁（青龙雷击用蓝白色）
+async function bolt(s, p, color = 0xffe040) {
   const g = s.add.graphics().setDepth(D + 2);
-  const flash = img(s, 'fx-glow', p.x, p.y, 1.4, D + 1).setTint(0xffe040).setBlendMode(ADD).setAlpha(0);
+  const flash = img(s, 'fx-glow', p.x, p.y, 1.4, D + 1).setTint(color).setBlendMode(ADD).setAlpha(0);
   for (let k = 0; k < 3; k++) {
     g.clear();
     let x = p.x + rand(-6, 6), y = p.y - 90;
     const pts = [[x, y]];
     while (y < p.y + 6) { y += rand(10, 16); x += rand(-9, 9); pts.push([x, y]); }
-    for (const [w, c, a] of [[5, 0xffe040, 0.5], [2, 0xfffbe0, 1]]) {
+    for (const [w, c, a] of [[5, color, 0.5], [2, 0xfffbe0, 1]]) {
       g.lineStyle(w, c, a).beginPath();
       pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
       g.strokePath();
@@ -531,7 +613,7 @@ async function bolt(s, p) {
   g.destroy();
   fadeOut(s, flash, 300);
   for (let i = 0; i < 8; i++) {
-    const sp = img(s, 'fx-spark', p.x + rand(-14, 14), p.y + rand(-14, 12), rand(0.4, 0.7)).setTint(0xffe040).setBlendMode(ADD);
+    const sp = img(s, 'fx-spark', p.x + rand(-14, 14), p.y + rand(-14, 12), rand(0.4, 0.7)).setTint(color).setBlendMode(ADD);
     s.tweens.add({ targets: sp, alpha: { from: 1, to: 0 }, duration: 120, yoyo: true, repeat: 2, onComplete: () => sp.destroy() });
   }
 }

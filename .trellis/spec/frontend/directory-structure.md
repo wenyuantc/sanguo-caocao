@@ -14,6 +14,7 @@ src/
 ├── data.js             # 静态规则表：TERRAIN、RANGES、SERIES（兵种系列与阶级）/ classOf、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
 ├── spells.js           # 策略表 SPELLS 与各系列习得表 SPELL_LEARN（纯数据，data.js 再导出）
 ├── status.js           # 异常状态与增减益：effStats、tickStatus、各种判定（纯函数）
+├── weather.js          # 天气表 TABLE / 关卡天气 STAGE_WEATHER、随机游走 stepWeather、天气策略 weatherSpellIdx（纯函数，Node 可导入）
 ├── equipment.js        # 装备与宝物：EQUIP / KINDS、装备属性与特效查询（fx/fxSum）、初始装备、奖励 REWARDS / 掉落 DROPS / 商店 SHOP_UNLOCK（纯函数）
 ├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、策略结算、AI 决策（不依赖 Phaser）
 ├── actions.js          # 作用于场景的异步战斗行动：doAttack/doSpell/doItem/killUnit/runAI
@@ -37,7 +38,8 @@ src/
 ├── mapRender.js        # drawMap：用 Graphics 绘制地形格
 ├── heroSprites.js      # Canvas 2D 战场小人（unitTexture）、共用绘图工具 kit()
 ├── portraits.js        # Canvas 2D 头像（portraitTexture）
-├── attackFx.js / spellFx.js / duel.js  # 攻击、策略/道具、单挑过场动画
+├── attackFx.js / spellFx.js / duel.js  # 攻击、策略/道具（含四神）、单挑过场动画
+├── weatherFx.js        # class WeatherFx：天气粒子（≤ 200）/ 阴天遮罩 / 切换动画；顶部栏天气图标 drawWeatherIcon
 └── scenes/
     ├── TitleScene.js   # key 'Title'
     ├── BattleScene.js  # key 'Battle'：回合循环、输入、事件、胜负
@@ -63,7 +65,7 @@ scenes/*.js
 
 - `logic.js` 只导入 `config.js`、`data.js`、`status.js`、`equipment.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
   （AI 决策和 HUD 攻击预测调用的是同一批函数）。
-- `stageMeta.js`、`stages/*.js`、`spells.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`equipment.js`、`deploy.js` 必须能被 Node 直接导入：
+- `stageMeta.js`、`stages/*.js`、`spells.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`equipment.js`、`deploy.js`、`weather.js` 必须能被 Node 直接导入：
   `scripts/validate-stages.mjs` 会直接 import 它们。这些文件里不要导入 `phaser`，也不要访问 `window`/`localStorage`。
 - 只有场景负责把各模块串起来。
 
@@ -80,6 +82,7 @@ scenes/*.js
 | 新异常 / 增减益 | `src/status.js`（`STATUS`、`tickStatus`、判定函数），图标在 `unitView.updateStatus` |
 | 新规则或公式 | `src/logic.js` 中导出的纯函数 |
 | 新装备 / 宝物特效 | `src/equipment.js` 的 `EQUIP`（新特效类型补 `FX_DESC`，在 `logic.js` / `actions.js` 用 `fx` / `fxSum` 读取）；图标按种类在 `spellFx.js` 的 `drawGear` |
+| 天气规则 / 关卡开局天气 | `src/weather.js`（`TABLE`、`STAGE_WEATHER`；关卡也可写 `weather: { type, start }`）；画面在 `weatherFx.js` |
 | 关卡奖励 / 掉落 / 商店上新 | `src/equipment.js` 的 `REWARDS` / `DROPS` / `SHOP_UNLOCK`（校验脚本检查引用） |
 | 新的带动画的战斗行动 | `src/actions.js`（async，接收场景 `s`） |
 | 新的可复用控件 | `src/ui.js` 中的工厂函数 `(scene, x, y, ...)` |

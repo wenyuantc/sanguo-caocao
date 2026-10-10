@@ -26,7 +26,9 @@
 ### 策略（`SPELLS`）
 
 - `cat`：`damage` 伤害 / `status` 异常 / `debuff` 减益 / `buff` 增益 / `heal` 回复兵力 / `mp` 回复策略值 / `cure` 解除异常 / `special`（回归、冥想）。
-- `elem`：`fire` / `water` / `earth` / `wind`（决定地形限制与特效）；`formula`：`a`~`f` 为原版伤害公式类别，`kill` 为目标全部兵力，`drainMp` 为谍报吸取量。
+- `elem`：`fire` / `water` / `earth` / `wind`（决定地形限制与特效）；`formula`：`a`~`f`、`g`（朱雀 L+Δ+25）为原版伤害公式类别，`kill` 为目标全部兵力，`drainMp` 为谍报吸取量。
+- 天气相关：`noBadWeather`（火系，雨 / 豪雨 / 雪不能用）、`weather: 'bad'|'sun'|'cloud'`（四神的天气条件）、`needGem`（需装备的宝玉 id）、`setWeather: 'cloud'|'sun'|'rain'`（昙天 / 晴明 / 豪雨）、`strikes`（青龙雷击次数）；`special` 另有 `'thunder'`、`'zhuque'`、`'xuanwu'`、`'baihu'`。
+- 可用性一律用 `spellUsable(id, u, weather, ctx?)` → `{ ok, reason }`（禁咒 / 混乱、习得等级、宝玉、天气、策略值，`ctx.map + ctx.target` 时含地形）；菜单、AI（`castable(u, weather)`）、测试共用。
 - `range`：射程（曼哈顿距离，`'map'` 为全图）；`area`：`0` 单体、`'cross'` 十字 5 格、`'square'` 3×3、`'map'` 全图野外；`target`：`'foe'` / `'ally'` / `'self'`。
 - `status`：附加异常（`'random'` 为随机一种）；`buff`：`{ stat: 'atk'|'int'|'def'|'burst'|'morale'|'power'|'all'|'move', mult? , add? }`（`power` 对文官作用于精神、对武将作用于攻击）；`special`：`'drain'` 吸取兵力、`'drainMp'`、`'again'`、`'meditate'`；`heal`：`'small'`/`'big'`；`hitMod`：成功率系数。
 - 结算一律走 `resolveSpell(map, units, a, id, t, rng)`（不修改单位，返回 `{ caster, spellId, center, effects: [{ u, hit, dmg?, heal?, mp?, mpDrain?, status?, buff?, cure?, again? }], self }`）→ `applySpell(res)`（写入并记录 `buffKeys` / `cured`）。`actions.doSpell` 在两者之间播放特效；Node 模拟脚本直接连用。
