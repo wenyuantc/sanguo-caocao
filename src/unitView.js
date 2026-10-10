@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { TILE, MAP_X, MAP_Y, COLORS, FONT } from './config.js';
+import { TILE, MAP_X, MAP_Y, COLORS, FONT, SETTINGS } from './config.js';
 import { unitTexture, TEX, LW, LH, PAD, ANCHOR_X, FEET_Y } from './heroSprites.js';
 import { STATUS, STATUS_KEYS } from './status.js';
 
@@ -39,7 +39,8 @@ export class UnitView {
     this.c.add([this.body, this.hpBar, this.statusMark]);
     this.updateHp();
     this.updateStatus();
-    this.idle = scene.tweens.add({ targets: this.body, y: -2, yoyo: true, repeat: -1, duration: 600 + Math.random() * 300, ease: 'Sine.easeInOut' });
+    // 待机呼吸动画：画质为“低”时省略
+    if (SETTINGS.quality !== 'low') this.idle = scene.tweens.add({ targets: this.body, y: -2, yoyo: true, repeat: -1, duration: 600 + Math.random() * 300, ease: 'Sine.easeInOut' });
   }
 
   drawTier() {
@@ -137,7 +138,7 @@ export class UnitView {
     this.acted = v;
     this.body.setAlpha(v ? 0.75 : 1);
     if (v) this.sprite.setTint(0x777777); else this.sprite.clearTint();
-    if (v) this.idle.pause(); else this.idle.resume();
+    if (v) this.idle?.pause(); else this.idle?.resume();
   }
 
   snap() {

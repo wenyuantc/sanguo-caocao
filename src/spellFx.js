@@ -844,7 +844,7 @@ export async function deathFx(s, v) {
   ensureTextures(s);
   const u = v.unit;
   const p = tileCenter(u.x, u.y);
-  v.idle.stop();
+  v.idle?.stop();
   v.hpTween?.stop();
   v.body.setPosition(0, 0);
   // 闪白抖动

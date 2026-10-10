@@ -1,4 +1,4 @@
-import { TILE, COLS, ROWS, MAP_X, MAP_Y } from './config.js';
+import { TILE, COLS, ROWS, MAP_X, MAP_Y, RES } from './config.js';
 import { TERRAIN } from './data.js';
 
 const rnd = (x, y, i = 0) => {
@@ -26,7 +26,19 @@ export function drawMap(scene, map) {
   g.lineStyle(1, 0x000000, 0.12);
   for (let x = 0; x <= COLS; x++) g.lineBetween(MAP_X + x * TILE, MAP_Y, MAP_X + x * TILE, MAP_Y + ROWS * TILE);
   for (let y = 0; y <= ROWS; y++) g.lineBetween(MAP_X, MAP_Y + y * TILE, MAP_X + COLS * TILE, MAP_Y + y * TILE);
-  return g;
+  return bake(scene, g);
+}
+
+// 地图是静态的：把数千条 Graphics 指令按 RES 倍烘焙成一张贴图，避免每帧重新处理
+const BAKE_KEY = 'map-bake', BAKE_M = 4; // 上方留边：营寨栅栏尖略高出格子
+function bake(scene, g) {
+  if (scene.textures.exists(BAKE_KEY)) scene.textures.remove(BAKE_KEY);
+  const top = MAP_Y - BAKE_M;
+  const dt = scene.textures.addDynamicTexture(BAKE_KEY, COLS * TILE * RES, (ROWS * TILE + BAKE_M) * RES);
+  g.setScale(RES);
+  dt.draw(g, -MAP_X * RES, -top * RES).render();
+  g.destroy();
+  return scene.add.image(MAP_X, top, BAKE_KEY).setOrigin(0).setScale(1 / RES).setDepth(0);
 }
 
 function drawDetail(g, ch, px, py, x, y) {

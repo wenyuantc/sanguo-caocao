@@ -1,3 +1,5 @@
+import { loadSettings, resolveRes } from './settings.js';
+
 export const TILE = 48;
 export const COLS = 18;
 export const ROWS = 13;
@@ -22,8 +24,9 @@ export const COLORS = {
 
 export const FACTION_NAME = { player: '我军', enemy: '敌军', ally: '友军' };
 
-// 高分辨率渲染：画布按 RES 倍尺寸创建，镜头放大 RES 倍，世界坐标保持不变
-export const RES = 2;
+// 高分辨率渲染：画布按 RES 倍尺寸创建，镜头放大 RES 倍，世界坐标保持不变（倍率取自游戏设置）
+export const SETTINGS = loadSettings();
+export const RES = resolveRes(SETTINGS);
 export function hiDpi(scene) {
   scene.cameras.main.setZoom(RES).centerOn(WIDTH / 2, HEIGHT / 2);
   scene.events.on('addedtoscene', (go) => { if (go.type === 'Text') go.setResolution(RES); });
