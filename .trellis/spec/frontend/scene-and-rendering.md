@@ -184,10 +184,28 @@ if (killed) await killUnit(s, d);
   `UnitView.moveAlong` 每步 `step`、`playAttack`（`crit` 切入、`attack` 挥动、命中 / 闪避 `hit` / `miss`）、`castFx`（`cast`）、`spellFx`（`spell`，青龙每道雷一次）、
   `itemFx` 回复（`spell` heal）、`gainExp` 升级（`levelup`）、`promoteFx`（`promote`）、`lootFx`（`treasure`）、`openRewards`（`treasure` / `item`）、`deathFx`（`retreat`）、
   `BattleScene.changeWeather`（`weather`）、`startPhase` 横幅前（`turn`）。
-- 调试：`__audioTest(name)` 试听音色（不传参依次试听全部）、`__sfxTest(name, opts)` 触发音效。
+- 调试：`__audioTest(name)` 试听音色（不传参依次试听全部）、`__sfxTest(name, opts)` 触发音效、`__musicTest(场合或曲目 id)` 播放配乐（不传参停止）、`__musicNow()` 当前曲目 id。
 - 音量设置（`music` / `sfx` 0–100、`mute`）在 `settings.js`，设置面板改动即时 `engine.setVolumes` 并保存，不重载页面；只有 `RENDER_KEYS` 改动才重载。
   战斗中由右侧面板“设置”按钮打开 `openSettingsMenu(scene, { audioOnly: true, onClose })`（期间 `modal = true`）。
 - 标题页首次进入时显示“点击开始”，首次点击 / 按键解锁音频后才显示菜单（调试入口 `?stage` 等跳过标题，由 window 级监听在第一次操作时解锁）。
+
+### 配乐（`sequencer.js` / `songs.js` / `music.js`）
+
+- 场景只调用 `playMusic(场合 | 曲目id, opts?)`（`music.js`）：同一首正在播放（或等待开始）时直接返回，不会从头重播，所以可以放心重复调用。
+  场合表 `OCCASION`：`title` / `story`（剧情、中国地图）/ `camp`（营中）/ `council`（军议、整备）/ `battle`（未登记关卡的战斗曲）/ `crisis` / `duel` / `victory` / `defeat` / `ending`。
+  未解锁时调用也可以：曲目登记为待播，解锁后自动开始。
+- 接入点：`TitleScene.create`（`title`，渐入）；`StoryScene.onBg`（`StoryRunner.bg` 换背景时回调：中国地图 → `story`，开场其余背景 → `council`，结尾的 `tent` / `camp` → `camp`、其余 → `story`；
+  叠加在战场上的结尾场景第一张背景不换曲，沿用胜利曲）；`CampScene.create`（`camp`）；`BattleScene.start`（整备 `council` → 开战 `updateMusic()`）；
+  `BattleScene.updateMusic()`（本关战斗曲 `battleMusic(stageId)`，`isCrisis` 为真时 `crisis`；在 `resume`、`startPhase`、`checkEnd` 未结束时调用，战斗结束后与单挑期间不处理）；
+  `runDuel`（`duel`，`finally` 中恢复）；`victory`（横幅前与战果面板前 `victory`）；`defeat`（`defeat`）；`EndingScene.create`（`ending`）。读档进入各场景时按上面的规则自然播放对应曲目。
+- 每关战斗曲 `BATTLE_MUSIC`：按原版各关战斗曲（research/audio.md §3.1，`ORIGINAL` 表）归类——暴走 / 急袭 → `battle1`、霸道 / 互角 → `battle2`、舌战 → `battle3`、大战 / 暗云 → `decisive`。
+  新增关卡要在 `ORIGINAL` 中登记（缺失时用 `OCCASION.battle`）。我军 / 友军 / 敌军阶段不换曲。
+- 危急判定 `isCrisis({ stage, units, turn }, prev)`（纯函数）：曹操、`stage.protect`、`reach` 条件指定的我军单位兵力低于 30%（已危急时回到 50% 以上才解除），或离 `stage.turns` 不到 2 回合（有 `survive` 胜利条件的关卡不算）。
+- 音序器：每 25ms 检查、提前 100ms 排程；每首曲子一个增益节点 → `musicBus`（计入 `activeNodes`，渐出且余音结束后断开）。切换时旧曲渐出，新曲在旧曲下一小节线（超过 `maxWait` 秒则立即）渐入。
+  `engine.ready` 为假（未解锁 / 后台挂起）时不排程；主线程卡顿错过的音符直接丢弃，不补发；静音或配乐音量为 0 时照常走拍但不发声。
+- 曲目（`songs.js`，纯数据）：五声音阶原创，不模仿原版旋律。简谱语法见 `sequencer.js` 顶部注释（`_` 八分、`__` 十六分、`.` 附点、`-` 延长一拍、`'` / `,` 八度、`x` / `X` 打击乐、`~` 琵琶轮指）；
+  每小节长度由 `compileSong` 校验（不对时 `console.warn`），`validate-stages.mjs` 同样校验各声部小节长度、场合与每关战斗曲登记（报错）。打击乐的 `pitch` ≤ 127 按 MIDI 号、否则按 Hz 解释（锣的低音写 MIDI 号，不要写 100 这类会被当成 MIDI 的 Hz 值）。
+  新曲先用 `__musicTest(id)` 试听，并对照现有曲目的响度调整 `gain`（`AnalyserNode` 接在 `musicBus` 上测 RMS，战斗类约 0.05–0.08、抒情类约 0.03–0.05，配乐音量 70 时）。
 
 ## 反模式
 

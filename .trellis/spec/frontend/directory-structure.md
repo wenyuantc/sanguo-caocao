@@ -48,7 +48,10 @@ src/
 ├── audio/              # 声音：Web Audio 实时合成，没有音频文件（约定见 scene-and-rendering.md「音频」）
 │   ├── engine.js       # AudioContext 单例、主音量 / 配乐 / 音效总线、混响、解锁与后台暂停、节点计数
 │   ├── instruments.js  # 乐器音色（古筝 / 琵琶 / 笛子 / 二胡 / 编钟 / 大鼓 / 小鼓 / 锣），统一签名，配乐复用
-│   └── sfx.js          # 音效表 sfx(name, opts)、8 声部上限、spellSchool / stepKind
+│   ├── sfx.js          # 音效表 sfx(name, opts)、8 声部上限、spellSchool / stepKind
+│   ├── sequencer.js    # 配乐音序器（look-ahead 排程、循环、渐入渐出、按小节切换）与简谱解析 parseJianpu / compileSong
+│   ├── songs.js        # 配乐曲目 SONGS（纯数据，简谱字符串）
+│   └── music.js        # playMusic / stopMusic、场合表 OCCASION、每关战斗曲 BATTLE_MUSIC、危急判定 isCrisis
 ├── camp/               # 营中（两关之间自由走动）：纯数据 + 纯函数，Node 可导入（props.js 除外）
 │   ├── layouts.js      # 布局 LAYOUTS（军营 / 城镇 / 府邸 / 野营 / 水寨）、CAMP_OF 关卡 → 布局、通用角色外形 FOLK、layoutGrid / checkLayout
 │   ├── talks.js        # 汇总 talks_a..f.js（本关专属台词，键为下一关 id）与 generic.js（通用台词），pickTalk 选台词
