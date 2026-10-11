@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, hiDpi } from '../config.js';
-import { getStage, resolveNext, FIRST_STAGE, ENDINGS, PLANNED_IDS } from '../stages.js';
+import { getStage, resolveNext, FIRST_STAGE, PLANNED_IDS } from '../stages.js';
 import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf, passable } from '../data.js';
 import {
   createUnit, restoreUnit, promoteBlock, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt,
@@ -13,7 +13,8 @@ import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, has } from '../status.j
 import { drawMap } from '../mapRender.js';
 import { MapCamera } from '../mapCamera.js';
 import { Minimap } from '../minimap.js';
-import { UnitView } from '../unitView.js';
+import { UnitView, tileCenter } from '../unitView.js';
+import { stageCmd, entryRoute, replayPatches, WALK_MS } from '../battleStage.js';
 import { Hud } from '../hud.js';
 import { DialogBox, button, wait, text, floatText } from '../ui.js';
 import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.js';
@@ -26,6 +27,7 @@ import { openInfo } from '../infoPanel.js';
 import { openRewards } from '../rewardPanel.js';
 import { ensureTextures, lootFx } from '../spellFx.js';
 import { playDuel } from '../duel.js';
+import { playPost, goNext } from '../story/flow.js';
 import {
   SLOTS, DROPS, issueKit, kitFrom, copyKit, newGear, pickGear, stageRewards, goldFor, gearName,
 } from '../equipment.js';
@@ -43,6 +45,9 @@ export class BattleScene extends Phaser.Scene {
     this.menu = null;
     this.hoverKey = null;
     this.mapReset = false;
+    // 开场场景（StoryScene）播完后进入时为 true；否则新开一关先转去开场场景（读档、重新挑战除外）
+    this.skipStory = !!data?.skipStory;
+    this.redirecting = false;
   }
 
   // 地图版本不一致时，把 registry 恢复为本关开头的战役状态（道具、红色指数、剧情标记、成长、装备、金钱）：
@@ -75,7 +80,9 @@ export class BattleScene extends Phaser.Scene {
     this.purgeTextures();
     const stage = (this.stage = getStage(this.stageId) || getStage(FIRST_STAGE));
     this.stageId = stage.id;
-    this.map = stage.map;
+    // 每局一份可改写的地图（字符串数组，地形变化时按行替换），改动记在 mapPatches 并写入存档
+    this.map = [...stage.map];
+    this.mapPatches = [];
     this.map.forEach((r, i) => r.length !== this.map[0].length && console.warn('地图行长度错误', i, r));
     // 关卡地图已重做（mapVersion 不同）：战斗中存档的坐标失效，从本关开头重新开始
     if (this.load && (this.load.mapVersion ?? 1) !== stage.mapVersion) {
@@ -83,6 +90,16 @@ export class BattleScene extends Phaser.Scene {
       this.load = null;
       this.mapReset = true;
     }
+    // 新开一关：先播开场场景（prologue 在场景中演出），场景结束后带 skipStory 回来整备
+    if (!this.load && !this.skipStory) {
+      this.redirecting = true;
+      this.scene.start('Story', {
+        stage: stage.id, part: 'pre',
+        notice: this.mapReset ? '关卡地图已更新，将从本关开头重新开始（等级、装备等成长数据保留）。' : null,
+      });
+      return;
+    }
+    replayPatches(this, this.load?.mapPatches);
     drawMap(this, this.map);
     // 镜头：地图层随镜头滚动，界面层固定；弹窗、对话、指令菜单时禁止手动滚动
     this.cam = new MapCamera(this, this.map, {
@@ -101,6 +118,9 @@ export class BattleScene extends Phaser.Scene {
     this.items = { ...(load?.items || this.registry.get('items') || this.difficulty.items) };
     this.red = load?.red ?? this.registry.get('red') ?? 0;
     this.flags = { ...(load?.flags || this.registry.get('flags') || {}) };
+    // 本关开头（开场场景之后、整备之前）的红色指数与标记：重新挑战时恢复，避免战斗中的剧情选项重复累加（旧存档缺失时取存档值）
+    const st = load ? load.start : null;
+    this.startState = { red: st?.red ?? this.red, flags: { ...(st?.flags || this.flags) } };
     // 装备背包与金钱：战斗中的掉落只记在副本里，胜利时写回 registry
     this.inventory = (load?.inventory || this.registry.get('inventory') || []).map((it) => ({ ...it }));
     this.gold = load?.gold ?? this.registry.get('gold') ?? 0;
@@ -162,6 +182,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.redirecting) return;
     // 镜头移动后，鼠标下的格子变了：刷新光标与悬停信息
     if (this.cam.moved) {
       this.cam.moved = false;
@@ -178,11 +199,7 @@ export class BattleScene extends Phaser.Scene {
 
   async start() {
     if (this.load) return this.resume();
-    if (this.mapReset) {
-      this.hud.log('关卡地图已更新，已从本关开头重新开始');
-      await this.dialog.show([{ who: '旁白', text: '关卡地图已更新，将从本关开头重新开始（等级、装备等成长数据保留）。' }]);
-    }
-    await this.dialog.show(this.stage.prologue);
+    // 开场对白已在开场场景（StoryScene）中演出
     await this.startPrep();
     await this.hud.banner(`${this.stage.chapter}　${this.stage.name}`);
     await this.startPhase('player');
@@ -290,6 +307,7 @@ export class BattleScene extends Phaser.Scene {
       mapVersion: this.stage.mapVersion,
       red: this.red,
       flags: { ...this.flags },
+      start: { red: this.startState.red, flags: { ...this.startState.flags } },
       turn: this.turn,
       items: { ...this.items },
       inventory: this.inventory.map((it) => ({ ...it })),
@@ -297,6 +315,7 @@ export class BattleScene extends Phaser.Scene {
       roster: this.registry.get('roster') || {},
       joined: [...this.joined],
       firedEvents: [...this.firedEvents],
+      mapPatches: this.mapPatches.map((p) => [...p]),
       weatherIdx: this.weatherIdx,
       units: this.units.map(({ stats, ...u }) => ({
         ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits },
@@ -461,8 +480,9 @@ export class BattleScene extends Phaser.Scene {
     this.registry.set('flags', { ...this.flags });
   }
 
-  spawn(defs = []) {
-    const out = [];
+  // 援军登场：从地图边缘（或 def.from）逐格走到落点，路线太远 / 走不通时原地淡入；全部到位后才返回
+  async spawn(defs = []) {
+    const out = [], walks = [], fades = [];
     for (let d of defs) {
       if (!this.flagOk(d)) continue;
       const at = this.spawnTile(d);
@@ -476,9 +496,25 @@ export class BattleScene extends Phaser.Scene {
       const v = new UnitView(this, u);
       this.views.set(u, v);
       v.c.setAlpha(0);
-      this.tweens.add({ targets: v.c, alpha: 1, duration: 400 });
+      const route = entryRoute(this, u, d);
+      if (route) {
+        const p = tileCenter(route[0].x, route[0].y);
+        v.c.setPosition(p.x, p.y);
+        walks.push([v, route]);
+      } else fades.push(v);
       out.push(u);
     }
+    if (!out.length) return out;
+    // 镜头：落点与（地图内的）入场格尽量同时入镜
+    await this.follow(out, walks.map(([, r]) => r.find((t) => inMap(t.x, t.y, this.map))));
+    const tween = (cfg) => new Promise((r) => this.tweens.add({ ...cfg, onComplete: r }));
+    await Promise.all([
+      ...fades.map((v) => tween({ targets: v.c, alpha: 1, duration: 400 })),
+      ...walks.map(([v, route]) => {
+        this.tweens.add({ targets: v.c, alpha: 1, duration: 200 });
+        return v.moveAlong(route, WALK_MS);
+      }),
+    ]);
     return out;
   }
 
@@ -496,17 +532,35 @@ export class BattleScene extends Phaser.Scene {
     return null;
   }
 
+  // 事件执行顺序：setFlag → stage 演出指令（按顺序 await）→ 援军登场 → setAi → dialog。
+  // stage 中写 { spawn: true } 可把援军登场（及 setAi）提前到该位置；指令可带 ifFlag / unlessFlag；演出期间禁止输入
   async runEvent(i, ev) {
     this.firedEvents.add(i);
     if (ev.setFlag) this.setFlag(ev.setFlag);
-    // 援军登场：镜头移到新出现的单位
-    const spawned = this.spawn(ev.units);
-    if (spawned.length) await this.follow(spawned);
-    for (const [id, ai] of Object.entries(ev.setAi || {})) {
-      const u = this.units.find((o) => o.id === id && o.alive);
-      if (u) u.ai = ai;
+    const prev = this.state;
+    this.state = 'busy';
+    let spawned = false;
+    const arrive = async () => {
+      if (spawned) return;
+      spawned = true;
+      await this.spawn(ev.units);
+      for (const [id, ai] of Object.entries(ev.setAi || {})) {
+        const u = this.units.find((o) => o.id === id && o.alive);
+        if (u) u.ai = ai;
+      }
+    };
+    for (const cmd of ev.stage || []) {
+      if (!this.flagOk(cmd)) continue;
+      try {
+        if (cmd.spawn) await arrive();
+        else await stageCmd(this, cmd);
+      } catch (e) {
+        console.error('战场演出出错', cmd, e);
+      }
     }
+    await arrive();
     await this.dialog.show(ev.dialog);
+    this.state = prev;
   }
 
   async fireEvents(faction) {
@@ -621,8 +675,14 @@ export class BattleScene extends Phaser.Scene {
       const u = this.units.find((o) => o.id === r.unit);
       if (u && u.alive === r.alive && (!r.outcome || r.outcome === outcome)) this.setFlag(r.flag);
     }
-    const eps = this.stage.epilogues || {};
-    await this.dialog.show((annihilated && eps.annihilate) || eps[outcome] || this.stage.epilogue);
+    // 结尾场景：叠加在战场上演出（对白按 annihilate → epilogues[outcome] → epilogue 选择，见 story/auto.postLines）；
+    // 场景中的选项写入 registry，播完同步回本场景（影响奖励、自动存档与路线）
+    this.registry.set('red', this.red);
+    this.registry.set('flags', { ...this.flags });
+    await playPost(this, { outcome, annihilated });
+    this.red = this.registry.get('red') ?? this.red;
+    this.flags = { ...(this.registry.get('flags') || this.flags) };
+    this.hud.setRed(this.red);
     // 成长记录与装备 / 果子引用合并保存；战斗中的装备熟练度按 uid 写回背包
     const roster = this.registry.get('roster') || {};
     for (const u of this.units) {
@@ -674,8 +734,7 @@ export class BattleScene extends Phaser.Scene {
     supplies[loot] = (supplies[loot] || 0) + 1;
     this.modal = true;
     await openRewards(this, { gold, gear, items: supplies });
-    if (next && getStage(next)) this.scene.start('Battle', { stage: next });
-    else this.scene.start('Ending', { route: ENDINGS[next] || 'villain' });
+    goNext(this, next);
   }
 
   async defeat(reason) {
@@ -687,8 +746,15 @@ export class BattleScene extends Phaser.Scene {
     const cx = VIEW_W / 2, cy = MAP_Y + 300;
     this.add.rectangle(0, 0, 2000, 2000, 0x000000, 0.55).setOrigin(0).setDepth(900).setInteractive();
     text(this, cx, cy - 70, reason, 26, '#f1e3c2', FONT).setOrigin(0.5).setDepth(901);
-    button(this, cx - 170, cy, 150, 48, '重新挑战', () => this.scene.start('Battle', { stage: this.stageId })).setDepth(901);
+    button(this, cx - 170, cy, 150, 48, '重新挑战', () => this.retry()).setDepth(901);
     button(this, cx + 20, cy, 150, 48, '返回标题', () => this.scene.start('Title')).setDepth(901);
+  }
+
+  // 重新挑战：不重播开场场景，红色指数与标记恢复为本关开头的值（战斗事件会重新触发）
+  retry() {
+    this.registry.set('red', this.startState.red);
+    this.registry.set('flags', { ...this.startState.flags });
+    this.scene.start('Battle', { stage: this.stageId, skipStory: true });
   }
 
   // ---------- 输入 ----------

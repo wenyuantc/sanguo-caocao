@@ -40,7 +40,7 @@ put('!', [14, 30], [15, 30]);
 fill(22, 18, 30, 18, '#');
 put('.', [26, 18]);
 put('T', [24, 20], [25, 20], [27, 20]);
-// 东南城池：城墙一圈，北面城门旁留出入口
+// 东南城池：城墙一圈，北面城门旁留出入口（第 2 回合事件打开城门）
 fill(26, 26, 37, 37, 'C');
 fill(27, 27, 36, 36, '+');
 put('E', [31, 26]);
@@ -87,6 +87,47 @@ export const DEBUG_STAGES = [
       E('e10', '河东弓兵', 'archer', 9, 28, 12),
       E('e11', '水军', 'pirate', 9, 19, 25),
       E('e12', '关隘守兵', 'infantry', 9, 6, 8),
+    ],
+    // 战场演出测试：镜头、高亮、船（3×3）、援军走入（默认 / 指定 from / 太远淡入）、开城门、放火、走位、转向、动作
+    events: [
+      {
+        turn: 1, faction: 'player',
+        stage: [
+          { camera: [20, 15] },
+          { highlight: [[19, 15], [20, 15]] },
+          { terrain: { at: [19, 15], set: 'ship', size: 3 } },
+          { act: 'caocao', pose: 'raise' },
+          { say: [{ who: '曹操', side: 'player', text: '船已备好，可由此渡河。' }] },
+        ],
+        dialog: [{ who: '旁白', text: '演出测试：大河中央出现了船阵。' }],
+      },
+      {
+        turn: 1, faction: 'enemy',
+        units: [
+          E('r1', '援军骑兵', 'cavalry', 9, 22, 1),
+          E('r2', '援军步兵', 'infantry', 9, 37, 11, { from: [39, 11] }),
+          E('r3', '伏兵', 'bandit', 8, 14, 9),
+        ],
+        dialog: [{ who: '旁白', text: '敌军援军从地图边缘赶到，林中另有伏兵。' }],
+      },
+      {
+        turn: 2, faction: 'player',
+        stage: [
+          { camera: 'boss' },
+          { face: 'boss', dir: 'up' },
+          { act: 'boss', pose: 'jump' },
+          { highlight: ['boss', [31, 26]] },
+          { terrain: { at: [31, 26], set: 'open' } },
+          { walk: 'g1', to: [31, 27] },
+          { face: 'g1', dir: 'left' },
+          { spawn: true },
+          { terrain: { at: [14, 4], set: 'fire', size: 3 } },
+          { act: 'e1', pose: 'shake' },
+        ],
+        units: [E('r4', '城外援军', 'archer', 9, 31, 24, { from: [31, 39] })],
+        setAi: { boss: 'aggressive' },
+        dialog: [{ who: '守将', side: 'enemy', text: '打开城门，出城迎敌！' }],
+      },
     ],
     prologue: [{ who: '旁白', text: '大地图测试：拖动地图、方向键 / WASD、鼠标移到地图边缘都可以滚动；右上角小地图可点击跳转，M 键折叠。' }],
     epilogue: [{ who: '旁白', text: '测试结束。' }],

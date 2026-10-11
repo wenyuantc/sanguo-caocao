@@ -18,29 +18,47 @@ const CHUNK = 20;
 export function drawMap(scene, map) {
   const rows = map.length, cols = map[0].length;
   for (const k of scene.textures.getTextureKeys()) if (k.startsWith(BAKE_KEY)) scene.textures.remove(k);
-  const images = [];
+  // 分块图像按 "cx,cy" 记在场景上，地形变化时只重烘受影响的分块（redrawTiles）
+  scene.mapChunks = new Map();
   for (let cy = 0; cy < rows; cy += CHUNK) {
-    for (let cx = 0; cx < cols; cx += CHUNK) {
-      const w = Math.min(CHUNK, cols - cx), h = Math.min(CHUNK, rows - cy);
-      const g = scene.add.graphics().setDepth(0);
-      for (let y = cy; y < cy + h; y++) {
-        for (let x = cx; x < cx + w; x++) {
-          const ch = map[y][x];
-          const t = TERRAIN[ch];
-          const px = MAP_X + x * TILE, py = MAP_Y + y * TILE;
-          g.fillStyle(shade(t.color, 0.93 + rnd(x, y) * 0.14), 1).fillRect(px, py, TILE, TILE);
-          drawDetail(g, ch, px, py, x, y);
-        }
-      }
-      // 网格
-      const left = MAP_X + cx * TILE, top = MAP_Y + cy * TILE;
-      g.lineStyle(1, 0x000000, 0.12);
-      for (let x = 0; x <= w; x++) g.lineBetween(left + x * TILE, top, left + x * TILE, top + h * TILE);
-      for (let y = 0; y <= h; y++) g.lineBetween(left, top + y * TILE, left + w * TILE, top + y * TILE);
-      images.push(bake(scene, g, `${BAKE_KEY}-${cx}-${cy}`, left, top, w, h));
+    for (let cx = 0; cx < cols; cx += CHUNK) drawChunk(scene, map, cx, cy);
+  }
+  return [...scene.mapChunks.values()];
+}
+
+function drawChunk(scene, map, cx, cy) {
+  const rows = map.length, cols = map[0].length;
+  const w = Math.min(CHUNK, cols - cx), h = Math.min(CHUNK, rows - cy);
+  const g = scene.add.graphics().setDepth(0);
+  for (let y = cy; y < cy + h; y++) {
+    for (let x = cx; x < cx + w; x++) {
+      const ch = map[y][x];
+      const t = TERRAIN[ch];
+      const px = MAP_X + x * TILE, py = MAP_Y + y * TILE;
+      g.fillStyle(shade(t.color, 0.93 + rnd(x, y) * 0.14), 1).fillRect(px, py, TILE, TILE);
+      drawDetail(g, ch, px, py, x, y);
     }
   }
-  return images;
+  // 网格
+  const left = MAP_X + cx * TILE, top = MAP_Y + cy * TILE;
+  g.lineStyle(1, 0x000000, 0.12);
+  for (let x = 0; x <= w; x++) g.lineBetween(left + x * TILE, top, left + x * TILE, top + h * TILE);
+  for (let y = 0; y <= h; y++) g.lineBetween(left, top + y * TILE, left + w * TILE, top + y * TILE);
+  const img = bake(scene, g, `${BAKE_KEY}-${cx}-${cy}`, left, top, w, h);
+  scene.mapChunks?.set(`${cx},${cy}`, img);
+  return img;
+}
+
+// 地形变化后重绘：tiles 为 {x, y} 数组，按所在分块重新烘焙（先销毁旧图像与贴图）
+export function redrawTiles(scene, map, tiles) {
+  const chunks = new Set(tiles.map((t) => `${Math.floor(t.x / CHUNK) * CHUNK},${Math.floor(t.y / CHUNK) * CHUNK}`));
+  for (const k of chunks) {
+    const [cx, cy] = k.split(',').map(Number);
+    scene.mapChunks?.get(k)?.destroy();
+    const tk = `${BAKE_KEY}-${cx}-${cy}`;
+    if (scene.textures.exists(tk)) scene.textures.remove(tk);
+    drawChunk(scene, map, cx, cy);
+  }
 }
 
 function bake(scene, g, key, left, top, w, h) {

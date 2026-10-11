@@ -5,6 +5,14 @@ import { STATUS, STATUS_KEYS } from './status.js';
 
 export const tileCenter = (x, y) => ({ x: MAP_X + x * TILE + TILE / 2, y: MAP_Y + y * TILE + TILE / 2 });
 
+// 剧情小人姿态名 → 战场动作（见 act）
+const ACT_ALIAS = {
+  raise: 'jump', excited: 'jump', cheer: 'jump',
+  bow: 'bow', kneel: 'bow', sit: 'bow',
+  cry: 'shake', sitcry: 'shake', bound: 'shake', fall: 'shake', hurt: 'shake',
+  sword: 'spin', slash: 'spin',
+};
+
 export class UnitView {
   constructor(scene, unit) {
     this.scene = scene;
@@ -107,6 +115,40 @@ export class UnitView {
     if (target.x !== this.unit.x) this.sprite.setFlipX(target.x < this.unit.x);
   }
 
+  // 战场演出的转向：left / right 左右翻转；up / down 没有背面贴图，用压扁 / 拉伸一下示意；也可传 {x, y} 面向某格
+  faceDir(dir) {
+    if (dir && typeof dir === 'object') return this.face(dir);
+    if (dir === 'left' || dir === 'right') this.sprite.setFlipX(dir === 'left');
+    else if (dir === 'up' || dir === 'down') {
+      this.scene.tweens.add({ targets: this.sprite, scaleY: this.sprite.scaleY * (dir === 'up' ? 1.08 : 0.92), duration: 120, yoyo: true });
+    }
+  }
+
+  // 战场演出的动作（返回 Promise）：jump 跳起、bow 俯身、shake 颤抖、flash 闪光、spin 回转；
+  // 剧情小人的姿态名也可直接使用，按相近的动作表现（举手 / 激动 → 跳起，作揖 / 跪 → 俯身，哭 / 被缚 → 颤抖，挥剑 → 回转）
+  act(pose) {
+    const kind = ACT_ALIAS[pose] || pose;
+    const s = this.scene, b = this.body;
+    const tw = (cfg) => new Promise((r) => s.tweens.add({ targets: b, ...cfg, onComplete: () => r() }));
+    this.idle?.pause();
+    const done = () => { b.setPosition(0, 0).setScale(1).setAngle(0); if (!this.acted) this.idle?.resume(); };
+    if (kind === 'bow') return tw({ scaleY: 0.82, y: 4, duration: 220, yoyo: true, hold: 260, ease: 'Quad.easeOut' }).then(done);
+    if (kind === 'shake') return tw({ x: { from: -3, to: 3 }, duration: 60, yoyo: true, repeat: 5 }).then(done);
+    if (kind === 'spin') return tw({ angle: 360, duration: 420, ease: 'Cubic.easeInOut' }).then(done);
+    if (kind === 'flash') {
+      return new Promise((r) => {
+        let n = 0;
+        const blink = () => {
+          if (!this.sprite.active) { r(); return; }
+          this.flashHit(0xfff2c0);
+          if (++n < 3) s.time.delayedCall(220, blink); else s.time.delayedCall(160, () => { done(); r(); });
+        };
+        blink();
+      });
+    }
+    return tw({ y: -14, duration: 150, yoyo: true, repeat: 1, ease: 'Quad.easeOut' }).then(done);
+  }
+
   faceDefault() {
     this.sprite.setFlipX(this.unit.faction === 'enemy');
   }
@@ -146,12 +188,13 @@ export class UnitView {
     this.c.setPosition(p.x, p.y).setDepth(10 + this.unit.y);
   }
 
-  moveAlong(path) {
+  // 沿路径逐格移动；ms 为每格时长（剧情演出、援军走入用较慢的步速）
+  moveAlong(path, ms = 90) {
     return new Promise((resolve) => {
       if (path.length <= 1) { this.snap(); resolve(); return; }
       const steps = path.slice(1).map((pt) => {
         const p = tileCenter(pt.x, pt.y);
-        return { x: p.x, y: p.y, duration: 90, ease: 'Linear' };
+        return { x: p.x, y: p.y, duration: ms, ease: 'Linear', onStart: () => this.c.setDepth(10 + Math.max(0, pt.y)) };
       });
       this.scene.tweens.chain({ targets: this.c, tweens: steps, onComplete: () => { this.snap(); resolve(); } });
     });
