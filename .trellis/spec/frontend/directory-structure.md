@@ -10,18 +10,20 @@
 index.html              # <div id="game">，加载 /src/main.js
 src/
 ├── main.js             # new Phaser.Game({ scene: [TitleScene, BattleScene, EndingScene] })
-├── config.js           # TILE/COLS/ROWS/MAP_X/MAP_Y/WIDTH/HEIGHT、字体、COLORS、RES + hiDpi()
-├── data.js             # 静态规则表：TERRAIN、RANGES、SERIES（兵种系列与阶级）/ classOf、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
+├── config.js           # TILE/VIEW_COLS/VIEW_ROWS（地图视口 18×13）/MAP_X/MAP_Y/WIDTH/HEIGHT、字体、COLORS、RES + hiDpi()
+├── terrain.js          # 30 种地形 TERRAIN（一字符一格）、按兵种系列的 TERRAIN_RULES（能力修正 / 移动消耗）、moveCost/passable/terrainDef（纯数据）
+├── data.js             # 静态规则表：TERRAIN（再导出）、RANGES、SERIES（兵种系列与阶级）/ classOf、ADVANTAGE、SPELLS、ITEMS、DIFFICULTIES
 ├── spells.js           # 策略表 SPELLS 与各系列习得表 SPELL_LEARN（纯数据，data.js 再导出）
 ├── status.js           # 异常状态与增减益：effStats、tickStatus、各种判定（纯函数）
 ├── weather.js          # 天气表 TABLE / 关卡天气 STAGE_WEATHER、随机游走 stepWeather、天气策略 weatherSpellIdx（纯函数，Node 可导入）
 ├── equipment.js        # 装备与宝物：EQUIP / KINDS、装备属性与特效查询（fx/fxSum）、初始装备、奖励 REWARDS / 掉落 DROPS / 商店 SHOP_UNLOCK（纯函数）
 ├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、策略结算、AI 决策（不依赖 Phaser）
 ├── actions.js          # 作用于场景的异步战斗行动：doAttack/doSpell/doItem/killUnit/runAI
-├── stageMeta.js        # normalizeStage、PLANNED_IDS、FIRST_STAGE、ENDINGS（不依赖 Phaser，校验脚本也会用）
-├── stages.js           # 汇总 stages/a..f.js → STAGES、getStage、routeOf、resolveNext
+├── stageMeta.js        # normalizeStage（mapVersion 默认 1）、PLANNED_IDS、FIRST_STAGE、ENDINGS、MAP_SIZES（各关原版地图尺寸）
+├── stages.js           # 汇总 stages/a..f.js → STAGES、getStage（也能取到调试关卡）、routeOf、resolveNext
 ├── stages/
 │   ├── helpers.js      # 单位工厂 P / E / A
+│   ├── debug.js        # 调试关卡 DEBUG_STAGES（test_bigmap 40×40 测试地图），不在 STAGES 中，用 ?stage=<id> 进入
 │   └── a.js … f.js     # 每组关卡一个文件（A–F），default 导出关卡对象数组
 ├── characters.js       # 按中文名登记的外形表 BASE + 合并 extra_a..f；兵种登记 CLASS_BY_NAME；颜色工具函数
 ├── characters/extra_<组>.js  # 各组补充的武将外形（default 导出对象）
@@ -35,7 +37,9 @@ src/
 ├── ui.js               # panel/text/button/portrait/DialogBox/floatText/wait
 ├── hud.js              # class Hud：顶栏、右侧面板、日志、横幅
 ├── unitView.js         # class UnitView：单个单位的容器、兵力条、移动/受击补间；tileCenter
-├── mapRender.js        # drawMap：用 Graphics 绘制地形格
+├── mapRender.js        # drawMap：用 Graphics 绘制 30 种地形，分块烘焙
+├── mapCamera.js        # class MapCamera：地图层 / 界面层两台相机、滚动（拖动 / 键盘 / 边缘）、panTo / follow、坐标换算
+├── minimap.js          # class Minimap：小地图（地形、单位、视口框，点击跳转）
 ├── heroSprites.js      # Canvas 2D 战场小人（unitTexture）、共用绘图工具 kit()
 ├── portraits.js        # Canvas 2D 头像（portraitTexture）
 ├── attackFx.js / spellFx.js / duel.js  # 攻击、策略/道具（含四神）、单挑过场动画
@@ -45,6 +49,8 @@ src/
     ├── BattleScene.js  # key 'Battle'：回合循环、输入、事件、胜负
     └── EndingScene.js  # key 'Ending'
 scripts/validate-stages.mjs  # 关卡数据的 Node 校验脚本（直接导入 src/ 模块）
+scripts/mapgen/              # 关卡地图重做工具：画图库、预览、写回、行军分析、与 HEAD 结构比较（用法见 STAGE_GUIDE §4）
+scripts/ai-battle.mjs        # 浏览器 AI 完整对战（planAI 驱动双方），难度复核与回合上限依据
 docs/STAGE_GUIDE.md          # 关卡编写的权威规范
 GQ.md                        # 与 1998 原版对照的关卡清单
 ```
@@ -65,7 +71,7 @@ scenes/*.js
 
 - `logic.js` 只导入 `config.js`、`data.js`、`status.js`、`equipment.js` 以及纯数据的 `generals.js` / `characters.js`（兵种覆盖 `roleOf`）；保持不依赖 Phaser、不访问场景，规则才能复用
   （AI 决策和 HUD 攻击预测调用的是同一批函数）。
-- `stageMeta.js`、`stages/*.js`、`spells.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`equipment.js`、`deploy.js`、`weather.js` 必须能被 Node 直接导入：
+- `stageMeta.js`、`stages/*.js`、`spells.js`、`terrain.js`、`data.js`、`status.js`、`characters.js`、`generals.js`、`equipment.js`、`deploy.js`、`weather.js` 必须能被 Node 直接导入：
   `scripts/validate-stages.mjs` 会直接 import 它们。这些文件里不要导入 `phaser`，也不要访问 `window`/`localStorage`。
 - 只有场景负责把各模块串起来。
 
@@ -77,7 +83,8 @@ scenes/*.js
 |------|------|
 | 新关卡 | 所属组的 `src/stages/<a-f>.js`（见 `docs/STAGE_GUIDE.md` §1）；id 必须在 `PLANNED_IDS` 中 |
 | 新的具名武将外形 | 首次引入该人物的组的 `src/characters/extra_<组>.js` |
-| 新兵种/地形/道具/难度 | `src/data.js` 中对应的表（绘制补在 `heroSprites.js`/`mapRender.js`/`spellFx.js`） |
+| 新兵种/道具/难度 | `src/data.js` 中对应的表（绘制补在 `heroSprites.js`/`spellFx.js`）；新兵种系列要在 `terrain.js` 的 `RAW` 补地形规则 |
+| 地形规则 / 新地形 | `src/terrain.js`（`LIST` 与 `RAW` 按原版编号排列），绘制补在 `mapRender.drawDetail`，图例同步 `docs/STAGE_GUIDE.md` §4 |
 | 新策略 / 习得调整 | `src/spells.js` 的 `SPELLS` / `SPELL_LEARN`；新效果类型在 `logic.js` 的 `resolveSpell` / `applySpell` 与 `spellFx.js` 的 `hitFx` 中补充 |
 | 新异常 / 增减益 | `src/status.js`（`STATUS`、`tickStatus`、判定函数），图标在 `unitView.updateStatus` |
 | 新规则或公式 | `src/logic.js` 中导出的纯函数 |
