@@ -12,6 +12,7 @@ import { pickTalk, stageTalks } from '../camp/talks.js';
 import { GENERALS, isGeneral } from '../generals.js';
 import { planDeploy, initialDeploy } from '../deploy.js';
 import { issueKit } from '../equipment.js';
+import { recordTreasures } from '../legacy.js';
 import { openPrep } from '../prep.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { applyLoad, writeAuto } from '../saves.js';
@@ -252,6 +253,7 @@ export class CampScene extends Phaser.Scene {
       const lv = Math.max(c.lvl || 1, roster[c.id]?.lvl || 0);
       roster[c.id] = { ...roster[c.id], equip: issueKit(this.inventory, c.id, GENERALS[c.id].cls, lv) };
       changed = true;
+      recordTreasures(this.inventory.slice(n).map((it) => it.id));
     }
     if (changed) {
       reg.set('roster', { ...roster });

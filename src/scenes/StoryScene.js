@@ -8,9 +8,11 @@ import { isoToScreen } from '../story/defs.js';
 import { DEMO_SCENES } from '../story/demo.js';
 import { afterPre } from '../story/flow.js';
 import { playMusic } from '../audio/music.js';
+import { withNgPlus, grantNgPlus } from '../legacy.js';
 
 // 剧情场景：执行场景脚本（手写 scenes 或由 prologue / epilogue 自动生成），结束后按 flow.js 跳转。
-// data：{ stage, part: 'pre' | 'post' | 'preview', outcome?, annihilated?, onDone?（叠加在战场上播放时的回调）, script?, demo?, notice?, deploy?（营中选好的出阵武将，转交战场） }
+// data：{ stage, part: 'pre' | 'post' | 'preview', outcome?, annihilated?, onDone?（叠加在战场上播放时的回调）, script?, demo?, notice?, deploy?（营中选好的出阵武将，转交战场）,
+//   ngplus?（新游戏第一关开场：按结局记录 / 图鉴插入许劭的二周目选项，见 legacy.js） }
 // 两台相机：主相机渲染场景层（depth < 1000：背景、人物、地图标记、黑幕），可推近；界面相机渲染对白、标题、按钮。
 // 加速：按住鼠标 / Ctrl 时 5 倍速并自动推进对白，单击后短暂 3 倍速；“跳过演出”快速播完（选项仍需选择）。场景中不能存档。
 export class StoryScene extends Phaser.Scene {
@@ -55,6 +57,7 @@ export class StoryScene extends Phaser.Scene {
       // 生成脚本出错时不演出，直接按流程继续（叠加在战场上时，战场仍会恢复）
       console.error('剧情场景脚本生成出错', e);
     }
+    if (o.ngplus && o.part === 'pre') script = withNgPlus(script);
     if (o.notice) script = [{ narr: o.notice }, ...script];
     this.runner.run(script)
       .catch((e) => console.error('剧情演出出错', e))
@@ -94,6 +97,7 @@ export class StoryScene extends Phaser.Scene {
   applyChoice(c) {
     if (c.red) this.registry.set('red', (this.registry.get('red') || 0) + c.red);
     if (c.flag) this.registry.set('flags', { ...(this.registry.get('flags') || {}), [c.flag]: true });
+    if (c.ngplus) grantNgPlus(this.registry, c.ngplus);
   }
 
   // ---------- 加速 / 跳过 ----------
