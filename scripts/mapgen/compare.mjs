@@ -15,7 +15,8 @@ const { default: O } = await import(pathToFileURL(path.join(tmp, `src/stages/${g
 const { default: N } = await import(pathToFileURL(path.join(root, `src/stages/${group}.js`)).href);
 fs.rmSync(tmp, { recursive: true, force: true });
 
-const SKIP = ['x', 'y', 'turn', 'tiles'];
+// stage（战场演出）与 from（援军入场格）是演出字段，不影响剧情结构
+const SKIP = ['x', 'y', 'turn', 'tiles', 'stage', 'from'];
 const strip = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v, (k, x) => (SKIP.includes(k) ? undefined : x))));
 const KEYS = ['id', 'name', 'next', 'victoryText', 'victory', 'prologue', 'epilogue', 'epilogues', 'events', 'protect', 'victoryFlags'];
 let bad = 0;

@@ -92,7 +92,8 @@ async function battle(n) {
     const runEvent = s.runEvent.bind(s);
     s.runEvent = async (i, ev) => {
       const before = s.units.length;
-      const p = runEvent(i, ev);
+      // 援军走入、战场演出都是异步的：等事件执行完再统计
+      const p = await runEvent(i, ev);
       const spawned = s.units.slice(before);
       if (spawned.length) {
         const pl = side('player').filter((u) => u.alive);

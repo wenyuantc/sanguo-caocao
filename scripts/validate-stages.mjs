@@ -19,6 +19,9 @@ import { roleOf } from '../src/logic.js';
 import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
 import { EQUIP, REWARDS, DROPS, SHOP_UNLOCK, STARTER_TREASURES, ITEM_PRICE, gearDesc } from '../src/equipment.js';
 import { TABLE, STAGE_WEATHER, SET_WEATHER, stageWeather, validIdx } from '../src/weather.js';
+import { TERRAIN_PRESETS } from '../src/terrain.js';
+import { checkScript, POSES } from '../src/story/defs.js';
+import { autoScene } from '../src/story/auto.js';
 
 const errors = [], warns = [];
 const err = (s, m) => errors.push(`[${s.id}] ${m}`);
@@ -166,6 +169,68 @@ function checkStage(s, { debug = false } = {}) {
     }
   });
   dialogs.forEach(checkLines);
+  // 战场演出：事件的 stage 指令与援军入场格 from
+  const tileOk = (p) => Array.isArray(p) && p.length === 2 && !!terr(p[0], p[1]);
+  const unitOk = (id) => all.some((u) => u.id === id);
+  const targetOk = (t) => (typeof t === 'string' ? unitOk(t) : tileOk(t));
+  const BATTLE_POSES = ['jump', 'bow', 'shake', 'flash', 'spin'];
+  s.events.forEach((e, i) => {
+    const at = `事件 #${i} stage`;
+    for (const u of e.units || []) {
+      if (u.from != null && u.from !== false && !tileOk(u.from)) err(s, `事件 #${i} 援军 ${u.id} 的 from 不在地图内：${JSON.stringify(u.from)}`);
+    }
+    if (e.stage == null) return;
+    if (!Array.isArray(e.stage)) { err(s, `${at} 必须是指令数组`); return; }
+    e.stage.forEach((c, j) => {
+      const where = `${at}[${j}]`;
+      if (c.camera != null) { if (!targetOk(c.camera)) err(s, `${where} camera 目标无效：${JSON.stringify(c.camera)}`); }
+      else if (c.walk != null) {
+        if (!unitOk(c.walk)) err(s, `${where} walk 单位不存在：${c.walk}`);
+        if (!c.to && !c.path) err(s, `${where} walk 需要 to 或 path`);
+        if (c.to && !tileOk(c.to)) err(s, `${where} walk.to 不在地图内`);
+        if (c.path && !(Array.isArray(c.path) && c.path.every(tileOk))) err(s, `${where} walk.path 含地图外的格子`);
+      } else if (c.highlight != null) {
+        if (!Array.isArray(c.highlight) || !c.highlight.every(targetOk)) err(s, `${where} highlight 含无效格子或单位`);
+      } else if (c.terrain != null) {
+        for (const t of [c.terrain].flat()) {
+          if (!tileOk(t.at)) err(s, `${where} terrain.at 不在地图内：${JSON.stringify(t.at)}`);
+          if (!TERRAIN_PRESETS[t.set] && !TERRAIN[t.set]) err(s, `${where} terrain.set 无效：${t.set}（预设 ${Object.keys(TERRAIN_PRESETS).join('/')} 或地形字符）`);
+          if (t.size != null && ![1, 3].includes(t.size)) err(s, `${where} terrain.size 只能是 1 或 3`);
+        }
+      } else if (c.face != null) {
+        if (!unitOk(c.face)) err(s, `${where} face 单位不存在：${c.face}`);
+        if (!['left', 'right', 'up', 'down'].includes(c.dir) && !targetOk(c.dir)) err(s, `${where} face.dir 无效：${JSON.stringify(c.dir)}`);
+      } else if (c.act != null) {
+        if (!unitOk(c.act)) err(s, `${where} act 单位不存在：${c.act}`);
+        if (!BATTLE_POSES.includes(c.pose) && !POSES[c.pose]) err(s, `${where} act.pose 无效：${c.pose}`);
+      } else if (c.say != null) { if (Array.isArray(c.say)) checkLines(c.say); else err(s, `${where} say 必须是对白数组`); }
+      else if (c.wait != null) { if (typeof c.wait !== 'number' || c.wait < 0) err(s, `${where} wait 必须是非负毫秒数`); }
+      else if (c.spawn !== true) err(s, `${where} 未知指令：${JSON.stringify(c).slice(0, 60)}`);
+    });
+    if (e.stage.filter((c) => c.spawn === true).length > 1) err(s, `${at} 最多一条 spawn`);
+  });
+  // 剧情场景：手写 scenes.pre / scenes.post（post 可按结果分支）；没有手写的部分检查自动生成的场景
+  const known = (name) => !!CHARACTERS[name] || GENERIC.test(name);
+  const checkScene = (script, label) => {
+    for (const m of checkScript(script, { known })) {
+      if (m.includes('人物未登记')) warn(s, `${label} ${m}（将用默认外形）`);
+      else err(s, `${label} ${m}`);
+    }
+  };
+  const sc = s.scenes || {};
+  for (const k of Object.keys(sc)) if (!['pre', 'post'].includes(k)) err(s, `scenes 只能有 pre / post：${k}`);
+  if (sc.pre != null) checkScene(sc.pre, 'scenes.pre');
+  else checkScene(autoScene(s, 'pre'), '自动开场场景');
+  if (Array.isArray(sc.post)) checkScene(sc.post, 'scenes.post');
+  else if (sc.post && typeof sc.post === 'object') {
+    for (const [k, v] of Object.entries(sc.post)) {
+      if (!['default', 'annihilate', 'win', ...Object.keys(s.epilogues || {})].includes(k)) warn(s, `scenes.post 分支 ${k} 没有对应的结果`);
+      checkScene(v, `scenes.post.${k}`);
+    }
+  } else {
+    for (const outcome of ['win', ...Object.keys(s.epilogues || {}).filter((k) => k !== 'annihilate')]) checkScene(autoScene(s, 'post', { outcome }), `自动结尾场景(${outcome})`);
+    if (s.epilogues?.annihilate) checkScene(autoScene(s, 'post', { annihilated: true }), '自动结尾场景(annihilate)');
+  }
   // 可达性：从曹操出发（忽略单位）。首领按步行判断（任意我军可接近），到达目标按指定单位的移动方式判断
   const cc = player.find((u) => u.id === 'caocao');
   const flood = (start, cls) => {
