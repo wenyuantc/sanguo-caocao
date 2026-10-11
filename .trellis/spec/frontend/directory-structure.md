@@ -31,6 +31,7 @@ src/
 ├── generals.js         # 武将总表 GENERALS（默认兵种、bonus、阵亡/离队标记、joinAt），纯数据
 ├── deploy.js           # 出阵推导 planDeploy / buildPlayerDefs、商店货架 shopStock（纯函数，不依赖 Phaser）
 ├── saves.js            # localStorage 存档位/自动存档、导出导入、applyLoad
+├── legacy.js           # 二周目继承：结局记录与宝物图鉴（localStorage sanguo-legacy）、许劭的二周目选项脚本 / 结果写入
 ├── saveMenu.js         # 存档/读档弹窗 UI（openSaveMenu）
 ├── prep.js             # 整备弹窗 UI（openPrep）：阵容 / 装备 / 道具 / 商店四页
 ├── rewardPanel.js      # 过关战果弹窗（openRewards，返回 Promise）

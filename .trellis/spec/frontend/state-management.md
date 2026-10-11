@@ -62,6 +62,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 |------------------|------|
 | `sanguo-slots` | 100 个手动存档位的数组（`SLOT_COUNT`），`null` 表示空 |
 | `sanguo-save` | 单个自动存档：每关胜利后由 `victory()` 写入 `kind: 'camp'`（下一关、`talked: []`，读取回到营中；没有下一关时仍为 `'stage'`）；营门出征时由 `CampScene.depart` 覆盖为 `kind: 'stage'`（含营中选项后的状态与 `deploy`，读取播下一关开场） |
+| `sanguo-legacy` | 二周目继承（`legacy.js`）：`{ endings: { villain?, middle?, loyal? }, codex: [宝物id] }`，不随单个存档。结局在 `EndingScene` 记录（调试关卡不记）；中间路线 = 马超迎击战分路时 `routeOf(red) === 'middle'`（`victory` 写标记 `route_middle`，剧情走奸雄线，`goNext` 进结局时换成 `middle`）。图鉴在得到宝物时登记（`kitFor` / 营中补发初始装备、`dropLoot`、胜利奖励、读档时持有的宝物）。新游戏第一关开场 `goStage(..., { ngplus: true })`，`StoryScene` 按结局数 / 图鉴插入许劭的选项，`grantNgPlus` 写入 `roster.caocao`（升级）/ `gold` / `inventory`（全部宝物）。全部导出带 `legacy`，导入时合并（结局取或、图鉴取并集） |
 
 - 存档类型 `kind`：`'stage'`（关卡开头，营门出征时的自动存档；读取后先播开场场景，不经过营中，`deploy` 经 `BattleScene` → `StoryScene` 带进整备；旧存档没有 `deploy`，行为不变）、`'battle'`（战斗中）、`'camp'`（营中，见下）。
 
