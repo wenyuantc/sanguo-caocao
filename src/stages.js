@@ -5,6 +5,7 @@ import groupC from './stages/c.js';
 import groupD from './stages/d.js';
 import groupE from './stages/e.js';
 import groupF from './stages/f.js';
+import { DEBUG_STAGES } from './stages/debug.js';
 import { normalizeStage, FIRST_STAGE, ENDINGS, LEGACY, PLANNED_IDS } from './stageMeta.js';
 
 export { FIRST_STAGE, ENDINGS, PLANNED_IDS };
@@ -12,11 +13,13 @@ export { FIRST_STAGE, ENDINGS, PLANNED_IDS };
 export const STAGES = [...groupA, ...groupB, ...groupC, ...groupD, ...groupE, ...groupF].map(normalizeStage);
 
 const BY_ID = new Map(STAGES.map((s) => [s.id, s]));
+// 调试关卡（?stage=test_bigmap）：可以按 id 取到，但不在 STAGES 中
+const DEBUG = new Map(DEBUG_STAGES.map(normalizeStage).map((s) => [s.id, s]));
 
 
 export function getStage(id) {
   if (typeof id === 'number') id = LEGACY[id];
-  return BY_ID.get(id);
+  return BY_ID.get(id) || DEBUG.get(id);
 }
 
 // 红色指数：>= 3 忠臣线（黄），<= -3 奸雄线（橙），其余为中间路线（剧情同奸雄线）

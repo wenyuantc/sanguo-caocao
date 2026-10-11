@@ -1,21 +1,23 @@
 import * as Phaser from 'phaser';
-import { TILE, COLS, ROWS, MAP_X, MAP_Y, FONT, hiDpi } from '../config.js';
+import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, hiDpi } from '../config.js';
 import { getStage, resolveNext, FIRST_STAGE, ENDINGS, PLANNED_IDS } from '../stages.js';
-import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf } from '../data.js';
+import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf, passable } from '../data.js';
 import {
   createUnit, restoreUnit, promoteBlock, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt,
   physDamage, hitRate, spellDamage, spellHit, healAmount, spellBlock, spellTargetOk, spellVictims,
-  areaTiles, spellDrainMp, usableSpells, spellCost, counterOk, tickGear, spellUsable, gemSpells,
+  areaTiles, roleOf, spellDrainMp, usableSpells, spellCost, counterOk, tickGear, spellUsable, gemSpells,
 } from '../logic.js';
 import { WEATHERS, weatherOf, stepWeather, stageWeather, validIdx, weatherSpellIdx } from '../weather.js';
 import { WeatherFx } from '../weatherFx.js';
 import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, has } from '../status.js';
 import { drawMap } from '../mapRender.js';
+import { MapCamera } from '../mapCamera.js';
+import { Minimap } from '../minimap.js';
 import { UnitView } from '../unitView.js';
 import { Hud } from '../hud.js';
 import { DialogBox, button, wait, text, floatText } from '../ui.js';
 import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.js';
-import { writeAuto, applyLoad } from '../saves.js';
+import { writeAuto, applyLoad, restoreRegistry, stageStartSave } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { GENERALS, isGeneral } from '../generals.js';
 import { planDeploy, buildPlayerDefs } from '../deploy.js';
@@ -40,6 +42,25 @@ export class BattleScene extends Phaser.Scene {
     this.sel = null;
     this.menu = null;
     this.hoverKey = null;
+    this.mapReset = false;
+  }
+
+  // 地图版本不一致时，把 registry 恢复为本关开头的战役状态（道具、红色指数、剧情标记、成长、装备、金钱）：
+  // 1. 第一关：开头状态就是新游戏（同 TitleScene.newGame），按存档难度重建；
+  // 2. 其他关：用 stage 指向本关的自动存档（上一关胜利时写入，见 stageStartSave）。
+  // 3. 都没有时退回：沿用 applyLoad 已写入的战斗存档数据。已知限制：道具消耗、红色指数、剧情标记、
+  //    roster / 装备（整备后写入的值）停留在存档时刻，开场剧情选项可能再次累加红色指数。
+  restartFromStageStart(load, stage) {
+    const difficulty = load.difficulty || 'normal';
+    if (stage.id === FIRST_STAGE) {
+      restoreRegistry(this, {
+        difficulty, roster: {}, joined: [], items: { ...diffOf(difficulty).items }, red: 0, flags: {}, inventory: [], gold: 0,
+      });
+      return;
+    }
+    const start = stageStartSave(load, stage.id, (id) => getStage(id)?.id);
+    if (start) restoreRegistry(this, start);
+    else console.warn('地图版本不一致且没有本关开头的自动存档，沿用战斗存档中的战役状态', stage.id);
   }
 
   // 释放上一关生成的人物 / 头像贴图，避免连续游玩时内存持续增长（按需重新生成）
@@ -55,8 +76,18 @@ export class BattleScene extends Phaser.Scene {
     const stage = (this.stage = getStage(this.stageId) || getStage(FIRST_STAGE));
     this.stageId = stage.id;
     this.map = stage.map;
-    this.map.forEach((r, i) => r.length !== COLS && console.warn('地图行长度错误', i, r));
+    this.map.forEach((r, i) => r.length !== this.map[0].length && console.warn('地图行长度错误', i, r));
+    // 关卡地图已重做（mapVersion 不同）：战斗中存档的坐标失效，从本关开头重新开始
+    if (this.load && (this.load.mapVersion ?? 1) !== stage.mapVersion) {
+      this.restartFromStageStart(this.load, stage);
+      this.load = null;
+      this.mapReset = true;
+    }
     drawMap(this, this.map);
+    // 镜头：地图层随镜头滚动，界面层固定；弹窗、对话、指令菜单时禁止手动滚动
+    this.cam = new MapCamera(this, this.map, {
+      canScroll: () => !this.modal && !this.dialog?.root.visible && this.state !== 'menu',
+    });
     // 天气：类别取关卡设定，序号开局取起始值，读档取存档值（旧存档缺失时取起始值）
     const wt = stageWeather(stage);
     this.weatherType = wt.type;
@@ -106,16 +137,51 @@ export class BattleScene extends Phaser.Scene {
     this.hud.setRed(this.red);
     this.drawGoals();
     this.dialog.onChoice = (c) => this.applyChoice(c);
+    this.minimap = this.cam.scrollable ? new Minimap(this, this.map, this.cam) : null;
 
+    // 输入：左键在地图上按下 → 抬起时没有拖动才算点击（拖动用于滚动镜头）；右键立即取消
     this.input.mouse?.disableContextMenu();
-    this.input.on('pointermove', (p) => this.onHover(p));
-    this.input.on('pointerdown', (p) => this.onClick(p));
+    this.input.on('pointermove', (p) => { this.cam.move(p); this.onHover(p); });
+    this.input.on('pointerdown', (p) => {
+      if (p.rightButtonDown()) {
+        if (!this.dialog.root.visible && !this.modal && this.state !== 'busy' && !this.over) this.cancel();
+        return;
+      }
+      // 对白 / 弹窗显示时的按下不算地图点击（对白遮罩自身也会阻止冒泡）
+      if (this.dialog.root.visible || this.modal) { this.cam.drag = null; return; }
+      this.cam.press(p);
+    });
+    const up = (p) => { if (this.cam.release(p)) this.onClick(p); };
+    this.input.on('pointerup', up);
+    this.input.on('pointerupoutside', () => { this.cam.drag = null; });
     this.input.keyboard?.on('keydown-ESC', () => this.cancel());
+    // 开局 / 读档时镜头对准曹操（曹操不在场时对准第一个我军）
+    const lead = this.units.find((u) => u.alive && u.id === 'caocao') || this.units.find((u) => u.alive && u.faction === 'player');
+    if (lead) this.cam.centerTile(lead.x, lead.y, 0);
     this.start();
+  }
+
+  update() {
+    // 镜头移动后，鼠标下的格子变了：刷新光标与悬停信息
+    if (this.cam.moved) {
+      this.cam.moved = false;
+      const p = this.input.activePointer;
+      if (this.input.isOver && !this.cam.drag?.moved) this.onHover(p);
+    }
+    this.minimap?.update(this.units);
+  }
+
+  // 镜头跟随：把相关格子（单位或 {x, y}）移入视口，返回 Promise
+  follow(...tiles) {
+    return this.cam.follow(tiles.flat());
   }
 
   async start() {
     if (this.load) return this.resume();
+    if (this.mapReset) {
+      this.hud.log('关卡地图已更新，已从本关开头重新开始');
+      await this.dialog.show([{ who: '旁白', text: '关卡地图已更新，将从本关开头重新开始（等级、装备等成长数据保留）。' }]);
+    }
     await this.dialog.show(this.stage.prologue);
     await this.startPrep();
     await this.hud.banner(`${this.stage.chapter}　${this.stage.name}`);
@@ -199,6 +265,7 @@ export class BattleScene extends Phaser.Scene {
 
   // 光标移到单位并在右侧面板显示其信息
   focusUnit(u) {
+    this.cam.centerTile(u.x, u.y);
     this.setCursor(u.x, u.y);
     this.hud.showUnit(u, terrainAt(this.map, u.x, u.y));
     this.hoverKey = null;
@@ -220,6 +287,7 @@ export class BattleScene extends Phaser.Scene {
       kind: 'battle',
       difficulty: this.difficultyId,
       stage: this.stageId,
+      mapVersion: this.stage.mapVersion,
       red: this.red,
       flags: { ...this.flags },
       turn: this.turn,
@@ -254,9 +322,11 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  // 指针所在格子：按镜头换算；指针在小地图上时视为不在地图上
   tileAt(p) {
-    const x = Math.floor((p.worldX - MAP_X) / TILE), y = Math.floor((p.worldY - MAP_Y) / TILE);
-    return inMap(x, y) ? { x, y } : null;
+    const s = this.cam.screenOf(p);
+    if (this.minimap?.hit(s.x, s.y)) return null;
+    return this.cam.tileAt(p);
   }
 
   unitAt(x, y) {
@@ -287,6 +357,11 @@ export class BattleScene extends Phaser.Scene {
     if (faction === 'player' && this.turn > 1) await this.changeWeather(stepWeather(this.weatherIdx));
     const mine = this.units.filter((u) => u.alive && u.faction === faction);
     if (faction !== 'player' && !mine.length && faction === 'ally') return this.nextPhase();
+    // 我军阶段开始：曹操不在视口内时把镜头移过去
+    if (faction === 'player') {
+      const lord = mine.find((u) => u.id === 'caocao');
+      if (lord) await this.follow(lord);
+    }
     await this.hud.banner(`第${this.turn}回合　${{ player: '我军', ally: '友军', enemy: '敌军' }[faction]}阶段`,
       { player: '#9cc8ff', ally: '#9ce0a8', enemy: '#ff9a8a' }[faction]);
     await this.fireEvents(faction);
@@ -387,9 +462,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   spawn(defs = []) {
-    for (const d of defs) {
+    const out = [];
+    for (let d of defs) {
       if (!this.flagOk(d)) continue;
-      if (this.unitAt(d.x, d.y)) continue;
+      const at = this.spawnTile(d);
+      if (!at) continue;
+      if (at.x !== d.x || at.y !== d.y) d = { ...d, ...at };
       const mine = d.faction === 'player';
       const kit = mine ? this.kitFor(d.id, d.lvl) : undefined;
       const u = createUnit(d, mine ? (this.registry.get('roster') || {})[d.id] : null, this.difficulty, kit);
@@ -399,13 +477,31 @@ export class BattleScene extends Phaser.Scene {
       this.views.set(u, v);
       v.c.setAlpha(0);
       this.tweens.add({ targets: v.c, alpha: 1, duration: 400 });
+      out.push(u);
     }
+    return out;
+  }
+
+  // 援军落点：原定格子被占时，就近（曼哈顿距离 3 格内）找该兵种可站的空格；都没有则放弃该单位
+  spawnTile(d) {
+    const cls = roleOf(d).cls;
+    for (let r = 0; r <= 3; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (const dy of new Set([r - Math.abs(dx), Math.abs(dx) - r])) {
+          const x = d.x + dx, y = d.y + dy;
+          if (inMap(x, y, this.map) && passable(cls, this.map[y][x]) && !this.unitAt(x, y)) return { x, y };
+        }
+      }
+    }
+    return null;
   }
 
   async runEvent(i, ev) {
     this.firedEvents.add(i);
     if (ev.setFlag) this.setFlag(ev.setFlag);
-    this.spawn(ev.units);
+    // 援军登场：镜头移到新出现的单位
+    const spawned = this.spawn(ev.units);
+    if (spawned.length) await this.follow(spawned);
     for (const [id, ai] of Object.entries(ev.setAi || {})) {
       const u = this.units.find((o) => o.id === id && o.alive);
       if (u) u.ai = ai;
@@ -569,7 +665,7 @@ export class BattleScene extends Phaser.Scene {
     items[loot] = (items[loot] || 0) + 1;
     this.registry.set('items', items);
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
-    writeAuto({
+    if (!this.stage.debug) writeAuto({
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       inventory: this.inventory, gold: this.gold, summary: { lordLvl },
     });
@@ -588,7 +684,7 @@ export class BattleScene extends Phaser.Scene {
     this.clearSelection();
     this.hud.log(reason);
     await this.hud.banner('败　北', '#ff8a7a');
-    const cx = (COLS * TILE) / 2, cy = MAP_Y + 300;
+    const cx = VIEW_W / 2, cy = MAP_Y + 300;
     this.add.rectangle(0, 0, 2000, 2000, 0x000000, 0.55).setOrigin(0).setDepth(900).setInteractive();
     text(this, cx, cy - 70, reason, 26, '#f1e3c2', FONT).setOrigin(0.5).setDepth(901);
     button(this, cx - 170, cy, 150, 48, '重新挑战', () => this.scene.start('Battle', { stage: this.stageId })).setDepth(901);
@@ -613,7 +709,6 @@ export class BattleScene extends Phaser.Scene {
 
   onClick(p) {
     if (this.dialog.root.visible || this.modal || this.state === 'busy' || this.over) return;
-    if (p.rightButtonDown()) { this.cancel(); return; }
     const t = this.tileAt(p);
     if (!t) return;
     const u = this.unitAt(t.x, t.y);
@@ -667,18 +762,19 @@ export class BattleScene extends Phaser.Scene {
     const tiles = [...range.values()];
     this.paint(tiles, u.faction === 'enemy' ? 0xff5040 : 0x50d070, 0.3);
     const atk = new Map();
-    for (const t of tiles) for (const a of attackTiles(u, t.x, t.y)) if (!range.has(key(a.x, a.y))) atk.set(key(a.x, a.y), a);
+    for (const t of tiles) for (const a of attackTiles(this.map, u, t.x, t.y)) if (!range.has(key(a.x, a.y))) atk.set(key(a.x, a.y), a);
     this.paint([...atk.values()], 0xff2020, 0.15);
   }
 
   select(u) {
     this.clearSelection();
+    this.follow(u);
     const range = reachable(this.map, this.units, u);
     this.sel = { unit: u, origin: { x: u.x, y: u.y }, range };
     this.state = 'move';
     this.paint([...range.values()], 0x3a8cff, 0.4);
     const atk = new Map();
-    for (const t of range.values()) for (const a of attackTiles(u, t.x, t.y)) if (!range.has(key(a.x, a.y))) atk.set(key(a.x, a.y), a);
+    for (const t of range.values()) for (const a of attackTiles(this.map, u, t.x, t.y)) if (!range.has(key(a.x, a.y))) atk.set(key(a.x, a.y), a);
     this.paint([...atk.values()], 0xff3020, 0.18);
   }
 
@@ -701,10 +797,12 @@ export class BattleScene extends Phaser.Scene {
     this.closeMenu();
     const u = this.sel.unit;
     const w = 128, h = 34;
-    let x = MAP_X + (u.x + 1) * TILE + 6;
-    if (x + w > MAP_X + COLS * TILE) x = MAP_X + u.x * TILE - w - 6;
-    let y = MAP_Y + u.y * TILE - 10;
-    y = Phaser.Math.Clamp(y, MAP_Y + 4, MAP_Y + ROWS * TILE - entries.length * (h + 4) - 4);
+    // 菜单在界面层：按单位格子的屏幕位置摆放（菜单打开期间禁止滚动）
+    const at = this.cam.tileToScreen(u.x, u.y);
+    let x = at.x + TILE + 6;
+    if (x + w > MAP_X + VIEW_W) x = at.x - w - 6;
+    let y = at.y - 10;
+    y = Phaser.Math.Clamp(y, MAP_Y + 4, MAP_Y + VIEW_H - entries.length * (h + 4) - 4);
     this.menu = this.add.container(x, y).setDepth(600);
     // 第 5 项为说明：鼠标移到按钮上时显示在预测区
     entries.forEach(([label, fn, disabled, icon, hint], i) => {
@@ -728,7 +826,7 @@ export class BattleScene extends Phaser.Scene {
     this.hl.clear();
     this.setCursor(u.x, u.y);
     this.hud.forecast('');
-    const foes = attackTiles(u).some((t) => { const o = this.unitAt(t.x, t.y); return o && isFoe(o, u); });
+    const foes = attackTiles(this.map, u).some((t) => { const o = this.unitAt(t.x, t.y); return o && isFoe(o, u); });
     const spells = this.menuSpells(u);
     const hasItem = Object.entries(this.items).some(([id, n]) => n > 0 && !ITEMS[id]?.fruit);
     const silent = has(u, 'silence') ? `${u.name}处于禁咒状态，无法使用策略` : '';
@@ -765,7 +863,7 @@ export class BattleScene extends Phaser.Scene {
 
   // 道具目标格：自身与上下左右
   itemTiles(u) {
-    return [{ x: u.x, y: u.y }, ...RANGES.cross.map(([dx, dy]) => ({ x: u.x + dx, y: u.y + dy })).filter((p) => inMap(p.x, p.y))];
+    return [{ x: u.x, y: u.y }, ...RANGES.cross.map(([dx, dy]) => ({ x: u.x + dx, y: u.y + dy })).filter((p) => inMap(p.x, p.y, this.map))];
   }
 
   itemMenu() {
@@ -789,8 +887,8 @@ export class BattleScene extends Phaser.Scene {
     const u = this.sel.unit;
     this.closeMenu();
     let tiles;
-    if (kind === 'attack') tiles = attackTiles(u);
-    else if (kind === 'spell') tiles = spellTiles(u, id);
+    if (kind === 'attack') tiles = attackTiles(this.map, u);
+    else if (kind === 'spell') tiles = spellTiles(this.map, u, id);
     else tiles = this.itemTiles(u);
     this.sel.action = { kind, id };
     this.sel.targets = tiles;

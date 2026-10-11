@@ -2,20 +2,8 @@ import { SPELLS, SPELL_LEARN, ELEMS } from './spells.js';
 
 export { SPELLS, SPELL_LEARN, ELEMS };
 
-// 地形：cost[移动类型]，def 防御加成，heal 回合开始回复比例
-export const TERRAIN = {
-  '.': { name: '平原', color: 0x9db86a, cost: { foot: 1, horse: 1 }, def: 0, heal: 0 },
-  ',': { name: '草原', color: 0x7fa653, cost: { foot: 1, horse: 1 }, def: 0.05, heal: 0 },
-  F: { name: '森林', color: 0x4c7a3a, cost: { foot: 2, horse: 3 }, def: 0.2, heal: 0, fire: 1.3 },
-  M: { name: '山地', color: 0x8a7350, cost: { foot: 3, horse: 99 }, def: 0.3, heal: 0 },
-  V: { name: '村庄', color: 0xb59a6a, cost: { foot: 1, horse: 1 }, def: 0.1, heal: 0.15 },
-  W: { name: '河流', color: 0x3f7fb5, cost: { foot: 99, horse: 99 }, def: 0, heal: 0 },
-  B: { name: '桥梁', color: 0x9a7448, cost: { foot: 1, horse: 1 }, def: 0, heal: 0 },
-  C: { name: '城墙', color: 0x6d6a66, cost: { foot: 99, horse: 99 }, def: 0, heal: 0 },
-  G: { name: '城池', color: 0xa89a82, cost: { foot: 1, horse: 1 }, def: 0.3, heal: 0.2 },
-  S: { name: '战船', color: 0x7a5432, cost: { foot: 1, horse: 2 }, def: 0.1, heal: 0, fire: 1.6 },
-  T: { name: '营寨', color: 0xa08458, cost: { foot: 1, horse: 1 }, def: 0.2, heal: 0.1, fire: 1.2 },
-};
+// 地形（30 种）与按兵种系列的移动消耗 / 能力修正：见 terrain.js
+export { TERRAIN, TERRAIN_RULES, TERRAIN_CHARS, IMPASSABLE, terrainRule, moveCost, passable, terrainDef } from './terrain.js';
 
 // 攻击范围（原版代码，见 research class-tiers §4）：[dx, dy] 偏移
 const ring = (lo, hi) => {

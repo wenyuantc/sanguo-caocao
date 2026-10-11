@@ -1,5 +1,5 @@
 import { PANEL_X, WIDTH, HEIGHT, MAP_Y, COLORS, FONT, FACTION_NAME } from './config.js';
-import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
+import { classOf, ITEMS, STAT5, STAT_NAME, ELEMS, terrainRule } from './data.js';
 import { GUARD_TAKEN, GUARD_SPELL_TAKEN, effMove } from './logic.js';
 import { effStats, statusList } from './status.js';
 import { panel, text, portrait, button } from './ui.js';
@@ -140,7 +140,7 @@ export class Hud {
       items.push(text(s, x, y, k, 15, '#e9c46a', FONT), text(s, x + 38, y, String(v), 15, col(v, base)));
     });
     items.push(text(s, 0, 184, '地形', 15, '#e9c46a', FONT),
-      text(s, 38, 184, terrain ? `${terrain.name} ${Math.round(terrain.def * 100)}%` : '-', 15, '#f6ecd2'));
+      text(s, 38, 184, terrain ? `${terrain.name}　能力 ${terrainRule(u.cls, terrain.ch).pct}%${terrain.heal ? `　回复 ${Math.round(terrain.heal * 100)}%` : ''}` : '-', 15, '#f6ecd2'));
     const status = u.faction === 'player' ? (u.acted ? '已行动' : '待命中') : u.ai === 'aggressive' ? '进攻' : '固守';
     items.push(text(s, 0, 204, `状态：${status}${u.guard ? `　主将·受物理伤害 −${Math.round((1 - GUARD_TAKEN) * 100)}%，策略 −${Math.round((1 - GUARD_SPELL_TAKEN) * 100)}%` : ''}`, 14, '#bfae88'));
     // 异常与增减益（含剩余回合）
@@ -154,15 +154,22 @@ export class Hud {
     this.info.add(items);
   }
 
+  // 地形情报：代表兵种的能力修正 / 移动消耗、回复、可用的攻击策略属性（原版 research maps.md §5~§7）
   showTerrain(t) {
     const s = this.scene;
-    const heal = t.heal ? `　回复 ${Math.round(t.heal * 100)}%` : '';
-    const cost = t.cost.foot >= 99 ? '不可通行' : `步行 ${t.cost.foot}　骑马 ${t.cost.horse >= 99 ? '×' : t.cost.horse}`;
+    const heal = t.heal ? `每回合回复兵力 ${Math.round(t.heal * 100)}%` : '无回复';
+    const rule = (cls, name) => {
+      const r = terrainRule(cls, t.ch);
+      return `${name} ${r.cost >= 99 ? '×' : `${r.pct}%·${r.cost}`}`;
+    };
+    const blocked = ['infantry', 'cavalry', 'pirate'].every((c) => terrainRule(c, t.ch).cost >= 99);
+    const elems = Object.entries({ fire: 'f', water: 'w', wind: 'n', earth: 'e' }).filter(([, c]) => t.elems.includes(c)).map(([k]) => ELEMS[k].name);
     this.info.add([
       text(s, 0, 0, t.name, 26, '#fff2cc', FONT),
-      text(s, 0, 40, `防御加成 ${Math.round(t.def * 100)}%${heal}`, 15, '#f1e3c2'),
-      text(s, 0, 64, `移动消耗：${cost}`, 15, '#f1e3c2'),
-      text(s, 0, 100, `本关天气：${this.weatherKinds || '-'}`, 15, '#bfae88'),
+      text(s, 0, 40, blocked ? '不可通行' : `${rule('infantry', '步兵')}　${rule('cavalry', '骑兵')}　${rule('archer', '弓兵')}`, 15, '#f1e3c2'),
+      text(s, 0, 62, blocked ? '' : `（能力修正·移动消耗）　${heal}`, 14, '#cdbd98'),
+      text(s, 0, 86, `攻击策略：${elems.length ? `${elems.join('、')}系可用` : '四系均不可用'}`, 15, '#f1e3c2'),
+      text(s, 0, 116, `本关天气：${this.weatherKinds || '-'}`, 15, '#bfae88'),
     ]);
   }
 

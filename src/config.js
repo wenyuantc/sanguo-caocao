@@ -1,13 +1,16 @@
 import { loadSettings, resolveRes } from './settings.js';
 
 export const TILE = 48;
-export const COLS = 18;
-export const ROWS = 13;
+// 地图视口：屏幕上的地图区固定为 18 × 13 格；地图实际尺寸由关卡数据决定（map[0].length × map.length），超出部分滚动查看
+export const VIEW_COLS = 18;
+export const VIEW_ROWS = 13;
 export const MAP_X = 0;
 export const MAP_Y = 40;
-export const PANEL_X = COLS * TILE;
+export const VIEW_W = VIEW_COLS * TILE;
+export const VIEW_H = VIEW_ROWS * TILE;
+export const PANEL_X = VIEW_W;
 export const WIDTH = 1200;
-export const HEIGHT = MAP_Y + ROWS * TILE + 8;
+export const HEIGHT = MAP_Y + VIEW_H + 8;
 export const FONT = '"STKaiti","KaiTi","Kaiti SC","PingFang SC","Microsoft YaHei",serif';
 export const UI_FONT = '"PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
 

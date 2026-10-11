@@ -41,7 +41,7 @@ export async function playDuel(s, ua, ub, ev) {
     const clang = text(s, WIDTH / 2, cy - 110, strong ? '斩！' : '铛！', strong ? 40 : 30, strong ? '#ff7a5a' : '#ffffff', FONT)
       .setOrigin(0.5).setStroke('#000', 6).setDepth(952);
     s.tweens.add({ targets: clang, y: clang.y - 20, alpha: 0, delay: 200, duration: 400, onComplete: () => clang.destroy() });
-    s.cameras.main.shake(strong ? 300 : 150, strong ? 0.012 : 0.006);
+    (s.cam?.ui || s.cameras.main).shake(strong ? 300 : 150, strong ? 0.012 : 0.006); // 单挑在界面层
     await Promise.all([
       tween(s, { targets: pa, x: WIDTH / 2 - 230, duration: 220, ease: 'Quad.easeOut' }),
       tween(s, { targets: pb, x: WIDTH / 2 + 230, duration: 220, ease: 'Quad.easeOut' }),
