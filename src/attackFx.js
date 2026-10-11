@@ -3,6 +3,7 @@ import { weaponOf, mountedOf } from './heroSprites.js';
 import { text } from './ui.js';
 import { FONT } from './config.js';
 import { viewRect } from './mapCamera.js';
+import { sfx } from './audio/sfx.js';
 
 // 每种兵器不同的攻击动画。onImpact 在命中瞬间调用（结算伤害 / 飘字）
 const D = 720; // 特效层级
@@ -242,11 +243,15 @@ export async function playAttack(s, attacker, defender, r, onImpact) {
   const g = geo(attacker, defender);
   va.face(defender);
   vd.face(attacker);
-  if (r.crit) await critCutIn(s, attacker);
+  if (r.crit) {
+    sfx('crit');
+    await critCutIn(s, attacker);
+  }
   let done = false;
   const hit = () => {
     if (done) return;
     done = true;
+    sfx(r.hit ? 'hit' : 'miss', { weapon, crit: r.crit });
     if (r.hit) {
       if (!['bow', 'staff'].includes(weapon)) sparks(s, g.B.x, g.B.y, r.crit ? 0xffe05a : 0xffffff, r.crit ? 10 : 6, r.crit ? 30 : 20);
       vd.flashHit();
@@ -258,6 +263,7 @@ export async function playAttack(s, attacker, defender, r, onImpact) {
     onImpact();
   };
   const weapon = weaponOf(attacker);
+  sfx('attack', { weapon });
   await (STYLES[weapon] || STYLES.sword)(s, va, g, hit, r.crit, !r.hit);
   hit();
   va.snap();

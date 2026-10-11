@@ -9,9 +9,12 @@ import { openSettingsMenu } from '../settingsMenu.js';
 import { goStage, goCamp } from '../story/flow.js';
 import { planDeploy } from '../deploy.js';
 import { DEMO_SCENES } from '../story/demo.js';
+import { engine } from '../audio/engine.js';
 
 // 调试入口只在页面加载后第一次进入标题时生效（返回标题后正常显示）
 let debugEntered = false;
+// 首次进入标题时提示“点击开始”：浏览器要求用户操作后才能出声，借这次点击解锁音频
+let started = false;
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -83,7 +86,30 @@ export class TitleScene extends Phaser.Scene {
     title.setShadow(4, 4, '#000', 8, true, true);
     this.tweens.add({ targets: title, scale: { from: 0.96, to: 1.02 }, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.easeInOut' });
     text(this, WIDTH / 2, 310, '— Phaser 4 战棋复刻版 —', 20, '#f1e3c2', FONT).setOrigin(0.5);
+    if (started || engine.unlocked) this.showMenu();
+    else this.pressStart();
+  }
 
+  // 点击开始：首次点击 / 按键后解锁音频，再显示菜单
+  pressStart() {
+    const hint = text(this, WIDTH / 2, 470, '— 点 击 开 始 —', 28, '#ffe08a', FONT).setOrigin(0.5).setStroke('#2a1200', 6);
+    this.tweens.add({ targets: hint, alpha: 0.25, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    const go = () => {
+      if (started) return;
+      started = true;
+      engine.unlock();
+      this.input.off('pointerdown', go);
+      this.input.keyboard?.off('keydown', go);
+      hint.destroy();
+      // 延后一帧显示菜单，避免这次点击落到新出现的按钮上
+      this.time.delayedCall(0, () => this.showMenu());
+    };
+    this.input.on('pointerdown', go);
+    this.input.keyboard?.on('keydown', go);
+    this.events.once('shutdown', () => { this.input.off('pointerdown', go); this.input.keyboard?.off('keydown', go); });
+  }
+
+  showMenu() {
     button(this, WIDTH / 2 - 110, 380, 220, 52, '新 的 征 程', () => this.chooseDifficulty(), 24);
     button(this, WIDTH / 2 - 110, 446, 220, 52, '读 取 进 度', () => {
       openSaveMenu(this, { mode: 'load', onLoad: (data) => applyLoad(this, data) });

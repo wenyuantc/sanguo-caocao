@@ -5,6 +5,7 @@ import { FONT } from './config.js';
 import { viewRect } from './mapCamera.js';
 import { ITEMS, SPELLS, TERRAIN } from './data.js';
 import { EQUIP, KINDS } from './equipment.js';
+import { sfx, spellSchool } from './audio/sfx.js';
 
 // 策略 / 道具特效：先生成高清特效贴图，再用补间组合
 const D = 720;
@@ -289,6 +290,7 @@ export async function castFx(s, caster, spellId, target) {
   // 法阵颜色按策略的主色（元素 / 类别）
   const sp = SPELLS[spellId];
   const st = { color: sp.color, css: css(sp.color), name: sp.name };
+  sfx('cast');
   const v = s.views.get(caster);
   if (target && target !== caster) v.face(target);
   const p = tileCenter(caster.x, caster.y);
@@ -413,6 +415,7 @@ export async function spellFx(s, res) {
   const sp = SPELLS[res.spellId];
   const from = tileCenter(res.caster.x, res.caster.y);
   if (sp.special === 'thunder') return thunder(s, res);
+  sfx('spell', { school: spellSchool(sp) });
   const spots = res.effects.length ? res.effects : [{ u: res.center, hit: true }];
   if (sp.area === 'map' && sp.target === 'foe') await sandstorm(s);
   if (sp.special === 'zhuque') await firebird(s, from, tileCenter(res.center.x, res.center.y));
@@ -447,6 +450,7 @@ async function thunder(s, res) {
   await delay(s, 300);
   for (const st of res.strikes) {
     const p = tileCenter(st.u.x, st.u.y);
+    sfx('spell', { school: 'thunder' });
     await bolt(s, p, 0x9ad8ff);
     if (!st.hit) failPuff(s, p);
     await delay(s, 60);
@@ -837,6 +841,7 @@ export async function itemFx(s, user, itemId, target) {
   }
   await delay(s, 420);
   // 回复
+  sfx('spell', { school: 'heal' });
   itemAura(s, b, itemId, st.color);
   await heal(s, b, st.color, true);
   vu.faceDefault();
@@ -847,6 +852,7 @@ export async function deathFx(s, v) {
   ensureTextures(s);
   const u = v.unit;
   const p = tileCenter(u.x, u.y);
+  sfx('retreat', { leader: !!u.leader });
   v.idle?.stop();
   v.hpTween?.stop();
   v.body.setPosition(0, 0);
@@ -901,6 +907,7 @@ export async function lootFx(s, x, y, id, label) {
   const p = tileCenter(x, y);
   const glow = img(s, 'fx-glow', p.x, p.y - 10, 1.2, D + 3).setTint(0xffd36a).setBlendMode(ADD).setAlpha(0);
   const icon = img(s, gearIcon(id), p.x, p.y, 0.6, D + 5);
+  sfx('treasure');
   s.tweens.add({ targets: glow, alpha: 0.9, scale: 2.4 / R, duration: 300, yoyo: true, hold: 300 });
   await tween(s, { targets: icon, y: p.y - 34, scale: 1.6 / R, duration: 380, ease: 'Back.easeOut' });
   for (let i = 0; i < 10; i++) {
@@ -922,6 +929,7 @@ export async function promoteFx(s, unit, title, onChange) {
   ensureTextures(s);
   const p = tileCenter(unit.x, unit.y);
   const v = s.views.get(unit);
+  sfx('promote');
   const done = heal(s, p, 0xffd36a);
   for (let i = 0; i < 14; i++) {
     const a = (Math.PI * 2 * i) / 14;
