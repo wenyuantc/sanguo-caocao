@@ -129,7 +129,7 @@ return key;
 
 - 设置在 `src/settings.js`（localStorage `sanguo-settings`，损坏回退默认），启动时由 `config.js` 读出
   `SETTINGS` / `RES`，`main.js` 据此设置 `antialias`、`fps.limit` 与帧率角标。设置面板 `settingsMenu.js`
-  只在标题页打开，保存后 `location.reload()` 生效（全屏立即生效）。
+  的渲染类设置（`RENDER_KEYS`）只在标题页修改，保存后 `location.reload()` 生效（全屏立即生效）；音量类设置即时生效，战斗中可打开只含音量行的面板（见「音频」）。
 - 画质“低”时 `UnitView.idle` 不创建，引用一律写 `v.idle?.…`。
 - 帧率上限默认 0（跟随屏幕）：Phaser 的限帧器在 60Hz 屏幕上设 60 会因 rAF 计时抖动丢帧。
 - `pointermove` 处理中不要无条件重建含 Text / 头像的面板：`BattleScene.onHover` 按“格子 + state”去重
@@ -166,6 +166,28 @@ if (killed) await killUnit(s, d);
 - 援军 `spawn` 是 async：`entryRoute` 给出从地图边缘（或 `def.from`）到落点的 BFS 路线（兵种可通行、不穿过敌对单位），起点在边缘时补一格地图外的虚拟起点；
   默认路线超过 `MAX_WALK`（6）格、走不通或 `from: false` / `enter: 'fade'` 时原地淡入。全部到位后才返回，读档不重放。
 - 地形变化 `changeTerrain`：`terrainCells` 解析范围（`size: 3` 为 3×3，按预设 / `from` 过滤，跳过有单位且新地形对其不可通行的格），`patchMap` 改地图并记 `mapPatches`，再重烘分块与小地图。
+
+## 音频（`src/audio/`）
+
+- 全部声音由 Web Audio 实时合成，没有音频文件；Phaser 自带的声音系统已关闭（`main.js` 的 `audio: { noAudio: true }`）。
+- `engine.js`：单例 `engine`（`AudioContext`、`master` → 压限 → 输出，`musicBus` / `sfxBus` 两个总线各有一路发送到程序生成脉冲响应的混响）。
+  `main.js` 启动时 `initAudio(SETTINGS)`：设置音量、在 window 上注册 pointerdown / keydown 解锁（上下文真正 running 后才移除监听：ESC 等按键不算浏览器认可的用户操作）、`visibilitychange` 时 suspend / resume。
+  `engine.ready`（已解锁且上下文在运行）为假时一切播放调用都是静默的无操作，调用方不需要判断。
+- `instruments.js`：音色函数统一签名 `play<音色>(dest, time, note, dur, vel = 0.8, opts = {})`（`dest` 为 `'music'` / `'sfx'` / AudioNode，`note` ≤ 127 为 MIDI 号、否则为 Hz，返回发声结束时间），
+  配乐的音序器直接调用。拨弦（古筝 / 琵琶）用 Karplus-Strong 预先算成缓冲并缓存。
+- 新建的节点一律经 `engine.track(nodes, sources)` 登记：全部声源 `onended` 后断开节点、扣减 `engine.activeNodes`（`window.__audioStats.activeNodes`，回归时检查回落到 0）。
+  不要自己给声源赋 `onended`（会覆盖登记）；每个声源都必须 `stop()`，否则节点永远不释放。
+- 音效：`sfx(name, opts)`（`sfx.js` 的 `SOUNDS` 表）。接入点只加一行 `sfx(...)`，不 await、不改变动画时序；音效内部的出声延迟按动画出手时刻写在音效定义里。
+  同时发声最多 8 个声部（满员淡出最早的，`step` 脚步满员时直接忽略），同名同参数 40ms 内只播一次。
+  兵器取 `weaponOf(unit)`（13 种），策略系别用 `spellSchool(sp)`，脚步类型用 `stepKind(lookOf(unit))`。
+- 现有接入点：`ui.button`（标签去掉空格后以 返回 / 取消 / 关闭 / 放弃 开头为 `cancel`，否则 `confirm`）、设置面板选项（`select`）、战场选中 / 查看单位（`select`）与取消（`cancel`）、
+  `UnitView.moveAlong` 每步 `step`、`playAttack`（`crit` 切入、`attack` 挥动、命中 / 闪避 `hit` / `miss`）、`castFx`（`cast`）、`spellFx`（`spell`，青龙每道雷一次）、
+  `itemFx` 回复（`spell` heal）、`gainExp` 升级（`levelup`）、`promoteFx`（`promote`）、`lootFx`（`treasure`）、`openRewards`（`treasure` / `item`）、`deathFx`（`retreat`）、
+  `BattleScene.changeWeather`（`weather`）、`startPhase` 横幅前（`turn`）。
+- 调试：`__audioTest(name)` 试听音色（不传参依次试听全部）、`__sfxTest(name, opts)` 触发音效。
+- 音量设置（`music` / `sfx` 0–100、`mute`）在 `settings.js`，设置面板改动即时 `engine.setVolumes` 并保存，不重载页面；只有 `RENDER_KEYS` 改动才重载。
+  战斗中由右侧面板“设置”按钮打开 `openSettingsMenu(scene, { audioOnly: true, onClose })`（期间 `modal = true`）。
+- 标题页首次进入时显示“点击开始”，首次点击 / 按键解锁音频后才显示菜单（调试入口 `?stage` 等跳过标题，由 window 级监听在第一次操作时解锁）。
 
 ## 反模式
 
