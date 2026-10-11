@@ -45,8 +45,10 @@ export default [
 | `deploy`（可选） | `planDeploy`：`{ max?, required?, slots? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式 |
 | `victory[]` | `checkEnd`（`boss`/`all`/`reach`）、`nextPhase`（`survive`）、`drawGoals`（`reach` 目标格） |
 | `protect`、`escape`、`victoryFlags` | `checkEnd`、`tryEscape`、`victory()` |
-| `events[]` | 援军落点被占时 `spawnTile` 在曼哈顿 3 格内找该兵种可站的空格，都没有才放弃该单位；`fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
-| `prologue` / `epilogue` / `epilogues{annihilate,retreat,win,…}` | `DialogBox.show`；结尾对白选择顺序：`annihilate`（敌军全灭时）→ `epilogues[outcome]` → `epilogue` |
+| `events[]` | 援军默认从最近地图边缘走入（6 格内，更远淡入）；落点被占时 `spawnTile` 在曼哈顿 3 格内找该兵种可站的空格，都没有才放弃该单位；`fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
+| `prologue` / `epilogue` / `epilogues{annihilate,retreat,win,…}` | 在剧情场景中演出（`story/auto.js` 的 `autoScene` 生成脚本）；结尾对白选择顺序（`postLines`）：`annihilate`（敌军全灭时）→ `epilogues[outcome]` → `epilogue` |
+| `scenes`（可选）`{ pre?, post? }` | `sceneFor`：手写脚本优先于自动生成；`post` 可为数组或与 `epilogues` 同名的分支对象（加 `default`）。手写时原对白（含 `choices` / `red` / `setFlag`）须原样放进 `say`，prologue / epilogue 字段保留。指令见 `docs/STAGE_GUIDE.md` §8.5 |
+| `events[].stage`、`units[].from` | `battleStage.js`：战场演出指令与援军入场格（见 §8）；地形变化写入战斗存档 `mapPatches` |
 | `next` | `stages.js` 中的 `resolveNext(stage, outcome, annihilated, red)` |
 | `victoryText`、`defeatText`、`turns` | `Hud` 右侧面板 / 顶栏 |
 

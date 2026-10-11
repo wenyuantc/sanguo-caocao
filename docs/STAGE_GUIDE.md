@@ -155,6 +155,30 @@ export default [{
 - 回合事件：`{ turn: 4, faction: 'enemy', units: [E(...)], setAi: { lvbu: 'aggressive' }, dialog: [...], setFlag? }`（援军、伏兵、首领出击）
 - 撤退事件：`{ onDeath: 'dianwei', dialog: [...], setFlag: 'dianwei_dead', units?, setAi? }`
 - 单挑：`{ duel: { a: 'guanyu', b: 'huaxiong', winner: 'a', result: 'kill'|'hurt'|'draw' }, dialog: [单挑前对白], after: [单挑后对白] }` —— a 与 b 首次交手时触发过场，结算后败者撤退或重伤。若败者是 boss 目标会直接判胜。原版有的单挑（关羽vs华雄/颜良/文丑、许褚vs马超 等）请还原。
+- 援军登场默认从最近的地图边缘走入（6 格以内；更远的伏兵原地淡入）。单位可加 `from: [x, y]` 指定起点格（通常在地图边缘，不限距离），`from: false` 强制淡入。
+- 战场演出（可选）`stage: [指令]`：执行顺序 setFlag → stage → 援军登场 → setAi → dialog；stage 中写 `{ spawn: true }` 可把援军登场提前到该位置。每条指令都可带 `ifFlag` / `unlessFlag`（按剧情标记跳过，与剧情场景一致）。指令：
+  - `{ camera: [x, y] | '单位id' }` 镜头移到该格；`{ highlight: [[x, y] | '单位id', ...] }` 闪烁高亮；`{ wait: 毫秒 }`；`{ say: [对白] }`
+  - `{ walk: '单位id', to: [x, y] }`（自动找路）或 `path: [[x, y], ...]`（途经点，相邻两点先横后竖）；终点必须是空格
+  - `{ face: '单位id', dir: 'left'|'right'|'up'|'down'|[x, y]|'单位id' }`；`{ act: '单位id', pose: 'jump'|'bow'|'shake'|'flash'|'spin' }`
+  - `{ terrain: { at: [x, y], set, size?: 1|3, from? } }`（可为数组：数组中的各条一起演出——一次镜头、一次闪光、一条日志）：`set` 为预设 `open`（城门 E → 城内 +）、`close`（+ → E）、`fire`（可燃地形 → 火 !）、`douse`（! → 平原）、`ship`（大河 / 小河 / 浅滩 / 池塘 → 船 S），或任意地形字符；`size: 3` 改以 at 为中心的 3×3，只改写 `from`（预设自带）中的地形，有单位且新地形对其不可通行的格子跳过。变化写入战斗中存档（`mapPatches`）。
+
+## 8.5 剧情场景 scenes（关与关之间的演出）
+- 每关的开场 / 结尾都在剧情场景（`StoryScene`）中演出：没有手写时由 `prologue` / `epilogue(s)` 自动生成（`src/story/auto.js`）；手写 `scenes: { pre?: [指令], post?: [指令] | { default, win, retreat, annihilate, ... } }` 优先，`post` 的分支键与 `epilogues` 相同。
+- 手写场景**取代**对应的 prologue / epilogue 演出，但 prologue / epilogue 仍要保留（作为数据来源与回退）；手写时把原有对白（含 `choices`、`red`、`setFlag`）原样放进 `say`，**选项与红色指数不能丢**，可以拆成多段穿插走位和动作。
+- 坐标：站位用等角格 `[a, b]`，地板为 0~20 的菱形（`a` 向右下、`b` 向左下），允许 −6~26（场外入场 / 离场）；屏幕位置 x = 600 + (a − b) × 28，y = 150 + (a + b) × 14。
+- 指令（每条可带 `ifFlag` / `unlessFlag`）：
+  - `{ bg: 名称, place?, time?: 'day'|'dusk'|'night', view?, keep?, fade? }`：背景。外场景 `field 野外`、`citygate 城下`、`river 河畔`、`mountain 山路`；内场景（等角）`palace 宫殿`、`tent 军营大帐`、`hall 公馆 / 相府`、`street 城内街道`、`camp 军营`；`china 中国地图`（`view`: `all / north / central / south / west / zhongyuan`；`zhongyuan` 为中原近景（约 3 倍，洛阳—官渡—白马一带），汜水关、虎牢关、荥阳、陈留、官渡、白马、延津、黎阳等相邻城市同时出场时用它）。`keep: true` 保留人物。
+  - `{ chapter: 章名, sub?, ms? }`、`{ place: 地点名 }`；
+  - `{ actor: 人物名, id?, at: [a, b], face?, side?, cls?, pose?, fade? }` 出场（同名多人用 `id` 区分，之后的指令引用 `id`）；`{ exit: 人物, to?, wait?, speed?, line? }` 离场；
+  - `{ move: 人物, to: [a, b], wait?: false, speed?, face?, line? }`（`wait: false` 与后续移动同时进行，用 `{ join: true }` 等全部走完）。默认沿格子先走 `a` 再走 `b`（折线）；`line: true` 直线走过去（`a`、`b` 同时变化时，例如屏幕上竖直 / 水平移动，避免走成 L 形或穿过旁人）；
+  - 说话人提示：对白开始时说话人轻跳一下。按对白行的 `actor`（出场时的 `id`）→ `who` 作为出场 id → 第一个名字等于 `who` 的人物依次匹配；同名多人时在对白行写 `actor: 'id'` 指定；
+  - `{ face: 人物, dir }`：`dr` 正面右下、`dl` 正面左下、`ur` 背面右上、`ul` 背面左上（`right / left / down / up` 为别名）；
+  - `{ act: 人物, pose, ms? }`：`stand walk bow raise raise1 reach sit kneel cry sitcry fall swing bound excite`（`sitcry` 跪坐哭泣；`ms` 为动作后的等待）；
+  - `{ emote: 人物, icon, hold?, ms? }`：`shock anger joy sweat question dots`；`hold` 为气泡显示时长（默认 2500 毫秒），`ms` 为指令后的等待（默认 380）；
+  - `{ say: [对白行...] }`（现有格式，含 `choices`）、`{ narr: 旁白 }`、`{ wait: 毫秒 }`、`{ fade: 'in'|'out', ms?, color? }`（`color` 只对这一轮转场生效，完全淡入后恢复黑色）、`{ camera: [a, b] | 'reset', zoom?, ms? }`、`{ shake: 毫秒 }`、`{ clear: true }`；
+  - 中国地图：`{ map: { show: 人物, at: 城市名或[x,y], side? } | { move: 人物, to } | { hide: 人物 } | { text, at } }`、`{ arrow: [城市名或[x,y], ...], side?, color?, ms? }`（城市表见 `src/story/defs.js` 的 `CITIES`）。头像与已有头像、城市名或地图文字重叠时（show 与 move 都会），圆点留在城市上，头像按周围空位错开到上下左右或四角并画引线连回城市点；`map.text` 也会在原位与上下左右中挑一个不压住头像和城市名的位置；被头像或箭头引用过的城市会标出地名并保留到换背景。
+- 示例见 `src/story/demo.js`；预览：`?scene=<关卡id>:pre`、`?scene=<关卡id>:post`（可加 `&outcome=retreat`、`&annihilate=1`、`&flags=标记1,标记2` 预设剧情标记以预览分支），`?scene=poses` 看全部动作 / 表情，`?scene=gallery` 看全部背景。
+- 校验会检查指令名、背景、站位范围、引用的人物是否已出场、动作 / 表情名、地图指令前是否设置了 `china` 背景；人物未登记外形只给警告。
 
 ## 9. 对白与红色指数
 - 对白：`{ who: '名字'|'旁白', side: 'player'|'enemy'|'ally', text }`。名字须与单位名一致才能显示对应头像；对白风格贴近三国演义，简洁。
