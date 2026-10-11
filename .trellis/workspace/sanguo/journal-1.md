@@ -54,3 +54,27 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: 音频引擎与音效
+<!-- trellis-session: v=2 fp=4d7e2dacd59025a8 -->
+
+**Date**: 2026-10-11
+**Task**: 音频引擎与音效
+**Branch**: `main`
+
+### Summary
+
+10-10-audio 拆为引擎与音效、配乐与场景接入两个子任务；完成子任务 1：src/audio 合成引擎、8 种乐器音色、全部音效接入，设置面板增加配乐/音效音量与静音（即时生效），战斗右侧面板设置入口，标题点击开始解锁音频。下一步：10-11-audio-music。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7c47466` | chore(task): 音频任务拆分为引擎与音效、配乐与场景接入两个子任务 |
+| `7d4ec99` | feat(audio): Web Audio 合成引擎、乐器音色与全部音效接入，设置面板增加音量与静音 |
+| `6699053` | docs(spec): 音频接入约定与 audio 目录说明 |
+
+### Status
+
+[OK] **Completed**
