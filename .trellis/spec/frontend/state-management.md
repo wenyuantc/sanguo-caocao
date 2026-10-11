@@ -72,7 +72,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 - 只有在我军阶段、`state` 为 `'idle'`/`'move'` 时才允许存档（`openSave`）。
 - 营中存档来自 `CampScene.snapshot()`（`kind: 'camp'`）：`stage` 为**下一关** id，`talked`（已播放本关专属台词的人物名）、`deploy`（营中整备选好的阵容，可为 `null`）、`pos`（曹操所在格），以及与自动存档相同的战役状态（`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`、`summary.lordLvl`）。营中任意时刻（没有对白 / 弹窗时）都能存档。
   `applyLoad` 遇到 `camp` 时写入 registry 后 `scene.start('Camp', { stage, talked, deploy, pos })`；`validSave` 接受 `camp`（`talked` 缺失或为数组）；存档列表显示“营中 · 下一战：<关名>”。`pos` 不可走时回到出生点。
-- 营中没有战斗状态：`CampScene` 只复制 `inventory` / `gold` / `items` 给整备界面（`openPrep` 直接读写 `scene.inventory` 等并立即写回 registry），对白选项（`applyChoice`）直接写 registry 的 `red` / `flags`。营中选好的阵容经 `goStage(scene, id, { deploy })` → `StoryScene` → `afterPre` 带进 `BattleScene`（`campDeploy`），由 `deploy.initialDeploy` 过滤后作为整备的初始阵容；读档、重新挑战不带阵容。
+- 营中没有战斗状态：`CampScene` 只复制 `inventory` / `gold` / `items` 给整备界面（`openPrep` 直接读写 `scene.inventory` 等并立即写回 registry），对白选项（`applyChoice`）直接写 registry 的 `red` / `flags`。营中选好的阵容经 `goStage(scene, id, { deploy })` → `StoryScene` → `afterPre` 带进 `BattleScene`（`campDeploy`），由 `deploy.initialDeploy` 过滤后作为整备的初始阵容；重新挑战（`retry`）沿用 `campDeploy`；读档不带阵容。
 - `EndingScene` 会调用 `clearAuto()`。
 - 导出/导入的文件格式为 `{ app: 'sanguo-caocao-save', version: 1, type: 'all' | 'single', ... }`；
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。

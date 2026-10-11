@@ -40,6 +40,8 @@
 - 移动：`story/path.js` 的 `findPath`（八方向，不切拐角，`near` 走到目标旁边）；方向键按屏幕方向映射为格子对角步。每步一个补间，`update` 中决定下一步；人物占格含正在走向的格（`to`）。规划长路径时忽略远处闲逛的人物，走到跟前被挡再按全部人物重新规划。
 - 弹窗 / 对白期间（`busy()`）不响应移动与互动；整备、商店复用 `openPrep(scene, plan, onConfirm, { tabs, title, confirmLabel, selected })`，场景需提供 `inventory` / `gold` / `items` 字段。
 - `shutdown` 时销毁人物并释放 `st-*` / `sbg-*` 贴图。
+- 布局（`camp/layouts.js`）新增或改动后必须过 `checkLayout`（校验脚本与 `scripts/test-path.mjs` 都会调用）：出生点、商人、整备人物、站岗位、百姓两两不能同格，且从出生点都能走到。踩过的坑：府邸布局的商人与出生点同格。
+- 营中摆人：`joined` 武将 → 本关台词里已在 `plan.pool`（预设我军 / `joinAt` 已到）但还没记入 `joined` 的武将 → 客人（非登记人物，或登记武将但条目写明 `side`）→ 布局百姓；按名字去重。新增“剧情中已归降、下一关才预设出场”的武将时，确认他能通过 `plan.pool` 进营。
 
 ## 镜头（`src/mapCamera.js`）
 
