@@ -17,6 +17,21 @@
   `tileCenter(x, y)`，反向换算用 `BattleScene.tileAt(pointer)`（按镜头换算，不要用 `pointer.worldX`）。
   地图尺寸由关卡决定（`map[0].length × map.length`，最大 40×40），屏幕上的地图区固定为 `VIEW_COLS × VIEW_ROWS`（18×13）。
 
+- `hiDpi` 只给每个场景实例注册一次 `addedtoscene` 监听（场景实例在重启之间复用，`scene.events` 的监听不会随 shutdown 清除）。
+  在 `create` 里给 `this.events` 加长期监听时，要在 `shutdown` 中移除，或用实例标记保证只注册一次。
+
+## 剧情场景（`src/scenes/StoryScene.js`、`src/story/`）
+
+- 流程（`story/flow.js`）：新游戏 / 下一关 → `Story`（pre）→ `Battle`（`skipStory: true`，开局整备）；胜利 → `playPost` 暂停并隐藏战场，
+  `launch('Story', { part: 'post', onDone })` 叠加播放，`onDone` 在 Story **shutdown 之后**回调（回调里马上再开 Story 也不会被这次关闭打断），
+  战场恢复后把 registry 中的 `red` / `flags` 同步回来再算奖励、写自动存档；`goNext` 进入下一关开场或结局。
+- `BattleScene.create` 在没有 `load` 且没有 `skipStory` 时转去开场场景（`redirecting = true`，`update` 直接返回）；地图版本不一致的重开也走这里，提示语作为 `notice` 旁白。
+  读档（`load`）与重新挑战（`retry()`，`skipStory: true`）不播开场场景；重新挑战把 registry 的 `red` / `flags` 恢复为 `startState`（本关开头的值，战斗快照里存为 `start`）。
+- 场景中的选项写入 registry（`StoryScene.applyChoice`）；场景里没有存档入口。
+- 两台相机：主相机渲染 depth < 1000 的场景层（可推近），`ui` 相机渲染对白、标题、按钮；`prerender` 时按 depth 设置 `cameraFilter`。
+- 加速 / 跳过只改 `tweens.timeScale` 与 `time.timeScale`（跳过 60 倍），遇到选项停下等玩家选择；`shutdown` 时恢复 1 倍并释放 `st-*` / `sbg-*` 贴图（`pt-*` 头像由下一个 `BattleScene` 释放）。
+- 剧情小人贴图 key `st-<名>-<阵营>-<兵种>-<动作>-<帧>-<f|b>`，`drawHuman(k, L, F, oy, mounted, S)` 的 `S` 缺省时与战场小人逐行一致；跪姿（`seat`）裁掉腰以下再画折叠的腿，作揖（`bend`）以腰为轴压扁上半身。
+
 ## 镜头（`src/mapCamera.js`）
 
 - `BattleScene.cam = new MapCamera(scene, map, { canScroll })`：两台相机。`cameras.main` 只渲染**地图层**，视口限定在地图区并滚动；
@@ -97,6 +112,7 @@ return key;
 - 地图格子用 `Graphics` 绘制，配合确定性伪随机 `rnd(x, y, i)`，保证每次加载外观一致；按 20×20 格分块，每块画完后按 `RES` 倍
   烘焙进 DynamicTexture（`map-bake-<x>-<y>`，避免 40×40 单张贴图超出显卡尺寸）并销毁 Graphics。30 种地形各有 `drawDetail` 分支，细节不要超出格子左右边界（上方可超出 4px）。大量静态 Graphics 指令在 WebGL 下每帧都会重新处理，
   静态内容一律烘焙。
+- 地形变化后用 `redrawTiles(scene, map, tiles)` 只重烘受影响的分块（分块图像记在 `scene.mapChunks`，key `"cx,cy"`），小地图用 `minimap.paintTerrain(map)` 重画像素并清空 `sig`。
 
 ## 游戏设置与性能
 
@@ -128,6 +144,17 @@ if (killed) await killUnit(s, d);
   只结束该单位行动，不会卡死整局（`BattleScene.execute`、`runAI`）。新增行动类型时保留这个保护。
 - `BattleScene.state`（`'busy' | 'idle' | 'move' | 'menu' | 'target'`）控制输入；任何需要 await 的动画
   开始前设为 `'busy'`，结束后恢复。
+
+## 战场演出（`src/battleStage.js`）
+
+- 事件可选字段 `stage: [指令]`，`runEvent` 的顺序：`setFlag` → `stage` 逐条 await → 援军登场（`spawn`）→ `setAi` → `dialog`；
+  `stage` 里写 `{ spawn: true }` 可把援军登场与 `setAi` 提前到该位置。整个事件期间 `state = 'busy'`，结束后恢复；每条指令单独 `try/catch`。
+- 指令：`{ camera: [x, y] | 单位id, ms? }`、`{ walk: id, to?: [x, y], path?: [[x, y], ...], ms? }`、`{ highlight: [[x, y] | 单位id, ...], color?, ms? }`、
+  `{ terrain: { at, set, size?, from? } | [...] }`、`{ face: id, dir: left|right|up|down|[x, y]|单位id }`、`{ act: id, pose }`、`{ say: [对白] }`、`{ wait: ms }`。
+  战场单位没有背面贴图：`face` 的 up/down 只做压扁示意；`act` 用 `UnitView.act`（jump / bow / shake / flash / spin，剧情姿态名按 `ACT_ALIAS` 映射）。
+- 援军 `spawn` 是 async：`entryRoute` 给出从地图边缘（或 `def.from`）到落点的 BFS 路线（兵种可通行、不穿过敌对单位），起点在边缘时补一格地图外的虚拟起点；
+  默认路线超过 `MAX_WALK`（6）格、走不通或 `from: false` / `enter: 'fade'` 时原地淡入。全部到位后才返回，读档不重放。
+- 地形变化 `changeTerrain`：`terrainCells` 解析范围（`size: 3` 为 3×3，按预设 / `from` 过滤，跳过有单位且新地形对其不可通行的格），`patchMap` 改地图并记 `mapPatches`，再重烘分块与小地图。
 
 ## 反模式
 

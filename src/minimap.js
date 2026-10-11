@@ -45,6 +45,13 @@ export class Minimap {
     const tm = this.scene.textures;
     if (tm.exists(KEY)) tm.remove(KEY);
     const tex = tm.createCanvas(KEY, this.cols, this.rows);
+    this.paintTerrain(map, tex);
+    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    return KEY;
+  }
+
+  // 重画地形像素（地形变化时调用，贴图对象不变）
+  paintTerrain(map, tex = this.scene.textures.get(KEY)) {
     const ctx = tex.getContext();
     const data = ctx.createImageData(this.cols, this.rows);
     for (let y = 0; y < this.rows; y++) {
@@ -59,8 +66,6 @@ export class Minimap {
     }
     ctx.putImageData(data, 0, 0);
     tex.refresh();
-    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-    return KEY;
   }
 
   toggle() {

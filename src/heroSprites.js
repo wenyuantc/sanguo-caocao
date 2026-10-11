@@ -9,7 +9,7 @@ export const C = {
   skin: '#f6cfa2', skinD: '#d9996a', hair: '#1e140e', gold: '#f0cc62', goldD: '#9a7420', metal: '#eef2f6', metalD: '#7d8896',
   wood: '#9a6638', woodD: '#4e3016', red: '#d42e22', redD: '#6e100a', yellow: '#f6d43e', yellowD: '#a8820e', white: '#fbf8ef', ink: '#1a1008',
 };
-const FACTION = {
+export const FACTION = {
   player: { a: '#4a86e8', d: '#1c3a7c', l: '#b4d0f6' },
   enemy: { a: '#d4402f', d: '#661409', l: '#e8b49a' },
   ally: { a: '#38a957', d: '#165226', l: '#b0e8c0' },
@@ -67,7 +67,7 @@ const CLASS_LOOK = {
 const BEARD_MAP = { mustache: 'mustache', goatee: 'goatee', short: 'goatee', full: 'full', long: 'long' };
 
 // 兵种外形 + 武将登记表中的个性外形
-function lookOf(unit) {
+export function lookOf(unit) {
   const look = { ...CLASS_LOOK[unit.cls] };
   const ch = getCharacter(unit.name);
   if (!ch || look.machine) return look;
@@ -87,20 +87,28 @@ function lookOf(unit) {
 }
 
 // ---------- 人物 ----------
-function drawHuman(k, L, F, oy, mounted) {
+// S：剧情小人的姿态（story/actors.js），缺省为战场小人。
+//   { back 背面, step 迈步 -1/0/1, legs: 'none' 不画腿, arms: { l, r: [[肩], [手], hand?] }, armsOver 手臂画在头部之后,
+//     gaze 视线偏移, eyes: 'closed', mouth: 'open', blush 脸红程度, tears 眼泪 }；有 S 时不画武器、盾牌与箭袋（由调用方另画）
+export function drawHuman(k, L, F, oy, mounted, S) {
   const { ctx, grad, fill, ell, poly, line } = k;
   const y = (v) => v + oy;
   const P = L.cloth || F;
-  if (L.cape) fill(grad(0, y(26), 0, y(54), C.red, C.redD), poly([18, y(25)], [34, y(25)], [40, y(mounted ? 40 : 52)], [26, y(mounted ? 43 : 55)], [12, y(mounted ? 40 : 52)]));
-  if (L.quiver) {
+  const capeFn = () => fill(grad(0, y(26), 0, y(54), C.red, C.redD), poly([18, y(25)], [34, y(25)], [40, y(mounted ? 40 : 52)], [26, y(mounted ? 43 : 55)], [12, y(mounted ? 40 : 52)]));
+  if (L.cape && !S?.back) capeFn();
+  if (L.quiver && !S) {
     fill(grad(31, 0, 37, 0, C.wood, C.woodD), poly([31, y(22)], [36, y(20)], [39, y(38)], [34, y(40)]));
     for (const dx of [0, 2, 4]) fill(C.white, poly([31.5 + dx, y(15)], [33 + dx, y(21)], [30.5 + dx, y(21)]), C.ink, 0.4);
   }
-  if (!mounted && !L.robe) {
-    line(22, y(40), 21, y(54), 4.6, P.d);
-    line(30, y(40), 31, y(54), 4.6, P.d);
-    fill(grad(0, y(54), 0, y(59), '#5a3a22', '#21140a'), ell(20, y(57), 4.2, 2.6));
-    fill(grad(0, y(54), 0, y(59), '#5a3a22', '#21140a'), ell(32, y(57), 4.2, 2.6));
+  const st = S?.step || 0;
+  if (!mounted && (!L.robe || S) && S?.legs !== 'none') {
+    // 迈步：两腿前后错开（剧情小人行走），战场小人 st = 0
+    if (!L.robe) {
+      line(22, y(40), 21 - st * 2.2, y(54 - Math.max(0, st) * 0.8), 4.6, P.d);
+      line(30, y(40), 31 + st * 2.2, y(54 - Math.max(0, -st) * 0.8), 4.6, P.d);
+    }
+    fill(grad(0, y(54), 0, y(59), '#5a3a22', '#21140a'), ell(20 - st * 2.2, y(57 - Math.max(0, st) * 0.8), 4.2, 2.6));
+    fill(grad(0, y(54), 0, y(59), '#5a3a22', '#21140a'), ell(32 + st * 2.2, y(57 - Math.max(0, -st) * 0.8), 4.2, 2.6));
   }
   if (L.robe) {
     const rc = L.robeColor || F.l;
@@ -108,7 +116,7 @@ function drawHuman(k, L, F, oy, mounted) {
       ctx.moveTo(18, y(25)); ctx.lineTo(34, y(25)); ctx.lineTo(38, y(mounted ? 38 : 57));
       ctx.quadraticCurveTo(26, y(mounted ? 41 : 61), 14, y(mounted ? 38 : 57)); ctx.closePath();
     });
-    fill(C.white, poly([22, y(25)], [26, y(33)], [30, y(25)]), C.ink, 0.5);
+    if (!S?.back) fill(C.white, poly([22, y(25)], [26, y(33)], [30, y(25)]), C.ink, 0.5);
     fill(grad(0, y(37), 0, y(40), C.gold, C.goldD), poly([17, y(37)], [35, y(37)], [35.3, y(40)], [16.7, y(40)]));
     line(26, y(40), 25, y(48), 1.4, C.gold, false);
     fill(grad(9, 0, 20, 0, shade(rc, 1.1), shade(rc, 0.75)), ell(15, y(35), 5, 7.5, 0.15));
@@ -118,8 +126,10 @@ function drawHuman(k, L, F, oy, mounted) {
     ctx.strokeStyle = shade(P.d, 0.6); ctx.lineWidth = 0.5;
     for (const ry of [42, 45]) for (let x = 15 + (ry % 2); x < 37; x += 3) { ctx.beginPath(); ctx.arc(x, y(ry), 1.5, 0, Math.PI); ctx.stroke(); }
     fill(grad(0, y(25), 0, y(40), shade(P.a, 1.25), P.a, P.d), poly([17, y(25)], [35, y(25)], [34, y(40)], [18, y(40)]));
-    fill(grad(20, y(28), 32, y(36), shade(P.l, 1.05), shade(P.a, 0.95)), ell(26, y(32), 6, 4.8), C.ink, 0.4);
-    fill(grad(24, y(30), 28, y(34), C.white, C.gold, C.goldD), ell(26, y(32), 2.3, 2.3), C.ink, 0.5);
+    if (!S?.back) {
+      fill(grad(20, y(28), 32, y(36), shade(P.l, 1.05), shade(P.a, 0.95)), ell(26, y(32), 6, 4.8), C.ink, 0.4);
+      fill(grad(24, y(30), 28, y(34), C.white, C.gold, C.goldD), ell(26, y(32), 2.3, 2.3), C.ink, 0.5);
+    }
     fill(grad(0, y(38), 0, y(41), C.gold, C.goldD), poly([17, y(38)], [35, y(38)], [35.2, y(40.6)], [16.8, y(40.6)]));
     fill(C.goldD, poly([24.5, y(37.6)], [27.5, y(37.6)], [27.5, y(41)], [24.5, y(41)]), C.ink, 0.4);
     fill(grad(12, y(24), 18, y(32), shade(P.a, 1.3), P.d), ell(17, y(28), 5.2, 4), C.gold, 0.8);
@@ -154,6 +164,20 @@ function drawHuman(k, L, F, oy, mounted) {
   }
   // 手臂
   const sleeve = L.robe ? shade(L.robeColor || F.l, 0.9) : P.a;
+  if (S) {
+    // 剧情小人：手臂按姿态绘制；背面时披风盖在身后
+    if (L.cape && S.back) capeFn();
+    const arms = () => {
+      for (const a of [S.arms.l, S.arms.r]) {
+        line(a[0][0], y(a[0][1]), a[1][0], y(a[1][1]), 4, sleeve);
+        if (a[2] !== false) fill(C.skin, ell(a[1][0], y(a[1][1] + 0.6), 2.3, 2.3), C.ink, 0.6);
+      }
+    };
+    if (!S.armsOver) arms();
+    drawHead(k, L, P, oy, S);
+    if (S.armsOver) arms();
+    return;
+  }
   if (L.weapon === 'bow') line(16, y(29), 10, y(36), 4, sleeve); else line(16, y(29), 14.5, y(39), 4, sleeve);
   line(36, y(29), 38, y(37), 4, sleeve);
   fill(C.skin, ell(L.weapon === 'bow' ? 9.5 : 14.5, y(L.weapon === 'bow' ? 37 : 40), 2.3, 2.3), C.ink, 0.6);
@@ -168,12 +192,20 @@ function drawHuman(k, L, F, oy, mounted) {
   }
 }
 
-function drawHead(k, L, P, oy) {
+export function drawHead(k, L, P, oy, S) {
   const { ctx, grad, fill, ell, poly, line } = k;
   const y = (v) => v + oy;
   fill(C.skinD, poly([23.5, y(22)], [28.5, y(22)], [28.5, y(27)], [23.5, y(27)]), null);
   fill(C.skin, ell(17.6, y(17), 1.6, 2.2));
   fill(C.skin, ell(34.4, y(17), 1.6, 2.2));
+  if (S?.back) {
+    // 背面：后脑全是头发，不画五官与胡须
+    fill(C.hair, ell(26, y(16.6), 8.9, 9));
+    fill(shade(C.hair, 1.6), ell(23, y(12.5), 3, 1.6, -0.3), null);
+    drawHat(k, L, P, oy);
+    return;
+  }
+  if (S) return drawStoryFace(k, L, P, oy, S);
   const fg = ctx.createRadialGradient(24, y(14), 1, 26, y(17), 10);
   fg.addColorStop(0, C.skin === '#f6cfa2' ? '#fde3c2' : C.skin); fg.addColorStop(1, C.skinD);
   fill(fg, ell(26, y(17), 8.4, 8.6));
@@ -196,7 +228,45 @@ function drawHead(k, L, P, oy) {
   drawHat(k, L, P, oy);
 }
 
-function drawHat(k, L, P, oy) {
+// 剧情小人的脸：与战场小人相同，另加视线偏移、闭眼、张嘴、脸红、眼泪
+function drawStoryFace(k, L, P, oy, S) {
+  const { ctx, fill, ell, poly, line } = k;
+  const y = (v) => v + oy;
+  const g = S.gaze || 0;
+  const fg = ctx.createRadialGradient(24 + g, y(14), 1, 26, y(17), 10);
+  fg.addColorStop(0, C.skin === '#f6cfa2' ? '#fde3c2' : C.skin); fg.addColorStop(1, C.skinD);
+  fill(fg, ell(26, y(17), 8.4, 8.6));
+  fill(C.hair, ell(26, y(15.5), 8.9, 7.6, 0, Math.PI, 0), null);
+  fill(C.hair, poly([17.2, y(15)], [19.4, y(15)], [19, y(20)], [17.4, y(19)]), null);
+  fill(C.hair, poly([34.8, y(15)], [32.6, y(15)], [33, y(20)], [34.6, y(19)]), null);
+  const angry = S.brow === 'angry';
+  line(20.3 + g, y(angry ? 14 : 14.6), 23.8 + g, y(angry ? 16 : 15.3), 0.9, C.hair, false);
+  line(28.2 + g, y(angry ? 16 : 15.3), 31.7 + g, y(angry ? 14 : 14.6), 0.9, C.hair, false);
+  for (const ex of [22.4 + g, 29.6 + g]) {
+    if (S.eyes === 'closed') {
+      ctx.beginPath(); ctx.arc(ex, y(17.2), 1.4, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 0.8; ctx.stroke();
+    } else {
+      fill(C.ink, ell(ex, y(17.8), 1.25, 1.75), null);
+      fill(C.white, ell(ex + 0.4, y(17.2), 0.45, 0.5), null);
+    }
+  }
+  const b = S.blush || 0.35;
+  fill(`rgba(235,90,80,${b})`, ell(20.4 + g, y(20.2), 1.8 + b, 1 + b * 0.4), null);
+  fill(`rgba(235,90,80,${b})`, ell(31.6 + g, y(20.2), 1.8 + b, 1 + b * 0.4), null);
+  if (S.tears) {
+    for (const tx of [21.6 + g, 30.4 + g]) fill('#8ad0ff', ell(tx, y(20.5 + S.tears), 0.9, 1.5), '#3a7ab8', 0.4);
+  }
+  if (S.mouth === 'open') fill('#7a2a1a', ell(26.2 + g, y(22.4), 1.5, 1.1), C.ink, 0.4);
+  else line(25 + g, y(22), 27.4 + g, y(21.8), 0.7, '#9a4a34', false);
+  if (L.beard === 'goatee') { fill(C.hair, poly([24.5 + g, y(23.3)], [27.5 + g, y(23.3)], [26 + g, y(27)]), null); line(23.5 + g, y(21.3), 25.2 + g, y(21), 0.6, C.hair, false); line(26.8 + g, y(21), 28.5 + g, y(21.3), 0.6, C.hair, false); }
+  if (L.beard === 'full') fill(C.hair, () => { ctx.moveTo(18.5, y(18)); ctx.quadraticCurveTo(19, y(28), 26 + g, y(29)); ctx.quadraticCurveTo(33, y(28), 33.5, y(18)); ctx.quadraticCurveTo(26 + g, y(24), 18.5, y(18)); }, null);
+  if (L.beard === 'mustache') { line(23.2 + g, y(21.4), 25.4 + g, y(20.9), 0.8, C.hair, false); line(26.6 + g, y(20.9), 28.8 + g, y(21.4), 0.8, C.hair, false); }
+  if (L.beard === 'long') fill(C.hair, () => { ctx.moveTo(23 + g, y(22.5)); ctx.lineTo(29 + g, y(22.5)); ctx.lineTo(26 + g, y(33)); ctx.closePath(); }, null);
+  drawHat(k, L, P, oy);
+}
+
+export function drawHat(k, L, P, oy) {
   const { ctx, grad, fill, ell, poly, line } = k;
   const y = (v) => v + oy;
   const helmet = (main, dark) => {

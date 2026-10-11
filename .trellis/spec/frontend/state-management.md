@@ -42,7 +42,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 主要字段：`stage`、`stageId`、`map`、`units`（普通对象数组）、`views`（`Map<unit, UnitView>`）、
 `turn`、`phase`（`'player' | 'ally' | 'enemy'`）、`state`（输入状态机）、`sel`（当前选择）、
 `firedEvents`（`Set<事件下标>`）、`flags`、`red`、`items`、`joined`（含本关预设 / `joinAt` 加入的武将）、
-`deployPlan`、`over`、`modal`、`weatherType`（本关天气类别 0~4，取 `stageWeather(stage)`）、`weatherIdx`（当前天气序号 0~5）。
+`deployPlan`、`mapPatches`、`over`、`modal`、`weatherType`（本关天气类别 0~4，取 `stageWeather(stage)`）、`weatherIdx`（当前天气序号 0~5）。
 
 - 天气：当前天气用 getter `this.weather`（= `weatherOf(weatherType, weatherIdx)`，`src/weather.js`）读取，不单独保存。
   开局序号取关卡起始值；第 2 回合起每到我军阶段开始 `stepWeather` 变化一次；天气策略经 `changeWeather(idx)` 修改。
@@ -64,7 +64,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 | `sanguo-save` | 单个自动存档，每关胜利后由 `victory()` 写入，`kind: 'stage'` |
 
 - 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、`mapVersion`、回合、道具、红色指数、标记、roster、
-  `joined`、`firedEvents`、`weatherIdx`、`inventory`、`gold`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` / `equip` / `fruits` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
+  `joined`、`firedEvents`、`weatherIdx`、`mapPatches`、`start`（本关开头的 `red` / `flags`，重新挑战时恢复，旧存档缺失时取存档值）、`inventory`、`gold`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` / `equip` / `fruits` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
   （旧存档单位缺 `tier` 时我军视为一阶、其他按难度门槛定阶，兵种按武将总表 / 登记表覆盖）。
   不要持久化派生数据或 Phaser 对象。
 - 只有在我军阶段、`state` 为 `'idle'`/`'move'` 时才允许存档（`openSave`）。
@@ -75,6 +75,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 - 兼容没有装备的旧存档：`applyLoad` 把 `inventory` 设为 `[]`、`gold` 设为 0；进入战斗时 `kitFor` 按原版规则补发初始装备；战斗中存档里没有 `equip` 的我军武将单位同样补发。`validSave` 不要求这两个字段。
 - 地图版本：快照记录关卡的 `mapVersion`（旧存档缺失视为 1）。读档时与当前关卡的 `mapVersion` 不一致（地图已重做、坐标失效），
   `BattleScene.create` 丢弃 `load`、置 `mapReset`，由 `restartFromStageStart` 把 registry 恢复为本关开头的战役状态后重开，开场前提示“关卡地图已更新，将从本关开头重新开始”。起点优先级：第一关用新游戏状态（按存档难度）；其他关用 `stageStartSave` 找到的自动存档（`stage` 指向本关、难度相同、`savedAt` 不晚于战斗存档）；都没有时退回 `applyLoad` 写入的战斗存档数据（道具、红色指数、标记、roster 停留在存档时刻，开场选项可能重复累加红色指数）。自动存档（关卡开头）不受影响。
+- 地形变化：`this.map` 是每局复制的字符串数组（`[...stage.map]`），战场演出改地形时按行替换字符串（`battleStage.patchMap`），并在 `mapPatches` 记 `[[x, y, 地形字符], ...]`（同一格只保留最后一次）。快照写入 `mapPatches`，读档时在 `drawMap` 之前由 `replayPatches` 重放；旧存档没有该字段视为无变化。不要直接改 `stage.map`（关卡数据是共享的，整备 `planDeploy` 也读它）。
 - 兼容没有天气的旧存档：战斗快照缺 `weatherIdx`（或不是 0~5 的整数）时取关卡起始序号；天气类别不入存档，始终按关卡决定。自动存档不需要天气（新关卡从起始值开始）。
 - `getStage(id)` 仍通过 `LEGACY`（`stageMeta.js`）兼容旧存档中的数字关卡下标；导入校验 `validSave`
   的关卡字段同样接受非空字符串 id 或非负整数。

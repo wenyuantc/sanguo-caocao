@@ -19,6 +19,7 @@ src/
 ├── equipment.js        # 装备与宝物：EQUIP / KINDS、装备属性与特效查询（fx/fxSum）、初始装备、奖励 REWARDS / 掉落 DROPS / 商店 SHOP_UNLOCK（纯函数）
 ├── logic.js            # 纯规则：属性计算、Dijkstra 移动范围、伤害/命中、策略结算、AI 决策（不依赖 Phaser）
 ├── actions.js          # 作用于场景的异步战斗行动：doAttack/doSpell/doItem/killUnit/runAI
+├── battleStage.js      # 战场演出：事件 stage 指令（镜头 / 走位 / 高亮 / 地形变化 / 转向 / 动作）、援军走入路线 entryRoute、mapPatches
 ├── stageMeta.js        # normalizeStage（mapVersion 默认 1）、PLANNED_IDS、FIRST_STAGE、ENDINGS、MAP_SIZES（各关原版地图尺寸）
 ├── stages.js           # 汇总 stages/a..f.js → STAGES、getStage（也能取到调试关卡）、routeOf、resolveNext
 ├── stages/
@@ -44,9 +45,18 @@ src/
 ├── portraits.js        # Canvas 2D 头像（portraitTexture）
 ├── attackFx.js / spellFx.js / duel.js  # 攻击、策略/道具（含四神）、单挑过场动画
 ├── weatherFx.js        # class WeatherFx：天气粒子（≤ 200）/ 阴天遮罩 / 切换动画；顶部栏天气图标 drawWeatherIcon
+├── story/              # 剧情场景（关与关之间的演出）
+│   ├── defs.js         # 纯数据 + 纯函数：等角坐标、背景表、中国地图视野 / 城市、各关地点、动作 / 表情、指令表、checkScript（Node 可导入）
+│   ├── auto.js         # sceneFor / autoScene：手写 scenes 优先，否则由 prologue / epilogue(s) 生成脚本（纯函数，校验脚本逐关检查）
+│   ├── backgrounds.js  # Canvas 2D 程序化背景（外场景 / 内场景 / 中国地图），烘焙为 sbg-* 贴图
+│   ├── actors.js       # StoryActor：剧情小人（drawHuman 的姿态参数 S）、表情气泡，贴图 st-*
+│   ├── runner.js       # StoryRunner 指令解释器、StoryDialog；中国地图头像 / 箭头 / 文字的避让布局
+│   ├── flow.js         # 关卡之间的跳转：goStage / afterPre / goNext / playPost
+│   └── demo.js         # 演示脚本（?scene=demo / gallery / poses）
 └── scenes/
     ├── TitleScene.js   # key 'Title'
     ├── BattleScene.js  # key 'Battle'：回合循环、输入、事件、胜负
+    ├── StoryScene.js   # key 'Story'：执行剧情场景脚本，开场 / 结尾 / 预览；跳过与加速
     └── EndingScene.js  # key 'Ending'
 scripts/validate-stages.mjs  # 关卡数据的 Node 校验脚本（直接导入 src/ 模块）
 scripts/mapgen/              # 关卡地图重做工具：画图库、预览、写回、行军分析、与 HEAD 结构比较（用法见 STAGE_GUIDE §4）

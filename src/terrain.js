@@ -99,3 +99,13 @@ export const passable = (cls, ch) => moveCost(cls, ch) < IMPASSABLE;
 export const terrainDef = (cls, ch) => terrainRule(cls, ch)?.def ?? 0;
 // 所有系列都不能进入的地形（障碍）
 export const isBlocked = (ch) => Object.keys(TERRAIN_RULES).every((cls) => !passable(cls, ch));
+
+// 战场演出的地形变化预设（battleStage.js 使用，校验脚本也检查）：ch 改成的地形，from 只改写这些地形的格子（3×3 范围时避免把城墙、河流也点着）
+const FLAMMABLE = LIST.filter((t) => t.elems.includes('f')).map((t) => t.ch).join('');
+export const TERRAIN_PRESETS = {
+  open: { ch: '+', from: 'E', name: '城门打开了', color: 0xfff0c0 },
+  close: { ch: 'E', from: '+', name: '城门关闭了', color: 0x5a3a20 },
+  fire: { ch: '!', from: FLAMMABLE, name: '燃起了大火', color: 0xff7a2a },
+  douse: { ch: '.', from: '!', name: '火势熄灭了', color: 0x9db86a },
+  ship: { ch: 'S', from: 'RW~O', name: '船只驶来', color: 0x7a5432 },
+};
