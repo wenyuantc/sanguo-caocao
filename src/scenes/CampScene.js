@@ -14,7 +14,7 @@ import { planDeploy, initialDeploy } from '../deploy.js';
 import { issueKit } from '../equipment.js';
 import { openPrep } from '../prep.js';
 import { openSaveMenu } from '../saveMenu.js';
-import { applyLoad } from '../saves.js';
+import { applyLoad, writeAuto } from '../saves.js';
 import { goStage } from '../story/flow.js';
 
 // 营中（两关之间）：曹操在军营 / 城镇里自由走动，与部下、百姓对话，整备、购物、存档，从营门出征。
@@ -323,15 +323,36 @@ export class CampScene extends Phaser.Scene {
     root.add([shade, panel(this, x0, y0, w, h, 0.98)]);
     root.add(text(this, WIDTH / 2, y0 + 36, '出　征', 26, '#ffd36a', FONT).setOrigin(0.5));
     root.add(text(this, WIDTH / 2, y0 + 86, `离开营中，进军「${this.stage.name}」？`, 18, '#f1e3c2', FONT).setOrigin(0.5));
-    const close = () => { this.input.keyboard?.off('keydown-ESC', close); root.destroy(); this.modal = false; };
-    root.add(button(this, WIDTH / 2 - 150, y0 + h - 64, 130, 44, '出　征', () => { close(); this.depart(); }, 19));
+    // 回车确认、ESC 取消。键盘监听下一帧再注册：打开本框的那次回车 / 空格不会立刻确认；按住不放的重复事件忽略
+    let done = false;
+    const kb = this.input.keyboard;
+    const close = () => {
+      if (done) return;
+      done = true;
+      kb?.off('keydown-ESC', onEsc);
+      kb?.off('keydown-ENTER', onEnter);
+      root.destroy();
+      this.modal = false;
+    };
+    const go = () => { if (done) return; close(); this.depart(); };
+    const onEsc = () => close();
+    const onEnter = (ev) => { if (!ev?.repeat) go(); };
+    root.add(button(this, WIDTH / 2 - 150, y0 + h - 64, 130, 44, '出　征', go, 19));
     root.add(button(this, WIDTH / 2 + 20, y0 + h - 64, 130, 44, '再等等', close, 19));
-    this.input.keyboard?.on('keydown-ESC', close);
+    this.time.delayedCall(0, () => {
+      if (done) return;
+      kb?.on('keydown-ESC', onEsc);
+      kb?.on('keydown-ENTER', onEnter);
+    });
   }
 
   depart() {
+    if (this.leaving) return;
     this.leaving = true;
     this.halt();
+    // 出征自动存档（关卡开头类型）：含营中选项改动后的红色指数 / 标记、道具、装备、金钱与选好的阵容，读取后播下一关开场
+    const { talked, pos, kind, ...data } = this.snapshot();
+    if (!this.stage.debug) writeAuto(data, 'stage');
     this.cameras.main.fadeOut(400);
     this.ui.fadeOut(400);
     this.time.delayedCall(420, () => goStage(this, this.stageId, { deploy: this.deploy }));

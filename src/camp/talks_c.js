@@ -4,11 +4,11 @@
 // 张郃到仓亭之战开场才归队，cangting 不写他；曹丕到邺城之战才加入，yecheng 之前不写他。
 // 关羽（暂投曹营）与武将总表的关羽同名，营中不会作为客人出现，白马、延津两关不写他。
 // 辛毗为客人（side: 'ally'），在邺城、南皮两关营中出现。
-// 本组营中选项设置的标记：camp_guanyu_respect（徐州：生擒关羽以礼相待）、camp_baima_evacuate（白马：徙民西撤）、
+// 本组营中选项设置的标记：camp_guanyu_respect（徐州：生擒关羽以礼相待）、camp_baima_evacuate / camp_baima_abandon（白马：徙民西撤 / 弃民轻装）、
 // camp_yanjin_told_guanyu（延津：告诉关羽刘备下落）、camp_guandu_share_rations（官渡：与士卒同食）、
 // camp_cangting_bait_captives（仓亭：驱降卒为饵）、camp_rangshan_spare_guanyu（穰山：遇关羽不加害）、
-// camp_liyang_no_plunder（黎阳：不扰袁氏丧地百姓）、camp_yecheng_spare_yuan（邺城：厚待袁氏家眷）、
-// camp_nanpi_spare_icemen（南皮：不追究逃亡的凿冰百姓）、camp_liucheng_reward_critics（柳城：日后赏谏阻远征者）
+// camp_liyang_no_plunder（黎阳：不扰袁氏丧地百姓）、camp_yecheng_spare_yuan / camp_yecheng_loot（邺城：厚待袁氏家眷 / 任诸将处置）、
+// camp_nanpi_spare_icemen（南皮：不追究逃亡的凿冰百姓）、camp_liucheng_reward_critics / camp_liucheng_gag（柳城：日后赏谏阻远征者 / 严令禁言）
 export const CAMP_TALKS_C = {
   // ==================== 第 16 关 徐州入侵战（吕布包围战后）====================
   xuzhou_ruqin: [
@@ -77,7 +77,7 @@ export const CAMP_TALKS_C = {
             { text: '带上百姓沿河西撤，不可弃之', red: 1, flag: 'camp_baima_evacuate', reply: [
               { who: '荀攸', text: '如此行军虽慢，却能收拢人心。攸这便命人预备车辆。' },
             ] },
-            { text: '大军轻装为先，百姓各自逃生', red: -1, reply: [
+            { text: '大军轻装为先，百姓各自逃生', red: -1, flag: 'camp_baima_abandon', reply: [
               { who: '荀攸', text: '……主公以军务为重，攸遵命。' },
             ] },
           ],
@@ -401,7 +401,7 @@ export const CAMP_TALKS_C = {
             { text: '孤亲往祭奠本初，厚待其家眷', red: 1, flag: 'camp_yecheng_spare_yuan', reply: [
               { who: '贾诩', text: '明公此举，可收河北士民之心。比十万大军还管用。' },
             ] },
-            { text: '任凭诸将处置，以赏战功', red: -1, reply: [
+            { text: '任凭诸将处置，以赏战功', red: -1, flag: 'camp_yecheng_loot', reply: [
               { who: '贾诩', text: '……诩记下了。只是河北人心，怕是要难收了。' },
             ] },
           ],
@@ -498,7 +498,7 @@ export const CAMP_TALKS_C = {
               { who: '曹仁', text: '兄长胸襟如此，诸将必然心服。' },
               { who: '曹操', text: '此行实是侥幸取胜也说不定。他们说的，正是万全之计。' },
             ] },
-            { text: '动摇军心者，一律严令禁言', red: -1, reply: [
+            { text: '动摇军心者，一律严令禁言', red: -1, flag: 'camp_liucheng_gag', reply: [
               { who: '曹仁', text: '……末将这就去传令，营中不得再议此事。' },
             ] },
           ],

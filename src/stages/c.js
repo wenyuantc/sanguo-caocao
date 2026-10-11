@@ -86,7 +86,11 @@ export default [
           { who: '贾诩', side: 'player', text: '果然有伏兵。诸将回身迎击，勿乱阵脚！' },
         ] },
       { turn: 8, faction: 'enemy', units: [], setAi: { e_guanyu: 'aggressive', jianyong: 'aggressive' },
-        dialog: [{ who: '关羽', side: 'enemy', text: '兄长有难，某岂能坐视！开城，随某杀出！' }] },
+        dialog: [
+          { who: '关羽', side: 'enemy', text: '兄长有难，某岂能坐视！开城，随某杀出！' },
+          { who: '郭嘉', side: 'player', text: '关羽出城了！诸将谨记主公军令：只可围困，不可伤他性命！', ifFlag: 'camp_guanyu_respect' },
+          { who: '夏侯惇', side: 'player', text: '关羽出城了！此人万夫不当，诸将合力围住他！', unlessFlag: 'camp_guanyu_respect' },
+        ] },
       { onDeath: 'liubei', dialog: [
         { who: '刘备', side: 'enemy', text: '曹军势大……三弟，二弟，各自突围，日后再图相会！' },
         { who: '旁白', text: '刘备兵败，单骑投奔河北袁绍；张飞亦不知去向。' },
@@ -106,6 +110,7 @@ export default [
       { who: '张辽', side: 'player', text: '云长且慢！你若战死，一负桃园之誓，二负托孤之重，三失匡扶汉室之志。何不暂且栖身，再图兄长音信？' },
       { who: '关羽', side: 'enemy', text: '……若要关某暂降，须依三事：一，降汉不降曹；二，二位嫂嫂俸禄、门户不得惊扰；三，但知兄长下落，虽千里亦当辞去。' },
       { who: '曹操', side: 'player', text: '吾为汉相，汉即吾也。三事吾皆允之！云长忠义，真世之虎臣。' },
+      { who: '关羽', side: 'enemy', text: '阵前曹公传令诸将，只围不杀……此番厚意，关某记下了。', ifFlag: 'camp_guanyu_respect' },
       { who: '旁白', text: '关羽暂居曹营。不久，袁绍起兵十万南下，遣大将颜良进围白马。' },
     ],
   },
@@ -180,6 +185,7 @@ export default [
         units: [P('guanyu', '关羽', 'cavalry', 18, 19, 19, { bonus: { atk: 14, hp: 20 } })],
         dialog: [
           { who: '关羽', side: 'player', text: '关某受丞相厚待，未有寸功。今日愿斩颜良，以报丞相！' },
+          { who: '关羽', side: 'player', text: '下邳城下，丞相严令诸将不得伤我，此恩尤重。今日正当相报。', ifFlag: 'camp_guanyu_respect' },
           { who: '曹操', side: 'player', text: '云长肯出，大事济矣！' },
         ] },
       { turn: 4, faction: 'enemy', units: [], setAi: { yanliang: 'aggressive', y5: 'aggressive', y9: 'aggressive' },
@@ -201,7 +207,9 @@ export default [
       { who: '刘延', side: 'ally', text: '白马之围得解，全赖丞相与关将军！' },
       { who: '曹操', side: 'player', text: '万军之中斩上将首级，云长真神人也！吾当表奏天子，封云长为汉寿亭侯。' },
       { who: '关羽', side: 'player', text: '关某不过略报丞相厚意而已。' },
-      { who: '旁白', text: '曹操徙白马百姓沿河西撤。袁绍闻颜良被斩，大怒，遣文丑与刘备渡河追击。' },
+      { who: '刘延', side: 'ally', text: '丞相肯带白马父老同行，延率残兵随军护送，愿效死力！', ifFlag: 'camp_baima_evacuate' },
+      { who: '旁白', text: '曹操徙白马百姓沿河西撤。袁绍闻颜良被斩，大怒，遣文丑与刘备渡河追击。', unlessFlag: 'camp_baima_abandon' },
+      { who: '旁白', text: '曹军轻装西撤，白马百姓四散逃生。袁绍闻颜良被斩，大怒，遣文丑与刘备渡河追击。', ifFlag: 'camp_baima_abandon' },
     ],
     // 手写剧情场景：开场（颜良围白马 → 荀攸献声东击西之计 → 颜良河畔叫阵）、结尾（关羽献颜良首级 → 西撤延津）
     scenes: {
@@ -299,6 +307,9 @@ export default [
         { act: '关羽', pose: 'bow' },
         { say: [{ who: '关羽', side: 'player', text: '关某不过略报丞相厚意而已。' }] },
         { act: '关羽', pose: 'stand' },
+        { act: '刘延', pose: 'bow', ifFlag: 'camp_baima_evacuate' },
+        { say: [{ who: '刘延', side: 'ally', text: '丞相肯带白马父老同行，延率残兵随军护送，愿效死力！' }], ifFlag: 'camp_baima_evacuate' },
+        { act: '刘延', pose: 'stand', ms: 0, ifFlag: 'camp_baima_evacuate' },
         // 中国地图：西撤延津，文丑、刘备渡河追击
         { bg: 'china', view: 'zhongyuan', place: '白马　延津' },
         { map: { show: '曹操', at: '白马', side: 'player' } },
@@ -307,7 +318,8 @@ export default [
         { map: { show: '文丑', at: '邺', side: 'enemy' } },
         { map: { show: '刘备', at: '邺', side: 'enemy' } },
         { arrow: ['邺', '黎阳', '延津'], side: 'enemy' },
-        { say: [{ who: '旁白', text: '曹操徙白马百姓沿河西撤。袁绍闻颜良被斩，大怒，遣文丑与刘备渡河追击。' }] },
+        { say: [{ who: '旁白', text: '曹操徙白马百姓沿河西撤。袁绍闻颜良被斩，大怒，遣文丑与刘备渡河追击。' }], unlessFlag: 'camp_baima_abandon' },
+        { say: [{ who: '旁白', text: '曹军轻装西撤，白马百姓四散逃生。袁绍闻颜良被斩，大怒，遣文丑与刘备渡河追击。' }], ifFlag: 'camp_baima_abandon' },
         { wait: 400 },
         { fade: 'out', ms: 500 },
       ],
@@ -357,6 +369,9 @@ export default [
       { who: '荀攸', side: 'player', text: '敌骑众多，可将辎重弃于道旁诱之。袁军争抢财物，阵形必乱，届时一举破之。' },
       { who: '曹操', side: 'player', text: '公达之计正合吾意。诸将解鞍放马，待敌过河！' },
       { who: '关羽', side: 'player', text: '文丑与颜良齐名，关某正欲会他一会。' },
+      { who: '刘延', side: 'ally', text: '白马父老已送往后方。延愿率本部守住丞相侧翼，以报活命之恩！', ifFlag: 'camp_baima_evacuate' },
+      { who: '关羽', side: 'player', text: '丞相厚恩，关某已知兄长就在对面。斩了文丑，便算还清丞相之情。', ifFlag: 'camp_yanjin_told_guanyu' },
+      { who: '曹操', side: 'player', text: '云长去留自便。今日只问文丑。', ifFlag: 'camp_yanjin_told_guanyu' },
     ],
     units: [
       P('caocao', '曹操', 'lord', 16, 10, 20, { leader: true, bonus: { atk: 4, int: 6 } }),
@@ -369,6 +384,7 @@ export default [
       P('yujin', '于禁', 'infantry', 16, 8, 19, { bonus: { def: 4, atk: 2 } }),
       P('dianwei', '典韦', 'fighter', 16, 11, 19, { unlessFlag: 'dianwei_dead', bonus: { atk: 12, hp: 30 } }),
       P('xunyou', '荀攸', 'strategist', 16, 9, 20, { bonus: { int: 8 } }),
+      A('liuyan', '刘延', 'infantry', 15, 13, 20, { ai: 'hold', bonus: { def: 4 }, ifFlag: 'camp_baima_evacuate' }),
       E('wenchou', '文丑', 'cavalry', 21, 11, 5, { leader: true, bonus: { atk: 16, def: 6, hp: 50 } }),
       E('liubei', '刘备', 'lord', 19, 11, 1, { ai: 'hold', bonus: { atk: 4, def: 4 } }),
       E('w1', '河北骑兵', 'cavalry', 16, 6, 6),
@@ -398,11 +414,15 @@ export default [
         ] },
       { onDeath: 'liubei', dialog: [
         { who: '刘备', side: 'enemy', text: '方才阵前那员红脸大将……莫非是二弟？……撤，速回河北！' },
+        { who: '关羽', side: 'player', text: '兄长！……丞相早已明言相告，关某心中有数，今日暂不相追。', ifFlag: 'camp_yanjin_told_guanyu' },
+        { who: '关羽', side: 'player', text: '那人……好生眼熟。', unlessFlag: 'camp_yanjin_told_guanyu' },
       ] },
     ],
     epilogue: [
       { who: '曹操', side: 'player', text: '旬日之间连诛河北二将，袁绍锐气已挫。' },
-      { who: '旁白', text: '不久，关羽得知刘备身在袁绍军中，遂将曹操所赐金银尽数封存，悬汉寿亭侯印于堂上，留书辞去。' },
+      { who: '旁白', text: '战后，关羽将曹操所赐金银尽数封存，悬汉寿亭侯印于堂上，亲至相府辞行。', ifFlag: 'camp_yanjin_told_guanyu' },
+      { who: '关羽', side: 'player', text: '丞相不以兄长消息相瞒，关某感佩。此恩今生难报，他日战阵相逢，当让丞相三分。', ifFlag: 'camp_yanjin_told_guanyu' },
+      { who: '旁白', text: '不久，关羽从旁人口中得知刘备身在袁绍军中，遂将曹操所赐金银尽数封存，悬汉寿亭侯印于堂上，留书辞去。', unlessFlag: 'camp_yanjin_told_guanyu' },
       { who: '关羽', side: 'player', text: '丞相厚恩，关某已斩颜良、文丑相报。今知兄长下落，誓当相从，就此别过。' },
       { who: '曹操', side: 'player', text: '……不忘故主，来去明白，真丈夫也。传令各关，放云长过去，勿得阻拦。' },
       { who: '旁白', text: '关羽护送二位嫂嫂，千里寻兄。曹操则收拢兵马，退守官渡，与袁绍大军隔水对峙。' },
@@ -476,6 +496,9 @@ export default [
       A('xuyou', '许攸', 'strategist', 16, 11, 27, { focus: 'chunyuqiong', bonus: { int: 6 } }),
       A('pili1', '霹雳车', 'catapult', 17, 9, 17, { ai: 'hold' }),
       A('pili2', '霹雳车', 'catapult', 17, 22, 17, { ai: 'hold' }),
+      // 营中选择“与士卒同食”：士卒感念，自愿留营死守
+      A('gd_g1', '曹军步兵', 'infantry', 16, 13, 25, { ai: 'hold', ifFlag: 'camp_guandu_share_rations' }),
+      A('gd_g2', '曹军步兵', 'infantry', 16, 18, 25, { ai: 'hold', ifFlag: 'camp_guandu_share_rations' }),
       E('yuanshao', '袁绍', 'lord', 22, 16, 1, { leader: true, ai: 'hold', bonus: { atk: 6, def: 8, int: 4, hp: 40 } }),
       E('guotu', '郭图', 'strategist', 19, 17, 1, { ai: 'hold', bonus: { int: 6 } }),
       E('zhanghe', '张郃', 'cavalry', 20, 15, 4, { ai: 'hold', bonus: { atk: 8 } }),
@@ -500,6 +523,8 @@ export default [
         dialog: [
           { who: '郭图', side: 'enemy', text: '曹操分兵在外，其营必虚。张郃、高览，速攻曹营！' },
           { who: '张郃', side: 'enemy', text: '……末将领命。' },
+          { who: '夏侯惇', side: 'player', text: '袁军来攻营了！孟德与士卒同食，营中无一人叛逃，军士们都抢着守寨门！', ifFlag: 'camp_guandu_share_rations' },
+          { who: '夏侯惇', side: 'player', text: '袁军来攻营了！营中缺粮，军心浮动……都给我顶住，后退者斩！', unlessFlag: 'camp_guandu_share_rations' },
         ] },
       { turn: 8, faction: 'enemy',
         units: [E('jiangqi', '蒋奇', 'cavalry', 18, 10, 0, { bonus: { atk: 4 } }), E('jq1', '河北骑兵', 'cavalry', 17, 10, 1)],
@@ -526,6 +551,7 @@ export default [
     epilogue: [
       { who: '袁绍', side: 'enemy', text: '十万大军竟败于此……撤，撤回河北！' },
       { who: '旁白', text: '袁绍仅率八百余骑渡河北逃。张郃、高览因受郭图谗言，焚其攻具，率部来降。' },
+      { who: '旁白', text: '相持数月，曹军粮尽而无一人叛逃。丞相减己份例、与士卒同食之事，在军中传为美谈。', ifFlag: 'camp_guandu_share_rations' },
       { who: '张郃', side: 'player', text: '袁本初不能用人，郃愿归明公麾下，效犬马之劳。' },
       { who: '曹操', side: 'player', text: '昔微子去殷、韩信归汉，将军来降，犹是也。' },
       { who: '旁白', text: '清点袁营辎重时，搜出一束书信，皆是许都官员与军中将士暗通袁绍之书。' },
@@ -638,6 +664,7 @@ export default [
         { map: { show: '曹操', at: '官渡', side: 'player' } },
         { map: { show: '张郃', at: '官渡', side: 'player' } },
         { say: [{ who: '旁白', text: '袁绍仅率八百余骑渡河北逃。张郃、高览因受郭图谗言，焚其攻具，率部来降。' }] },
+        { say: [{ who: '旁白', text: '相持数月，曹军粮尽而无一人叛逃。丞相减己份例、与士卒同食之事，在军中传为美谈。' }], ifFlag: 'camp_guandu_share_rations' },
         // 曹操军主营：张郃来降；焚烧书信
         { bg: 'tent', place: '官渡　曹操军主营' },
         { actor: '曹操', side: 'player', at: [3, 3], face: 'dr' },
@@ -760,6 +787,8 @@ export default [
       { who: '程昱', side: 'player', text: '可退军背河，伏兵十队于两侧。令许褚佯败诱敌，袁军追至，十面齐出，必可破之。' },
       { who: '曹操', side: 'player', text: '前无去路，后临大河，诸军必死战。仲德之计大妙！' },
       { who: '许褚', side: 'player', text: '诱敌的活计交给俺！' },
+      { who: '程昱', side: 'player', text: '河北降卒已驱在阵前。袁军见是旧部，必然轻进。', ifFlag: 'camp_cangting_bait_captives' },
+      { who: '张郃', side: 'player', text: '……那些都是河北子弟。郃无话可说。', ifFlag: 'camp_cangting_bait_captives' },
       { who: '袁绍', side: 'enemy', text: '曹操背水下寨，自寻死路！诸子听令，一鼓作气，将曹军赶入河中！' },
     ],
     units: [
@@ -773,6 +802,9 @@ export default [
       P('xiahouyuan', '夏侯渊', 'archercav', 18, 15, 19, { mark: '渊', bonus: { atk: 4, agi: 4 } }),
       P('xuhuang', '徐晃', 'infantry', 18, 16, 22, { bonus: { atk: 6 } }),
       P('yuejin', '乐进', 'infantry', 18, 15, 25, { bonus: { atk: 4 } }),
+      // 营中选择“降卒为饵”：河北降卒在前诱敌
+      A('ct_bait1', '河北降兵', 'infantry', 15, 8, 22, { ifFlag: 'camp_cangting_bait_captives' }),
+      A('ct_bait2', '河北降兵', 'infantry', 15, 11, 22, { ifFlag: 'camp_cangting_bait_captives' }),
       E('yuanshao', '袁绍', 'lord', 23, 9, 1, { leader: true, ai: 'hold', bonus: { atk: 6, def: 8, int: 4, hp: 40 } }),
       E('yuantan', '袁谭', 'cavalry', 20, 6, 8, { bonus: { atk: 4 } }),
       E('yuanshang', '袁尚', 'cavalry', 20, 13, 8, { bonus: { atk: 4 } }),
@@ -791,6 +823,8 @@ export default [
     events: [
       { turn: 4, faction: 'player', units: [],
         dialog: [
+          { who: '旁白', text: '阵前降卒死伤枕藉，袁军只道曹军溃败，蜂拥追来。', ifFlag: 'camp_cangting_bait_captives' },
+          { who: '许褚', side: 'player', text: '袁军追着俺屁股跑进来了！嘿嘿，俺这一路边打边跑，可没吃亏！', unlessFlag: 'camp_cangting_bait_captives' },
           { who: '程昱', side: 'player', text: '袁军已然深入！伏兵齐出，十面合围！' },
           { who: '夏侯惇', side: 'player', text: '杀！一个也别放走！' },
         ] },
@@ -803,6 +837,8 @@ export default [
     epilogue: [
       { who: '袁绍', side: 'enemy', text: '十面埋伏……吾又中曹操之计……（口吐鲜血）' },
       { who: '旁白', text: '袁绍大败，诸子各自奔逃。袁绍回到冀州，忧愤成疾。' },
+      { who: '旁白', text: '此战河北降卒十不存一。消息传回冀州，河北人闻曹军之名，多有恨意。', ifFlag: 'camp_cangting_bait_captives' },
+      { who: '旁白', text: '曹军精兵亦多有折损，然河北降卒闻丞相不以己为饵，归心者日众。', unlessFlag: 'camp_cangting_bait_captives' },
       { who: '郭嘉', side: 'player', text: '袁绍一时难以再起。刘备新依附汝南刘辟、龚都，欲袭许都，当先除之。' },
       { who: '曹操', side: 'player', text: '传令，回师汝南，讨伐刘备！' },
     ],
@@ -893,6 +929,9 @@ export default [
           { who: '关羽', side: 'enemy', text: '兄长勿忧，关某来也！' },
           { who: '周仓', side: 'enemy', text: '曹兵听着，周仓在此！' },
           { who: '郭嘉', side: 'player', text: '关羽自穰山杀出！趁其立足未稳，速击之，莫让他与城中合兵。' },
+          { who: '张辽', side: 'player', text: '诸军听着，丞相有令：遇关将军只可逼退，不得加害！', ifFlag: 'camp_rangshan_spare_guanyu' },
+          { who: '关羽', side: 'enemy', text: '曹公仍念旧情……然兄长之命不可违。关某今日只退曹兵，不取曹公性命。', ifFlag: 'camp_rangshan_spare_guanyu' },
+          { who: '夏侯惇', side: 'player', text: '关羽既已离去，便是敌将！今日休想再走！', unlessFlag: 'camp_rangshan_spare_guanyu' },
         ] },
       { turn: 10, faction: 'enemy', units: [], setAi: { zhaoyun: 'aggressive', liubei: 'aggressive' },
         dialog: [{ who: '刘备', side: 'enemy', text: '事已至此，唯有死战！子龙，随我杀出城去！' }] },
@@ -908,11 +947,18 @@ export default [
       { duel: { a: 'zhanghe', b: 'liupi', winner: 'a', result: 'kill' },
         dialog: [{ who: '刘辟', side: 'enemy', text: '休要小觑我汝南好汉！' }],
         after: [{ who: '张郃', side: 'player', text: '不堪一击。' }] },
+      // 营中标记：关羽撤退时的对白（追加在末尾，不影响已有事件下标）
+      { onDeath: 'e_guanyu', dialog: [
+        { who: '关羽', side: 'enemy', text: '曹公军令如山，诸将竟无一人以死相逼……此情，关某铭记。', ifFlag: 'camp_rangshan_spare_guanyu' },
+        { who: '曹操', side: 'player', text: '让开一条路，放云长去吧。', ifFlag: 'camp_rangshan_spare_guanyu' },
+        { who: '关羽', side: 'enemy', text: '曹操！今日之仇，关某记下了！', unlessFlag: 'camp_rangshan_spare_guanyu' },
+      ] },
     ],
     epilogue: [
       { who: '刘备', side: 'enemy', text: '天不佑我……备无立锥之地矣。' },
       { who: '孙乾', side: 'enemy', text: '荆州刘表与主公同为汉室宗亲，何不往投之？' },
       { who: '旁白', text: '刘备收拾残部，南投荆州刘表，屯于新野。' },
+      { who: '旁白', text: '关羽护着刘备南去。临行前，他在穰山道旁勒马回望曹营良久。', ifFlag: 'camp_rangshan_spare_guanyu' },
       { who: '旁白', text: '建安七年夏，袁绍病逝。袁谭、袁尚兄弟争位，曹操趁势北上，兵临黎阳。' },
     ],
   },
@@ -1006,6 +1052,7 @@ export default [
         units: [E('fengji', '逢纪', 'strategist', 22, 0, 17, { bonus: { int: 6 } }), E('fj1', '河北步兵', 'infantry', 20, 0, 18)],
         dialog: [
           { who: '逢纪', side: 'enemy', text: '奉袁尚公子之命，前来助战！' },
+          { who: '张郃', side: 'player', text: '明公，沿途乡里感念我军秋毫无犯，早有人来报逢纪援军的去向！', ifFlag: 'camp_liyang_no_plunder' },
           { who: '郭嘉', side: 'player', text: '袁尚已遣援兵……主公，若再相持，恐生变数。不如暂且收兵？' },
           { who: '曹操', side: 'player', text: '既已交兵，岂可半途而废！先破了援兵再说。' },
         ] },
@@ -1027,6 +1074,7 @@ export default [
       { who: '郭嘉', side: 'player', text: '主公，袁氏兄弟急之则相保，缓之则相争。不如假意南征刘表，坐待其变。' },
       { who: '曹操', side: 'player', text: '善。暂且引兵南还。' },
       { who: '旁白', text: '曹军南撤后，袁谭、袁尚果然反目相攻。袁谭不敌，遣辛毗向曹操求援。' },
+      { who: '旁白', text: '曹军在黎阳不扰乡里之事，渐渐传入邺城。', ifFlag: 'camp_liyang_no_plunder' },
     ],
   },
   // ---------------- 23 邺城之战 ----------------
@@ -1112,19 +1160,33 @@ export default [
       ] },
       { turn: 12, faction: 'enemy', units: [], setAi: { s6: 'aggressive', s7: 'aggressive', s3: 'aggressive', s4: 'aggressive' },
         // 战场演出：审荣献门，东城门（开局关闭）打开
+        // 营中标记 camp_liyang_no_plunder：东门已在第 10 回合提前打开（见末尾事件）
         stage: [
-          { camera: [20, 3] },
-          { highlight: [[20, 3]] },
-          { terrain: { at: [20, 3], set: 'open' } },
+          { camera: [20, 3], unlessFlag: 'camp_liyang_no_plunder' },
+          { highlight: [[20, 3]], unlessFlag: 'camp_liyang_no_plunder' },
+          { terrain: { at: [20, 3], set: 'open' }, unlessFlag: 'camp_liyang_no_plunder' },
         ],
         dialog: [
-          { who: '辛毗', side: 'ally', text: '城中粮尽，人心已散！审配之侄审荣守东门，已暗中与我约定献门！' },
+          { who: '辛毗', side: 'ally', text: '城中粮尽，人心已散！审配之侄审荣守东门，已暗中与我约定献门！', unlessFlag: 'camp_liyang_no_plunder' },
+          { who: '辛毗', side: 'ally', text: '城中粮尽，东门又已洞开，守军再无斗志！', ifFlag: 'camp_liyang_no_plunder' },
           { who: '审配', side: 'enemy', text: '审荣竟敢通敌！……出城迎战！' },
+        ] },
+      // 营中标记 camp_liyang_no_plunder：黎阳秋毫无犯，审荣提前两回合献东门（无标记时本事件无任何效果）
+      { turn: 10, faction: 'enemy', units: [],
+        stage: [
+          { camera: [20, 3], ifFlag: 'camp_liyang_no_plunder' },
+          { highlight: [[20, 3]], ifFlag: 'camp_liyang_no_plunder' },
+          { terrain: { at: [20, 3], set: 'open' }, ifFlag: 'camp_liyang_no_plunder' },
+        ],
+        dialog: [
+          { who: '辛毗', side: 'ally', text: '丞相在黎阳秋毫无犯，城中早有耳闻。审荣守东门，已等不及要献门了！', ifFlag: 'camp_liyang_no_plunder' },
+          { who: '曹操', side: 'player', text: '好！不扰百姓，竟换来一座城门。诸将，从东门杀入！', ifFlag: 'camp_liyang_no_plunder' },
         ] },
     ],
     epilogue: [
       { who: '审配', side: 'enemy', text: '我主在北，吾当北面而死！' },
-      { who: '旁白', text: '邺城陷落，审配不屈而死。曹操亲往袁绍墓前祭奠，哭之甚哀，又厚待袁氏家眷。' },
+      { who: '旁白', text: '邺城陷落，审配不屈而死。曹操亲往袁绍墓前祭奠，哭之甚哀，又厚待袁氏家眷。', unlessFlag: 'camp_yecheng_loot' },
+      { who: '旁白', text: '邺城陷落，审配不屈而死。诸将争入袁府，掳掠财货，袁氏家眷流离失所，河北士民多有怨言。', ifFlag: 'camp_yecheng_loot' },
       { who: '旁白', text: '军士押来一名文士——正是当年为袁绍起草讨曹檄文、辱及曹操祖父的陈琳。' },
       { who: '陈琳', side: 'enemy', text: '箭在弦上，不得不发……琳但求一死。' },
       { who: '曹操', side: 'player', text: '卿昔为本初作檄，但罪状孤可也，何乃上及父祖耶？', choices: [
@@ -1210,11 +1272,13 @@ export default [
     events: [
       { turn: 6, faction: 'enemy',
         units: [
-          E('am1', '伏兵', 'cavalry', 21, 0, 7), E('am2', '伏兵', 'infantry', 21, 1, 8),
-          E('am3', '伏兵', 'cavalry', 21, 19, 7), E('am4', '伏兵', 'infantry', 21, 18, 8),
+          // 营中标记 camp_yecheng_spare_yuan：河北士民感念曹操厚待袁氏，步兵伏兵不肯出战
+          E('am1', '伏兵', 'cavalry', 21, 0, 7), E('am2', '伏兵', 'infantry', 21, 1, 8, { unlessFlag: 'camp_yecheng_spare_yuan' }),
+          E('am3', '伏兵', 'cavalry', 21, 19, 7), E('am4', '伏兵', 'infantry', 21, 18, 8, { unlessFlag: 'camp_yecheng_spare_yuan' }),
         ],
         dialog: [
           { who: '郭图', side: 'enemy', text: '林中伏兵何在？截断曹军后路！' },
+          { who: '郭图', side: 'enemy', text: '怎么只来了一半？……什么，步卒听说曹操厚待袁氏家眷，都弃械散了？！', ifFlag: 'camp_yecheng_spare_yuan' },
           { who: '郭嘉', side: 'player', text: '果然有伏兵！回军先破之，免得腹背受敌。' },
         ] },
       { onDeath: 'gate1', setAi: { k1: 'aggressive', k3: 'aggressive', gate2: 'aggressive' },
@@ -1222,10 +1286,24 @@ export default [
       { onDeath: 'xinping', dialog: [{ who: '辛评', side: 'enemy', text: '毗弟……你我兄弟，终究各为其主……' }] },
       { turn: 11, faction: 'enemy', units: [], setAi: { yuantan: 'aggressive', guotu: 'aggressive', k2: 'aggressive' },
         dialog: [{ who: '袁谭', side: 'enemy', text: '与其坐困孤城，不如拼死一战！' }] },
+      // 营中标记 camp_nanpi_spare_icemen：被赦免的凿冰百姓报信，提前标出两侧林中伏兵的位置（无标记时本事件无任何效果）
+      { turn: 3, faction: 'player', units: [],
+        stage: [
+          { camera: [0, 7], ifFlag: 'camp_nanpi_spare_icemen' },
+          { highlight: [[0, 7], [1, 8]], ifFlag: 'camp_nanpi_spare_icemen' },
+          { camera: [19, 7], ifFlag: 'camp_nanpi_spare_icemen' },
+          { highlight: [[19, 7], [18, 8]], ifFlag: 'camp_nanpi_spare_icemen' },
+        ],
+        dialog: [
+          { who: '旁白', text: '几名衣衫褴褛的百姓悄悄摸进营来——正是前日逃散、被丞相饶过的凿冰民夫。', ifFlag: 'camp_nanpi_spare_icemen' },
+          { who: '百姓', side: 'ally', text: '丞相饶了小人们的性命……小人们藏在林子里时，看见两边林中都埋着袁军！', ifFlag: 'camp_nanpi_spare_icemen' },
+          { who: '曹操', side: 'player', text: '好！诸将留意左右两侧林地，伏兵一出，回军先破之。', ifFlag: 'camp_nanpi_spare_icemen' },
+        ] },
     ],
     epilogue: [
       { who: '袁谭', side: 'enemy', text: '我袁显思……竟死于此地……' },
       { who: '旁白', text: '袁谭被斩，郭图亦死于乱军之中，冀、青二州尽入曹操之手。' },
+      { who: '旁白', text: '那几名凿冰民夫后来终究被军吏认出，跪在营门前请罪。曹操只摆了摆手，叫他们回乡去了。', ifFlag: 'camp_nanpi_spare_icemen' },
       { who: '旁白', text: '袁熙、袁尚兄弟北逃，投奔辽西乌桓单于蹋顿。' },
       { who: '曹操', side: 'player', text: '二袁不除，北方终不得安。孤欲远征乌桓，诸君以为如何？' },
       { who: '郭嘉', side: 'player', text: '胡人恃其偏远，必不设备。兵贵神速，宜轻兵兼道，掩其不意！' },
@@ -1279,6 +1357,7 @@ export default [
       { who: '郭嘉', side: 'player', text: '嘉……尚能为主公画策……' },
       { who: '曹操', side: 'player', text: '奉孝之身重于千军。此战若有不支，即刻退回易州，不得逞强！' },
       { who: '张辽', side: 'player', text: '敌阵未整，正可击之！末将请为先锋！' },
+      { who: '曹仁', side: 'player', text: '兄长不罪谏者，诸将心服，此战人人争先！', ifFlag: 'camp_liucheng_reward_critics' },
     ],
     units: [
       P('caocao', '曹操', 'lord', 22, 6, 20, { leader: true, bonus: { atk: 4, int: 6 } }),
@@ -1335,6 +1414,10 @@ export default [
       { who: '旁白', text: '张辽阵斩蹋顿，乌桓降者二十余万口。袁尚、袁熙逃往辽东，不久为公孙康所斩，首级送至曹营。' },
       { who: '曹操', side: 'player', text: '北方已定！只是……奉孝如何了？' },
       { who: '旁白', text: '若郭嘉早已退回后方，当可安然养病；若随军苦战至最后，其病势恐已难以挽回……' },
+      { who: '旁白', text: '回师途中天寒且旱，二百里无水，军中乏食，杀马数千匹以为粮，方得还师。', ifFlag: 'camp_liucheng_reward_critics' },
+      { who: '曹操', side: 'player', text: '孤前行乘危以侥幸，虽得之，天所佐也，不可以为常。诸君之谏，乃万安之计。先前谏阻者，皆有重赏！', ifFlag: 'camp_liucheng_reward_critics' },
+      { who: '旁白', text: '自此以后，诸将遇事，无不直言。', ifFlag: 'camp_liucheng_reward_critics' },
+      { who: '旁白', text: '营中禁言之令虽解，诸将却从此不再轻易进谏。', ifFlag: 'camp_liucheng_gag' },
       { who: '旁白', text: '曹操班师邺城，筑玄武池以练水军，目光转向南方的荆州。' },
     ],
   },

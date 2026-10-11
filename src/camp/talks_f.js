@@ -1,6 +1,6 @@
 // 营中台词 · F 组（奸雄线 j_*：张鲁讨伐战 ~ 建业入侵战）
 // 键为即将开始的关卡 id；格式见 docs/STAGE_GUIDE.md §13
-// 本组营中选项设置的剧情标记（前缀 jcamp_，只在营中台词里读取）：
+// 本组营中选项设置的剧情标记（前缀 jcamp_，后果见 src/stages/f.js 对应关卡的 ifFlag / unlessFlag）：
 //   jcamp_zhanglu_mercy   张鲁讨伐前许诺善待张鲁（张辽）
 //   jcamp_hefei_trust     逍遥津前托付张辽全权（郭嘉）
 //   jcamp_miaocai_warned  定军山前再三告诫夏侯渊（夏侯渊）

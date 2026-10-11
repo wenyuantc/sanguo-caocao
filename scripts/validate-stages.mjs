@@ -458,6 +458,41 @@ for (const id of Object.keys(ITEM_PRICE)) if (!ITEMS[id]) eqErr(`有价格的道
       else if (CAMP_STRICT) campErr(`talks_${g}.${sid} 缺少营中台词`);
     }
   }
+  // 营中选项设置的剧情标记必须有后果：在任一关卡数据（任意位置的 ifFlag / unlessFlag，含开场 / 结尾 / 事件 / 单位 / 场景脚本）、
+  // 营中台词的 ifFlag / unlessFlag、武将离队标记（generals.gone）或奖励条件（REWARDS）中至少被读取一次。
+  // 读取方在全部组中查找（不受分组参数影响）；只报所选组的 talks_<组>.js 设置的标记
+  {
+    const reads = new Set();
+    const walk = (o, seen = new Set()) => {
+      if (!o || typeof o !== 'object' || seen.has(o)) return;
+      seen.add(o);
+      if (Array.isArray(o)) { o.forEach((v) => walk(v, seen)); return; }
+      for (const [k, v] of Object.entries(o)) {
+        if ((k === 'ifFlag' || k === 'unlessFlag') && typeof v === 'string') reads.add(v);
+        else walk(v, seen);
+      }
+    };
+    const stageMods = await Promise.all([...'abcdef'].map((g) => import(`../src/stages/${g}.js`)));
+    stageMods.forEach((m) => walk(m.default));
+    walk(Object.values(TALKS_BY_GROUP));
+    walk(GENERIC_TALKS);
+    walk(FOLK_TALKS);
+    walk(REWARDS);
+    for (const g of Object.values(GENERALS)) if (typeof g.gone === 'string') reads.add(g.gone);
+    for (const g of groups.length ? groups : Object.keys(GROUP_IDS)) {
+      const where = new Map();
+      const scan = (arr, at) => (Array.isArray(arr) ? arr : []).forEach((l) => (l?.choices || []).forEach((c) => {
+        if (typeof c?.flag === 'string') where.set(c.flag, [...(where.get(c.flag) || []), at]);
+        scan(c?.reply, at);
+      }));
+      for (const [sid, list] of Object.entries(TALKS_BY_GROUP[g] || {})) {
+        (Array.isArray(list) ? list : []).forEach((e) => scan(e?.lines, `talks_${g}.${sid}（${e?.who}）`));
+      }
+      for (const [flag, ats] of where) {
+        if (!reads.has(flag)) campErr(`[${g.toUpperCase()} 组] 营中剧情标记 ${flag} 没有被任何关卡数据或营中台词读取（ifFlag / unlessFlag），设置于 ${[...new Set(ats)].join('、')}`);
+      }
+    }
+  }
   // 通用台词
   let genOk = 0;
   const genTotal = Object.keys(GENERALS).filter((id) => id !== 'caocao').length;

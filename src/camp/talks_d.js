@@ -1,9 +1,10 @@
 // 营中台词 · D 组（第 26~31 关：博望坡之战 ~ 马超迎击战）
 // 键为即将开始的关卡 id；格式见 docs/STAGE_GUIDE.md §13
-// 本组设置的剧情标记（只作记录，营中台词内部引用）：
+// 本组设置的剧情标记（后果见 src/stages/d.js 对应关卡的 ifFlag / unlessFlag）：
 //   camp_bowang_warned  博望坡前嘱咐夏侯惇提防火攻
 //   camp_liucong_killed 长坂坡前密令于禁除去刘琮（赤壁营中文聘会提起）
 //   camp_hefei_bait     合肥战前同意张辽将计就计、放任内应举事
+//   camp_hefei_purge    合肥战前下令尽捕城中可疑之人（叛兵提前被拿下，只有戈定漏网）
 export const CAMP_TALKS_D = {
   // ==================== 柳城之后 → 26 博望坡之战（邺城） ====================
   bowangpo: [
@@ -259,7 +260,7 @@ export const CAMP_TALKS_D = {
             { text: '不要声张，让他们举火，诱太史慈入瓮', flag: 'camp_hefei_bait', reply: [
               { who: '张辽', text: '末将正是此意！叛贼一动，西门便是太史慈的葬身之处。' },
             ] },
-            { text: '宁可错杀，尽捕城中可疑之人', red: -1, reply: [
+            { text: '宁可错杀，尽捕城中可疑之人', red: -1, flag: 'camp_hefei_purge', reply: [
               { who: '张辽', text: '……末将遵命。只怕抓不尽，反倒打草惊蛇。' },
             ] },
           ],

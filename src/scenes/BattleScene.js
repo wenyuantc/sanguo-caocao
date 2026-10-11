@@ -54,7 +54,7 @@ export class BattleScene extends Phaser.Scene {
 
   // 地图版本不一致时，把 registry 恢复为本关开头的战役状态（道具、红色指数、剧情标记、成长、装备、金钱）：
   // 1. 第一关：开头状态就是新游戏（同 TitleScene.newGame），按存档难度重建；
-  // 2. 其他关：用 stage 指向本关的自动存档（上一关胜利时写入，见 stageStartSave）。
+  // 2. 其他关：用 stage 指向本关的自动存档（营门出征时写入的 'stage'，或上一关胜利时写入的 'camp'，见 stageStartSave）。
   // 3. 都没有时退回：沿用 applyLoad 已写入的战斗存档数据。已知限制：道具消耗、红色指数、剧情标记、
   //    roster / 装备（整备后写入的值）停留在存档时刻，开场剧情选项可能再次累加红色指数。
   restartFromStageStart(load, stage) {
@@ -96,7 +96,7 @@ export class BattleScene extends Phaser.Scene {
     if (!this.load && !this.skipStory) {
       this.redirecting = true;
       this.scene.start('Story', {
-        stage: stage.id, part: 'pre',
+        stage: stage.id, part: 'pre', deploy: this.campDeploy,
         notice: this.mapReset ? '关卡地图已更新，将从本关开头重新开始（等级、装备等成长数据保留）。' : null,
       });
       return;
@@ -727,10 +727,13 @@ export class BattleScene extends Phaser.Scene {
     items[loot] = (items[loot] || 0) + 1;
     this.registry.set('items', items);
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
+    // 自动存档：下一关存在时（goNext 进营中）写营中存档，读取后回到营中；没有下一关（结局）时保持关卡开头类型
+    const toCamp = !!(next && getStage(next) && next !== FIRST_STAGE);
     if (!this.stage.debug) writeAuto({
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       inventory: this.inventory, gold: this.gold, summary: { lordLvl },
-    });
+      ...(toCamp ? { talked: [], deploy: null } : {}),
+    }, toCamp ? 'camp' : 'stage');
     const supplies = { ...this.difficulty.reward };
     if (seal) supplies.seal = (supplies.seal || 0) + 1;
     supplies[loot] = (supplies[loot] || 0) + 1;

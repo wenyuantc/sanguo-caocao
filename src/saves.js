@@ -1,5 +1,5 @@
 // 存档：100 个手动存档位 + 1 个自动存档（每章胜利后写入）
-// 存档类型 kind：'stage' 关卡开头（自动存档）/ 'battle' 战斗中 / 'camp' 营中（stage 为下一关 id，另记 talked 已对话人物、deploy 营中选好的阵容、pos 曹操位置）
+// 存档类型 kind：'stage' 关卡开头（营门出征时的自动存档，可带 deploy 营中选好的阵容）/ 'battle' 战斗中 / 'camp' 营中（stage 为下一关 id，另记 talked 已对话人物、deploy 营中选好的阵容、pos 曹操位置）
 import { isGeneral } from './generals.js';
 
 const SLOT_KEY = 'sanguo-slots';
@@ -31,8 +31,9 @@ export function readAuto() {
   return parse(localStorage.getItem(AUTO_KEY), null);
 }
 
-export function writeAuto(data) {
-  localStorage.setItem(AUTO_KEY, JSON.stringify({ ...data, kind: 'stage', savedAt: Date.now() }));
+// kind：'camp'（胜利后进营中前写入，读取回到营中）或 'stage'（营门出征时写入，读取播下一关开场）
+export function writeAuto(data, kind = 'stage') {
+  localStorage.setItem(AUTO_KEY, JSON.stringify({ ...data, kind, savedAt: Date.now() }));
 }
 
 export function clearAuto() {
@@ -70,23 +71,26 @@ export function restoreRegistry(scene, data) {
   scene.registry.set('gold', data.gold ?? 0);
 }
 
-// 读取存档：写入全局状态后进入战场；营中存档（kind: 'camp'）回到营中
+// 读取存档：写入全局状态后进入战场；营中存档（kind: 'camp'）回到营中；
+// 关卡开头存档（kind: 'stage'）先播开场场景，营门出征时选好的阵容（deploy）带进整备
 export function applyLoad(scene, data) {
   restoreRegistry(scene, data);
   if (data.kind === 'camp') {
     scene.scene.start('Camp', { stage: data.stage, talked: data.talked, deploy: data.deploy, pos: data.pos });
     return;
   }
-  scene.scene.start('Battle', { stage: data.stage, load: data.kind === 'battle' ? data : null });
+  if (data.kind === 'battle') { scene.scene.start('Battle', { stage: data.stage, load: data }); return; }
+  scene.scene.start('Battle', { stage: data.stage, load: null, deploy: Array.isArray(data.deploy) ? data.deploy : null });
 }
 
 // 战斗中存档的地图版本与关卡不一致时，找本关开头的状态作为重开起点：
-// 自动存档在上一关胜利时写入（stage = 下一关 id），所以 stage 指向本关的自动存档就是本关开头的快照。
+// 自动存档在上一关胜利时（kind: 'camp'，进营中前）和营门出征时（kind: 'stage'，含营中选项与阵容）写入，
+// stage 都是下一关 id，所以 stage 指向本关的自动存档就是本关开头的快照（出征时那份覆盖胜利时那份，优先被找到）。
 // 还要求难度相同、且不晚于该战斗存档（更晚的自动存档属于之后另一次进入本关，状态不同）。
 // idOf 把关卡字段（旧存档可能是数字下标）换成关卡 id。找不到时返回 null。
 export function stageStartSave(load, stageId, idOf = (s) => s) {
   const auto = readAuto();
-  if (!auto || auto.kind !== 'stage' || idOf(auto.stage) !== stageId) return null;
+  if (!auto || (auto.kind !== 'stage' && auto.kind !== 'camp') || idOf(auto.stage) !== stageId) return null;
   if ((auto.difficulty || 'normal') !== (load.difficulty || 'normal')) return null;
   if (auto.savedAt && load.savedAt && auto.savedAt > load.savedAt) return null;
   return auto;

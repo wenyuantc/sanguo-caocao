@@ -113,13 +113,20 @@ for (const id of ids) {
       const s = window.game.scene.getScene('Camp');
       return s.modal && s.children.list.some((o) => o.depth === 3000);
     }, null, 20000);
-    await page.evaluate(() => window.game.scene.getScene('Camp').depart());
+    // 出征确认框：回车确认（键盘监听延后一帧注册）
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Enter');
     out.story = await until(page, (sid) => window.game.scene.isActive('Story') && window.game.scene.getScene('Story').opts?.stage === sid, id, 5000);
+    // 出征时写入关卡开头类型的自动存档（含营中选好的阵容）
+    out.auto = await page.evaluate((sid) => {
+      const a = JSON.parse(localStorage.getItem('sanguo-save') || 'null');
+      return !!a && a.kind === 'stage' && a.stage === sid && Array.isArray(a.deploy) && !('talked' in a);
+    }, id);
   } catch (e) {
     errs.push(e.message);
   }
   out.errors = errs;
-  const bad = errs.length || !out.prep || !out.shop || !out.snapshot || !out.reachGate || !out.story || out.unread;
+  const bad = errs.length || !out.prep || !out.shop || !out.snapshot || !out.reachGate || !out.story || !out.auto || out.unread;
   if (bad) failed += 1;
   console.log(bad ? '失败' : '通过', JSON.stringify(out));
   await page.close();

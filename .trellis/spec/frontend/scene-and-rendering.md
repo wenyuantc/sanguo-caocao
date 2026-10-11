@@ -34,7 +34,7 @@
 
 ## 营中场景（`src/scenes/CampScene.js`、`src/camp/`）
 
-- 流程：`goNext` → `goCamp`（`Camp`，data `{ stage: 下一关, talked?, deploy?, pos? }`）→ 营门确认 → `goStage(scene, id, { deploy })`。第一关之前、结局之后不进营中。
+- 流程：`goNext` → `goCamp`（`Camp`，data `{ stage: 下一关, talked?, deploy?, pos? }`）→ 营门确认（回车确认 / ESC 取消；键盘监听延后一帧注册并忽略按住重复，避免打开确认框的那次回车直接出征）→ 写 `kind: 'stage'` 自动存档 → `goStage(scene, id, { deploy })`。第一关之前、结局之后不进营中。
 - 两台相机同剧情场景：主相机（depth < 1000：背景、物件、人物、头顶标记 / 提示）放大 `ZOOM` 倍并平滑跟随曹操（夹在背景范围内）；`ui` 相机渲染顶栏、按钮、`DialogBox`（1000）与弹窗（3000）。场景层文字用 `worldText`（分辨率 `RES × ZOOM`）。
 - 人物复用 `StoryActor`，坐标为等角整数格；物件（`camp/props.js`）按中心的屏幕 y 设 depth（`100 + y / 4`，与人物同一套排序）。背景是整张图，高大物件身后的格子在布局里划为障碍，避免人物画在帐篷上。
 - 移动：`story/path.js` 的 `findPath`（八方向，不切拐角，`near` 走到目标旁边）；方向键按屏幕方向映射为格子对角步。每步一个补间，`update` 中决定下一步；人物占格含正在走向的格（`to`）。规划长路径时忽略远处闲逛的人物，走到跟前被挡再按全部人物重新规划。
