@@ -32,5 +32,8 @@ export const SETTINGS = loadSettings();
 export const RES = resolveRes(SETTINGS);
 export function hiDpi(scene) {
   scene.cameras.main.setZoom(RES).centerOn(WIDTH / 2, HEIGHT / 2);
+  // 场景实例在重启之间复用，scene.events 的监听不会随 shutdown 清除：只注册一次，避免每次进入场景叠加一个（文字被重复重绘）
+  if (scene.hiDpiBound) return;
+  scene.hiDpiBound = true;
   scene.events.on('addedtoscene', (go) => { if (go.type === 'Text') go.setResolution(RES); });
 }

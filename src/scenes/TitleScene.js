@@ -6,6 +6,8 @@ import { applyLoad } from '../saves.js';
 import { FIRST_STAGE, getStage } from '../stages.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
+import { goStage } from '../story/flow.js';
+import { DEMO_SCENES } from '../story/demo.js';
 
 // 调试入口只在页面加载后第一次进入标题时生效（返回标题后正常显示）
 let debugEntered = false;
@@ -15,12 +17,28 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     hiDpi(this);
-    // 调试入口：地址带 ?stage=<关卡 id>（如 test_bigmap）时以普通难度新开该关；只在首次进入标题时生效
-    const debugStage = !debugEntered && new URLSearchParams(location.search).get('stage');
+    // 调试入口（只在首次进入标题时生效）：
+    //   ?stage=<关卡 id>（如 test_bigmap）以普通难度新开该关（先播开场场景）；加 &story=0 跳过开场场景直接整备
+    //   ?scene=<关卡 id>:pre|post 预览该关的开场 / 结尾场景（新游戏状态，播完回到标题），可加 &flags=a,b 预设剧情标记以预览分支；
+    //   ?scene=demo / gallery / poses 播放演示场景
+    const q = new URLSearchParams(location.search);
+    const debugStage = !debugEntered && q.get('stage');
     if (debugStage && getStage(debugStage)) {
       debugEntered = true;
-      this.newGame('normal', debugStage);
+      this.newGame('normal', debugStage, q.get('story') === '0');
       return;
+    }
+    const preview = !debugEntered && q.get('scene');
+    if (preview) {
+      debugEntered = true;
+      const [id, part = 'pre'] = preview.split(':');
+      if (DEMO_SCENES[id] || getStage(id)) {
+        this.resetCampaign('normal');
+        const flags = (q.get('flags') || '').split(',').map((f) => f.trim()).filter(Boolean);
+        if (flags.length) this.registry.set('flags', Object.fromEntries(flags.map((f) => [f, true])));
+        this.scene.start('Story', DEMO_SCENES[id] ? { demo: id, part: 'preview' } : { stage: id, part: part === 'post' ? 'post' : 'preview', outcome: q.get('outcome') || 'win', annihilated: q.get('annihilate') === '1' });
+        return;
+      }
     }
     const g = this.add.graphics();
     // 背景：暮色渐变 + 远山
@@ -63,8 +81,14 @@ export class TitleScene extends Phaser.Scene {
       '左键：选择 / 移动 / 指令　右键或 ESC：取消　骑兵克步兵，步兵克弓兵，弓兵克骑兵', 16, '#e8d6ae').setOrigin(0.5);
   }
 
-  // 新游戏：重置全部战役状态后进入 stage
-  newGame(id, stage) {
+  // 新游戏：重置全部战役状态后进入 stage（先播开场场景；skipStory 为调试用，直接进入整备）
+  newGame(id, stage, skipStory = false) {
+    this.resetCampaign(id);
+    if (skipStory) this.scene.start('Battle', { stage, skipStory: true });
+    else goStage(this, stage);
+  }
+
+  resetCampaign(id) {
     this.registry.set('difficulty', id);
     this.registry.set('roster', {});
     this.registry.set('joined', []);
@@ -73,7 +97,6 @@ export class TitleScene extends Phaser.Scene {
     this.registry.set('flags', {});
     this.registry.set('inventory', []);
     this.registry.set('gold', 0);
-    this.scene.start('Battle', { stage });
   }
 
   // 难度选择

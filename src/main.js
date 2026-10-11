@@ -2,6 +2,7 @@ import * as Phaser from 'phaser';
 import { WIDTH, HEIGHT, RES, SETTINGS } from './config.js';
 import { TitleScene } from './scenes/TitleScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
+import { StoryScene } from './scenes/StoryScene.js';
 import { EndingScene } from './scenes/EndingScene.js';
 
 window.game = new Phaser.Game({
@@ -13,7 +14,8 @@ window.game = new Phaser.Game({
   antialias: SETTINGS.quality !== 'low',
   fps: { limit: SETTINGS.fps },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [TitleScene, BattleScene, EndingScene],
+  // StoryScene 排在 BattleScene 之后：结尾场景叠加在战场之上播放
+  scene: [TitleScene, BattleScene, StoryScene, EndingScene],
 });
 
 // 帧率角标：DOM 叠加，与场景无关
