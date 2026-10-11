@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { TILE, MAP_X, MAP_Y, COLORS, FONT, SETTINGS } from './config.js';
-import { unitTexture, TEX, LW, LH, PAD, ANCHOR_X, FEET_Y } from './heroSprites.js';
+import { unitTexture, lookOf, TEX, LW, LH, PAD, ANCHOR_X, FEET_Y } from './heroSprites.js';
+import { sfx, stepKind } from './audio/sfx.js';
 import { STATUS, STATUS_KEYS } from './status.js';
 
 export const tileCenter = (x, y) => ({ x: MAP_X + x * TILE + TILE / 2, y: MAP_Y + y * TILE + TILE / 2 });
@@ -192,9 +193,10 @@ export class UnitView {
   moveAlong(path, ms = 90) {
     return new Promise((resolve) => {
       if (path.length <= 1) { this.snap(); resolve(); return; }
+      const kind = stepKind(lookOf(this.unit));
       const steps = path.slice(1).map((pt) => {
         const p = tileCenter(pt.x, pt.y);
-        return { x: p.x, y: p.y, duration: ms, ease: 'Linear', onStart: () => this.c.setDepth(10 + Math.max(0, pt.y)) };
+        return { x: p.x, y: p.y, duration: ms, ease: 'Linear', onStart: () => { this.c.setDepth(10 + Math.max(0, pt.y)); sfx('step', { kind }); } };
       });
       this.scene.tweens.chain({ targets: this.c, tweens: steps, onComplete: () => { this.snap(); resolve(); } });
     });

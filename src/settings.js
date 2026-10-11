@@ -1,7 +1,12 @@
-// 游戏设置：只影响渲染，不进入存档；修改后需重载页面生效（全屏除外）
+// 游戏设置：不进入存档。渲染类设置修改后需重载页面生效（全屏除外）；音量类设置即时生效
 const SETTINGS_KEY = 'sanguo-settings';
 
-export const DEFAULT_SETTINGS = { res: 'auto', quality: 'high', fps: 0, showFps: false };
+export const DEFAULT_SETTINGS = { res: 'auto', quality: 'high', fps: 0, showFps: false, music: 70, sfx: 80, mute: false };
+
+// 需要重载页面才生效的渲染类设置
+export const RENDER_KEYS = ['res', 'quality', 'fps', 'showFps'];
+// 音量：0–100 的整数
+export const VOLUME_KEYS = ['music', 'sfx'];
 
 // 各设置项的可选值（设置面板按此顺序显示）
 export const SETTING_OPTIONS = {
@@ -10,9 +15,12 @@ export const SETTING_OPTIONS = {
   // 帧率上限：0 = 跟随屏幕刷新率（60Hz 屏幕上限制为 60 会因计时抖动丢帧，故默认不限）
   fps: [[0, '跟随屏幕'], [60, '60'], [30, '30']],
   showFps: [[true, '开'], [false, '关']],
+  mute: [[false, '关'], [true, '开']],
 };
 
-const valid = (k, v) => SETTING_OPTIONS[k].some(([o]) => o === v);
+const valid = (k, v) => (VOLUME_KEYS.includes(k)
+  ? Number.isInteger(v) && v >= 0 && v <= 100
+  : SETTING_OPTIONS[k].some(([o]) => o === v));
 
 export function loadSettings() {
   let raw = null;

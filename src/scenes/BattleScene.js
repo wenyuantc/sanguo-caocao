@@ -20,6 +20,7 @@ import { DialogBox, button, wait, text, floatText } from '../ui.js';
 import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.js';
 import { writeAuto, applyLoad, restoreRegistry, stageStartSave } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
+import { openSettingsMenu } from '../settingsMenu.js';
 import { GENERALS, isGeneral } from '../generals.js';
 import { planDeploy, buildPlayerDefs, initialDeploy } from '../deploy.js';
 import { openPrep } from '../prep.js';
@@ -31,6 +32,7 @@ import { playPost, goNext } from '../story/flow.js';
 import {
   SLOTS, DROPS, issueKit, kitFrom, copyKit, newGear, pickGear, stageRewards, goldFor, gearName,
 } from '../equipment.js';
+import { sfx } from '../audio/sfx.js';
 
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
@@ -219,6 +221,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.weather === old) return false;
     this.hud.setWeather(this.weather, this.weatherType);
     this.hud.log(`天气由${WEATHERS[old]}转为${WEATHERS[this.weather]}`);
+    sfx('weather', { weather: this.weather });
     await this.weatherFx.transition(this.weather);
     return true;
   }
@@ -343,6 +346,14 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  // 音量设置（只显示音量相关的行）：弹窗期间不响应地图输入
+  openSettings() {
+    if (this.modal || this.over || this.dialog.root.visible) return;
+    this.modal = true;
+    // 敌军阶段中打开时战斗可能已结束（战果面板会自行设 modal），关闭时不要覆盖
+    openSettingsMenu(this, { audioOnly: true, onClose: () => { if (!this.over) this.modal = false; } });
+  }
+
   // 指针所在格子：按镜头换算；指针在小地图上时视为不在地图上
   tileAt(p) {
     const s = this.cam.screenOf(p);
@@ -383,6 +394,7 @@ export class BattleScene extends Phaser.Scene {
       const lord = mine.find((u) => u.id === 'caocao');
       if (lord) await this.follow(lord);
     }
+    sfx('turn', { faction });
     await this.hud.banner(`第${this.turn}回合　${{ player: '我军', ally: '友军', enemy: '敌军' }[faction]}阶段`,
       { player: '#9cc8ff', ally: '#9ce0a8', enemy: '#ff9a8a' }[faction]);
     await this.fireEvents(faction);
@@ -784,8 +796,8 @@ export class BattleScene extends Phaser.Scene {
     if (!t) return;
     const u = this.unitAt(t.x, t.y);
     if (this.state === 'idle') {
-      if (u && u.faction === 'player' && !u.acted) this.select(u);
-      else if (u) this.inspect(u);
+      if (u && u.faction === 'player' && !u.acted) { sfx('select'); this.select(u); }
+      else if (u) { sfx('select'); this.inspect(u); }
       else this.hl.clear();
     } else if (this.state === 'move') {
       const node = this.sel.range.get(key(t.x, t.y));
@@ -802,6 +814,7 @@ export class BattleScene extends Phaser.Scene {
 
   cancel() {
     if (this.modal) return;
+    if (['move', 'menu', 'target'].includes(this.state)) sfx('cancel');
     if (this.state === 'move' || (this.state === 'idle' && this.hl)) {
       this.clearSelection();
       this.state = 'idle';

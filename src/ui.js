@@ -1,5 +1,6 @@
 import { COLORS, FONT, UI_FONT, WIDTH, HEIGHT } from './config.js';
 import { portraitTexture } from './portraits.js';
+import { sfx } from './audio/sfx.js';
 
 export function panel(scene, x, y, w, h, alpha = 0.95) {
   const g = scene.add.graphics();
@@ -30,13 +31,49 @@ export function button(scene, x, y, w, h, label, onClick, size = 18) {
   zone.on('pointerout', () => draw(false, c.disabled));
   zone.on('pointerdown', (p, lx, ly, ev) => {
     ev?.stopPropagation?.();
-    if (!c.disabled) onClick();
+    if (c.disabled) return;
+    // 点击音：返回 / 取消类按钮（标签去掉空格后以这些词开头）用取消音
+    sfx(/^(返回|取消|关闭|放弃)/.test(t.text.replace(/\s/g, '')) ? 'cancel' : 'confirm');
+    onClick();
   });
   c.setDisabled = (d) => { c.disabled = d; draw(false, d); t.setAlpha(d ? 0.45 : 1); return c; };
   c.label = t;
   return c;
 }
 
+// 滑条：value 取 min–max 的整数（按 step），拖动时调用 onChange(v)；右侧显示数值。返回 Container，带 .value、.setValue(v)
+export function slider(scene, x, y, w, value, onChange, { min = 0, max = 100, step = 1 } = {}) {
+  const c = scene.add.container(x, y);
+  const g = scene.add.graphics();
+  const label = text(scene, w + 16, 0, '', 17, '#f1e3c2').setOrigin(0, 0.5);
+  const zone = scene.add.zone(-10, -18, w + 20, 36).setOrigin(0).setInteractive({ useHandCursor: true });
+  const draw = () => {
+    const k = (c.value - min) / (max - min);
+    g.clear();
+    g.fillStyle(0x2a1b0e, 1).fillRoundedRect(0, -4, w, 8, 4);
+    g.lineStyle(1, COLORS.gold, 0.5).strokeRoundedRect(0, -4, w, 8, 4);
+    if (k > 0) g.fillStyle(0x8a5a1c, 1).fillRoundedRect(0, -4, Math.max(8, w * k), 8, 4);
+    g.fillStyle(0xffd36a, 1).fillCircle(w * k, 0, 9);
+    g.lineStyle(2, 0x3a1800, 1).strokeCircle(w * k, 0, 9);
+    label.setText(String(c.value));
+  };
+  c.setValue = (v) => { c.value = Math.max(min, Math.min(max, Math.round(v / step) * step)); draw(); return c; };
+  // 按住后在滑条区域内移动即可拖动；在场景任意处抬起结束
+  let dragging = false;
+  const pick = (lx) => {
+    const old = c.value;
+    c.setValue(min + ((lx - 10) / w) * (max - min));
+    if (c.value !== old) onChange(c.value);
+  };
+  zone.on('pointerdown', (p, lx, ly, ev) => { ev?.stopPropagation?.(); dragging = true; pick(lx); });
+  zone.on('pointermove', (p, lx) => { if (dragging && p.isDown) pick(lx); });
+  const stop = () => { dragging = false; };
+  scene.input.on('pointerup', stop);
+  c.once('destroy', () => scene.input.off('pointerup', stop));
+  c.add([g, label, zone]);
+  c.setValue(value);
+  return c;
+}
 
 // 高清半身头像
 export function portrait(scene, x, y, name, side, size = 96) {

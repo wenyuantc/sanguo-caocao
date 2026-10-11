@@ -10,6 +10,7 @@ import { tileCenter } from './unitView.js';
 import { floatText, wait } from './ui.js';
 import { castFx, spellFx, itemFx, deathFx, promoteFx } from './spellFx.js';
 import { playAttack } from './attackFx.js';
+import { sfx } from './audio/sfx.js';
 
 // 普通攻击：攻击 → 蛇矛穿透 → 方天画戟连击（击破时）/ 反击 → 双剑 / 双鞭再反击
 export async function doAttack(s, a, d) {
@@ -253,6 +254,7 @@ export async function gainExp(s, u, amt) {
     const before = knownSpells(u);
     const diff = levelUp(u);
     const p = tileCenter(u.x, u.y);
+    sfx('levelup');
     floatText(s, p.x, p.y - 30, `升级！Lv${u.lvl}`, '#ffe08a', 26);
     s.hud.log(`★ ${u.name} 升至 ${u.lvl} 级（攻击+${diff.atk} 防御+${diff.def} 兵力+${diff.hp}）`);
     const learned = knownSpells(u).filter((id) => !before.includes(id));

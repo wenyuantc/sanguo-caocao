@@ -3,6 +3,7 @@ import { ITEMS } from './data.js';
 import { EQUIP, SLOT_NAME, gearName, gearDesc } from './equipment.js';
 import { ensureTextures, gearIcon } from './spellFx.js';
 import { panel, text, button } from './ui.js';
+import { sfx } from './audio/sfx.js';
 
 // 过关战果：金钱、本关取得的装备（战斗中掉落 + 关卡奖励）与补给道具；点击确定或遮罩关闭
 export function openRewards(scene, { gold = 0, gear = [], items = {} } = {}) {
@@ -12,6 +13,7 @@ export function openRewards(scene, { gold = 0, gear = [], items = {} } = {}) {
     const rows = Math.min(gear.length, 6);
     const w = 640, h = 230 + rows * 54 + (gear.length > rows ? 24 : 0) + (supplies.length ? 70 : 0);
     const x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
+    sfx(gear.length ? 'treasure' : 'item');
     const root = scene.add.container(0, 0).setDepth(3000);
     const shade = scene.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.6).setOrigin(0).setInteractive();
     root.add([shade, panel(scene, x0, y0, w, h, 0.98)]);

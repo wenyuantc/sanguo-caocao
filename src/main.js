@@ -5,6 +5,15 @@ import { BattleScene } from './scenes/BattleScene.js';
 import { StoryScene } from './scenes/StoryScene.js';
 import { EndingScene } from './scenes/EndingScene.js';
 import { CampScene } from './scenes/CampScene.js';
+import { initAudio } from './audio/engine.js';
+import { audition } from './audio/instruments.js';
+import { sfx } from './audio/sfx.js';
+
+// 音频：实时合成，首次点击 / 按键后解锁；音量取自游戏设置
+initAudio(SETTINGS);
+// 调试：__audioTest('zheng') 试听音色（不传参依次试听全部），__sfxTest('attack', { weapon: 'spear' }) 触发音效
+window.__audioTest = audition;
+window.__sfxTest = sfx;
 
 window.game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -15,6 +24,8 @@ window.game = new Phaser.Game({
   antialias: SETTINGS.quality !== 'low',
   fps: { limit: SETTINGS.fps },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  // 不用 Phaser 的声音系统（没有音频文件，声音由 src/audio 实时合成），避免多建一个 AudioContext
+  audio: { noAudio: true },
   // StoryScene 排在 BattleScene 之后：结尾场景叠加在战场之上播放；CampScene 为两关之间的营中
   scene: [TitleScene, BattleScene, StoryScene, CampScene, EndingScene],
 });

@@ -18,7 +18,10 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "10-11-audio-engine-sfx",
+    "10-11-audio-music"
+  ],
   "parent": "10-10-core-systems",
   "relatedFiles": [],
   "notes": "",

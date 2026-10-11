@@ -13,7 +13,11 @@
 ## 接入点
 - 场景：Title（标题）、StoryScene（剧情 / 中国地图）、CampScene（军营）、BattleScene（军议 → 战斗；我军回合不换曲，与原版一致；危急时切换）、单挑（单挑曲）、胜利、败北、结局。
 - 动作：`ui.button`（点击音）、`UnitView.moveAlong`（脚步）、`attackFx` 各兵器、`spellFx` 各系、`actions`（升级、撤退、道具）、天气变化。
-- 设置面板：新增 `src/settings.js` 覆盖层（滑条用 `ui.js` 新增的 `slider` 工厂函数）。
+- 设置：复用已有的 `src/settings.js` / `src/settingsMenu.js`（10-10-game-settings 已实现，目前只在标题页打开、保存后重载页面）：
+  - `settings.js` 的 `DEFAULT_SETTINGS` 增加 `music`、`sfx`（0–100）和 `mute`，`loadSettings` 照旧校验并回退默认；
+  - 音量项**即时生效、不触发重载**：`apply()` 只在渲染类设置有改动时才重载；
+  - `settingsMenu.js` 增加音量行（滑条用 `ui.js` 新增的 `slider` 工厂函数）；
+  - 战斗中从系统菜单打开同一面板，此时只显示音量相关的行（渲染类设置需重载，不在战斗中修改）。
 
 ## 性能与泄漏
 - 每个音符、音效的节点在 `onended` 时断开；同时发声的音效限制 8 个。

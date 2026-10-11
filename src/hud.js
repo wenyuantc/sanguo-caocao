@@ -58,9 +58,11 @@ export class Hud {
     this.logText = text(scene, PANEL_X + 20, MAP_Y + 418 + shift, '', 14, '#cdbd98').setDepth(51).setLineSpacing(4).setWordWrapWidth(PW - 40);
     this.maxLogs = shift > 20 ? 4 : 5;
     this.logs = [];
-    const half = (PW - 50) / 2;
-    this.saveBtn = button(scene, PANEL_X + 20, HEIGHT - 102, half, 36, '保存进度', () => scene.openSave('save'), 17).setDepth(52);
-    this.loadBtn = button(scene, PANEL_X + 30 + half, HEIGHT - 102, half, 36, '读取进度', () => scene.openSave('load'), 17).setDepth(52);
+    const third = (PW - 60) / 3;
+    this.saveBtn = button(scene, PANEL_X + 20, HEIGHT - 102, third, 36, '保存进度', () => scene.openSave('save'), 17).setDepth(52);
+    this.loadBtn = button(scene, PANEL_X + 30 + third, HEIGHT - 102, third, 36, '读取进度', () => scene.openSave('load'), 17).setDepth(52);
+    // 音量设置：任何阶段都能打开
+    this.setBtn = button(scene, PANEL_X + 40 + third * 2, HEIGHT - 102, third, 36, '设　置', () => scene.openSettings(), 17).setDepth(52);
     this.endBtn = button(scene, PANEL_X + 20, HEIGHT - 58, PW - 40, 40, '结束回合', () => scene.endPlayerPhase(), 20).setDepth(52);
   }
 
