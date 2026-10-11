@@ -512,6 +512,23 @@ for (const id of Object.keys(ITEM_PRICE)) if (!ITEMS[id]) eqErr(`有价格的道
   console.log(`营中台词：本关专属 ${covered} / ${total} 关，通用台词满 3 段的武将 ${genOk} / ${genTotal}${CAMP_STRICT ? '（严格模式）' : ''}`);
 }
 
+// 配乐：每关都登记了战斗曲，场合都指向存在的曲目，每首曲目各声部小节长度正确
+{
+  const { BATTLE_MUSIC, OCCASION } = await import('../src/audio/music.js');
+  const { SONGS } = await import('../src/audio/songs.js');
+  const { parseJianpu } = await import('../src/audio/sequencer.js');
+  for (const id of PLANNED_IDS) if (!SONGS[BATTLE_MUSIC[id]]) errors.push(`[music] ${id} 没有登记战斗曲（music.js ORIGINAL）`);
+  for (const [k, v] of Object.entries(OCCASION)) if (!SONGS[v]) errors.push(`[music] 场合 ${k} 的曲目不存在：${v}`);
+  for (const song of Object.values(SONGS)) {
+    for (const v of song.voices) {
+      try {
+        const { bad } = parseJianpu(v.notes, song.beats || 4);
+        if (bad.length) errors.push(`[music] ${song.id} 声部 ${v.inst} 第 ${bad.map((b) => b + 1).join('、')} 小节长度不对`);
+      } catch (e) { errors.push(`[music] ${song.id} 声部 ${v.inst}：${e.message}`); }
+    }
+  }
+}
+
 console.log(`共 ${STAGES.length} 关${groups.length ? '' : `（另有调试关卡 ${DEBUG_STAGES.length} 个）`}`);
 warns.forEach((w) => console.log('警告', w));
 errors.forEach((e) => console.log('错误', e));

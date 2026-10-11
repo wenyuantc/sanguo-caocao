@@ -78,3 +78,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: 配乐与场景接入
+<!-- trellis-session: v=2 fp=eea091b253146259 -->
+
+**Date**: 2026-10-11
+**Task**: 配乐与场景接入
+**Branch**: `main`
+
+### Summary
+
+音序器（look-ahead 排程、简谱解析、循环与渐变切曲）、13 首原创五声音阶曲目、场合映射与 57 关战斗曲分配、危急判定（回滞）与单挑恢复；接入标题/剧情/营中/战斗/结局；validate-stages 增加配乐校验；spec 补配乐约定。曲目尚未人工试听。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d17f17f` | feat(audio): 音序器、13 首原创配乐与各场景接入，每关战斗曲分配与危急切换 |
+| `39720c1` | docs(spec): 配乐接入约定、简谱语法与 audio 目录说明 |
+
+### Status
+
+[OK] **Completed**

@@ -177,6 +177,7 @@ export class StoryRunner {
   }
 
   async bg(c) {
+    this.s.onBg?.(c.bg);
     const first = !this.bgImg;
     if (!first && c.fade !== false) await this.fadeTo(1, 300);
     if (!c.keep) this.clear();

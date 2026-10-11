@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-10-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~80 | Active |
+| `journal-1.md` | ~103 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-10-11 | 配乐与场景接入 | `d17f17f`, `39720c1` | `main` |
 | 3 | 2026-10-11 | 音频引擎与音效 | `7c47466`, `7d4ec99`, `6699053` | `main` |
 | 2 | 2026-10-10 | 装备与宝物（10-10-equipment） | `97ef476`, `18a7c9f`, `4738e03`, `4839ed1`, `b056a1d`, `d6c3543` | `cursor/equipment-treasures-6e34` |
 | 1 | 2026-10-10 | 填写前端规范（Bootstrap Guidelines） | `01fe940` | `main` |
