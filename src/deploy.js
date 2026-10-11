@@ -129,6 +129,15 @@ export function shopStock(stageId) {
   return out;
 }
 
+// 整备的初始阵容：沿用之前（营中整备）选好的武将——必须出阵的武将一定在内，其余只保留本关候选中的，不超过人数上限
+export function initialDeploy(plan, ids) {
+  const poolIds = new Set(plan.pool.map((c) => c.id));
+  const room = plan.max - plan.fixed.length;
+  const out = [...plan.required].filter((id) => poolIds.has(id));
+  for (const id of ids || []) if (poolIds.has(id) && !out.includes(id) && out.length < room) out.push(id);
+  return out;
+}
+
 // 按选择生成我军单位定义（与关卡 P(...) 结构一致）：临时成员与预设武将站原位，其余依次填入空出的位置
 export function buildPlayerDefs(plan, selectedIds) {
   const used = new Set();

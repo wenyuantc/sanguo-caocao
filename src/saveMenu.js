@@ -11,6 +11,10 @@ function describe(data) {
   if (!data) return { title: '— 空存档 —', sub: '' };
   const stage = getStage(data.stage);
   if (!stage) return { title: '已通关', sub: formatTime(data.savedAt) };
+  if (data.kind === 'camp') {
+    const lv = data.summary?.lordLvl ? `　曹操 Lv${data.summary.lordLvl}` : '';
+    return { title: `营中 · 下一战：${stage.title}${lv}`, sub: formatTime(data.savedAt) };
+  }
   const where = data.kind === 'battle' ? `第 ${data.turn} 回合` : '开战前';
   const lvl = data.summary?.lordLvl ? `　曹操 Lv${data.summary.lordLvl}` : '';
   return { title: `${stage.title}　${where}${lvl}`, sub: formatTime(data.savedAt) };

@@ -21,7 +21,7 @@ import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.
 import { writeAuto, applyLoad, restoreRegistry, stageStartSave } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { GENERALS, isGeneral } from '../generals.js';
-import { planDeploy, buildPlayerDefs } from '../deploy.js';
+import { planDeploy, buildPlayerDefs, initialDeploy } from '../deploy.js';
 import { openPrep } from '../prep.js';
 import { openInfo } from '../infoPanel.js';
 import { openRewards } from '../rewardPanel.js';
@@ -48,6 +48,8 @@ export class BattleScene extends Phaser.Scene {
     // 开场场景（StoryScene）播完后进入时为 true；否则新开一关先转去开场场景（读档、重新挑战除外）
     this.skipStory = !!data?.skipStory;
     this.redirecting = false;
+    // 营中整备选好的出阵武将（经开场场景带入）：作为整备界面的初始阵容
+    this.campDeploy = Array.isArray(data?.deploy) ? data.deploy : null;
   }
 
   // 地图版本不一致时，把 registry 恢复为本关开头的战役状态（道具、红色指数、剧情标记、成长、装备、金钱）：
@@ -252,7 +254,7 @@ export class BattleScene extends Phaser.Scene {
     const plan = this.deployPlan;
     if (!plan) return;
     this.modal = true;
-    const ids = await new Promise((r) => openPrep(this, plan, r));
+    const ids = await new Promise((r) => openPrep(this, plan, r, { selected: this.campDeploy && initialDeploy(plan, this.campDeploy) }));
     this.modal = false;
     this.hud.setItems(this.items);
     for (const u of this.units.filter((o) => o.faction === 'player')) {
@@ -754,7 +756,7 @@ export class BattleScene extends Phaser.Scene {
   retry() {
     this.registry.set('red', this.startState.red);
     this.registry.set('flags', { ...this.startState.flags });
-    this.scene.start('Battle', { stage: this.stageId, skipStory: true });
+    this.scene.start('Battle', { stage: this.stageId, skipStory: true, deploy: this.campDeploy });
   }
 
   // ---------- 输入 ----------

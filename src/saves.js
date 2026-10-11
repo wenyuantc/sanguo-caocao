@@ -1,4 +1,5 @@
 // 存档：100 个手动存档位 + 1 个自动存档（每章胜利后写入）
+// 存档类型 kind：'stage' 关卡开头（自动存档）/ 'battle' 战斗中 / 'camp' 营中（stage 为下一关 id，另记 talked 已对话人物、deploy 营中选好的阵容、pos 曹操位置）
 import { isGeneral } from './generals.js';
 
 const SLOT_KEY = 'sanguo-slots';
@@ -69,9 +70,13 @@ export function restoreRegistry(scene, data) {
   scene.registry.set('gold', data.gold ?? 0);
 }
 
-// 读取存档：写入全局状态后进入战场
+// 读取存档：写入全局状态后进入战场；营中存档（kind: 'camp'）回到营中
 export function applyLoad(scene, data) {
   restoreRegistry(scene, data);
+  if (data.kind === 'camp') {
+    scene.scene.start('Camp', { stage: data.stage, talked: data.talked, deploy: data.deploy, pos: data.pos });
+    return;
+  }
   scene.scene.start('Battle', { stage: data.stage, load: data.kind === 'battle' ? data : null });
 }
 
@@ -112,7 +117,8 @@ export function exportSlot(i) {
 // 关卡字段：当前存档为字符串关卡 id，旧存档为数字下标
 const validStage = (v) => (typeof v === 'string' && v.length > 0) || (Number.isInteger(v) && v >= 0);
 const validSave = (d) => d && typeof d === 'object' && validStage(d.stage)
-  && d.items && typeof d.items === 'object' && (d.joined == null || Array.isArray(d.joined)) && (d.kind === 'stage' || (d.kind === 'battle' && Array.isArray(d.units)));
+  && d.items && typeof d.items === 'object' && (d.joined == null || Array.isArray(d.joined))
+  && (d.kind === 'stage' || (d.kind === 'battle' && Array.isArray(d.units)) || (d.kind === 'camp' && (d.talked == null || Array.isArray(d.talked))));
 
 // 解析导入文件，返回导入计划（不写入）；格式错误时抛出中文错误信息
 export function planImport(textContent) {

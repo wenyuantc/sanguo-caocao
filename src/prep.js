@@ -22,7 +22,9 @@ const STAT_ROWS = [['hp', '兵力'], ['mp', '策略'], ...STAT5.map((k) => [k, S
 
 // 出阵整备：阵容 / 装备 / 道具 / 商店四页；onConfirm(选中的武将 id 数组)
 // 装备、道具、商店的改动立即写入战役状态（registry），重新挑战本关时保留
-export function openPrep(scene, plan, onConfirm) {
+// scene 需要有 inventory / gold / items 字段（BattleScene、CampScene）。
+// opts：{ selected?: 初始阵容, tabs?: 显示的页 id, tab?: 初始页, title?, confirmLabel?: 确认按钮文字（营中为“完　成”） }
+export function openPrep(scene, plan, onConfirm, opts = {}) {
   ensureTextures(scene);
   const root = scene.add.container(0, 0).setDepth(3000);
   const shade = scene.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.65).setOrigin(0).setInteractive();
@@ -30,7 +32,8 @@ export function openPrep(scene, plan, onConfirm) {
   const w = 1000, h = 600, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
   const COLS_N = 4, ROWS_N = 3, PER_PAGE = COLS_N * ROWS_N, cw = 230, ch = 124, gap = 12;
   root.add([shade, panel(scene, x0, y0, w, h, 0.98)]);
-  root.add(text(scene, WIDTH / 2, y0 + 30, '出 阵 整 备', 30, '#ffd36a', FONT).setOrigin(0.5));
+  root.add(text(scene, WIDTH / 2, y0 + 30, opts.title || '出 阵 整 备', 30, '#ffd36a', FONT).setOrigin(0.5));
+  const tabs = opts.tabs ? TABS.filter(([id]) => opts.tabs.includes(id)) : TABS;
   const hint = text(scene, x0 + 30, y0 + 64, '', 15, '#cdbd98');
   const countText = text(scene, x0 + w - 30, y0 + 60, '', 20, '#f1e3c2', FONT).setOrigin(1, 0);
   const goldText = text(scene, x0 + w - 30, y0 + 22, '', 18, '#ffe08a', FONT).setOrigin(1, 0);
@@ -44,8 +47,8 @@ export function openPrep(scene, plan, onConfirm) {
   const locked = (c) => c.fixed || plan.required.has(c.id);
   const PAGES = Math.max(1, Math.ceil(cards.length / PER_PAGE));
   const GEN_PER = 11, GEN_PAGES = Math.max(1, Math.ceil(generals.length / GEN_PER));
-  let selected = new Set(plan.defaults);
-  let tab = 'deploy';
+  let selected = new Set(opts.selected || plan.defaults);
+  let tab = tabs.some(([id]) => id === opts.tab) ? opts.tab : tabs[0][0];
   const pages = { deploy: 0, gen: 0, bag: 0, buy: 0, sell: 0 };
   let cur = generals[0]?.id;
   let slot = 'weapon';
@@ -93,7 +96,7 @@ export function openPrep(scene, plan, onConfirm) {
     refresh();
   };
 
-  const tabBtns = TABS.map(([id, label], i) => button(scene, x0 + 24 + i * 92, y0 + 16, 84, 34, label, () => {
+  const tabBtns = tabs.map(([id, label], i) => button(scene, x0 + 24 + i * 92, y0 + 16, 84, 34, label, () => {
     if (tab === id) return;
     tab = id;
     toast.setText('');
@@ -106,7 +109,7 @@ export function openPrep(scene, plan, onConfirm) {
     toast.setText('');
     refresh();
   }, 18);
-  const okBtn = button(scene, x0 + w - 154, y0 + h - 56, 130, 40, '出　阵', () => {
+  const okBtn = button(scene, x0 + w - 154, y0 + h - 56, 130, 40, opts.confirmLabel || '出　阵', () => {
     if (closed) return;
     dispose();
     onConfirm(plan.pool.filter((c) => selected.has(c.id)).map((c) => c.id));
@@ -381,7 +384,7 @@ export function openPrep(scene, plan, onConfirm) {
     list.removeAll(true);
     hint.setText(HINT[tab]);
     goldText.setText(`军资金 ${scene.gold}`);
-    tabBtns.forEach((b, i) => b.label.setColor(TABS[i][0] === tab ? '#ffd36a' : '#f6e7c1'));
+    tabBtns.forEach((b, i) => b.label.setColor(tabs[i][0] === tab ? '#ffd36a' : '#f6e7c1'));
     const deploy = tab === 'deploy';
     countText.setVisible(deploy);
     resetBtn.setVisible(deploy);
