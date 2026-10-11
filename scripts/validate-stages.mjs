@@ -1,14 +1,17 @@
 // 关卡数据校验：node scripts/validate-stages.mjs [分组字母...]
-// 不带参数校验全部关卡；带参数（如 a c）只校验对应的 src/stages/<组>.js
-// 检查地图尺寸/字符、单位站位与地形、胜利条件、事件、对白、关卡衔接与可达性
-import { normalizeStage, PLANNED_IDS, ENDINGS, FIRST_STAGE } from '../src/stageMeta.js';
+// 不带参数校验全部关卡（另外校验调试关卡 src/stages/debug.js）；带参数（如 a c）只校验对应的 src/stages/<组>.js
+// 检查地图尺寸/字符、单位站位与地形（按兵种系列的通行规则）、胜利条件、事件、对白、关卡衔接与可达性
+// 地图尺寸：正式关卡必须为 mapVersion 2，尺寸等于 MAP_SIZES（原版尺寸）；旧版 18×13（mapVersion 1）只允许调试关卡使用
+import { normalizeStage, PLANNED_IDS, ENDINGS, FIRST_STAGE, MAP_SIZES, LEGACY_MAP_SIZE } from '../src/stageMeta.js';
+import { DEBUG_STAGES } from '../src/stages/debug.js';
 
-const groups = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const groups = argv.filter((a) => !a.startsWith('--'));
 const STAGES = groups.length
   ? (await Promise.all(groups.map((g) => import(`../src/stages/${g}.js`)))).flatMap((m) => m.default).map(normalizeStage)
   : (await import('../src/stages.js')).STAGES;
 const getStage = (id) => STAGES.find((s) => s.id === id);
-import { TERRAIN, SERIES, RANGES, classOf, SPELLS, ITEMS, DIFFICULTIES, LOOT } from '../src/data.js';
+import { TERRAIN, SERIES, RANGES, classOf, SPELLS, ITEMS, DIFFICULTIES, LOOT, passable } from '../src/data.js';
 import { STATUS } from '../src/status.js';
 import { CHARACTERS, CLASS_BY_NAME } from '../src/characters.js';
 import { GENERALS } from '../src/generals.js';
@@ -17,28 +20,36 @@ import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
 import { EQUIP, REWARDS, DROPS, SHOP_UNLOCK, STARTER_TREASURES, ITEM_PRICE, gearDesc } from '../src/equipment.js';
 import { TABLE, STAGE_WEATHER, SET_WEATHER, stageWeather, validIdx } from '../src/weather.js';
 
-const COLS = 18, ROWS = 13;
 const errors = [], warns = [];
 const err = (s, m) => errors.push(`[${s.id}] ${m}`);
 const warn = (s, m) => warns.push(`[${s.id}] ${m}`);
 const GENERIC = /兵|军|贼|术士|伏兵|守将|部将|将领|士兵|骑|营|旁白|斥候|使者|百姓|侍从|亲卫|船|车|众/;
 const ids = new Set();
 
-for (const s of STAGES) {
+function checkStage(s, { debug = false } = {}) {
   if (ids.has(s.id)) err(s, 'id 重复');
   ids.add(s.id);
   for (const f of ['id', 'name', 'chapter', 'turns', 'victoryText', 'map', 'units', 'prologue']) if (s[f] == null) err(s, `缺少字段 ${f}`);
-  // 地图
+  // 地图：一字符一格（30 种地形编码见 terrain.js），尺寸按 mapVersion 检查
+  if (![1, 2].includes(s.mapVersion)) err(s, `mapVersion 只能是 1 或 2：${s.mapVersion}`);
+  const [COLS, ROWS] = s.mapVersion >= 2 ? MAP_SIZES[s.id] || [s.map?.[0]?.length, s.map?.length] : LEGACY_MAP_SIZE;
+  if (s.mapVersion >= 2 && !MAP_SIZES[s.id] && !debug) err(s, 'MAP_SIZES 中没有本关的地图尺寸');
+  if (s.mapVersion < 2 && !debug) err(s, `地图仍为旧版 18×13，应按原版尺寸 ${MAP_SIZES[s.id]?.join('×')} 重做并设 mapVersion: 2`);
+  if (!(COLS >= 18 && COLS <= 40 && ROWS >= 13 && ROWS <= 40)) err(s, `地图尺寸超出范围：${COLS}×${ROWS}（应为 18~40 × 13~40）`);
   if (!Array.isArray(s.map) || s.map.length !== ROWS) err(s, `地图行数应为 ${ROWS}，实际 ${s.map?.length}`);
   s.map?.forEach((row, y) => {
     if (row.length !== COLS) err(s, `地图第 ${y} 行长度 ${row.length}（应为 ${COLS}）：${row}`);
     for (const ch of row) if (!TERRAIN[ch]) err(s, `地图第 ${y} 行含未知地形字符 '${ch}'`);
   });
+  const mapOk = Array.isArray(s.map) && s.map.length === ROWS && s.map.every((r) => r.length === COLS);
   // 天气：关卡 weather 字段（可选）或原版映射，类别 0~4、起始序号 0~5
   const wt = stageWeather(s);
   if (!TABLE[wt.type] || !validIdx(wt.start)) err(s, `天气设定错误：${JSON.stringify(wt)}（type 0~4，start 0~5）`);
   if (!s.weather && !STAGE_WEATHER[s.id]) warn(s, '没有原版天气映射，使用默认天气（普通类别、开局晴）');
-  const terr = (x, y) => TERRAIN[s.map[y]?.[x]];
+  const terr = (x, y) => TERRAIN[s.map?.[y]?.[x]];
+  // 按兵种系列判断能否站立 / 通行；目标格、撤离点、出阵位置按步兵判断
+  const canStand = (cls, x, y) => !!terr(x, y) && passable(cls, s.map[y][x]);
+  const footOk = (x, y) => canStand('infantry', x, y);
   // 单位
   const all = [...s.units, ...s.events.flatMap((e) => e.units || [])];
   const unitIds = new Set();
@@ -56,7 +67,7 @@ for (const s of STAGES) {
     if (!['player', 'enemy', 'ally'].includes(u.faction)) err(s, `${u.id} 阵营错误`);
     if (!(u.x >= 0 && u.x < COLS && u.y >= 0 && u.y < ROWS)) { err(s, `${u.name}(${u.id}) 坐标越界 (${u.x},${u.y})`); continue; }
     const t = terr(u.x, u.y);
-    if (t && t.cost[cls.moveType] >= 99) err(s, `${u.name}(${u.id}) [${cls.name}] 站在不可通行地形 ${t.name} (${u.x},${u.y})`);
+    if (t && !passable(real, t.ch)) err(s, `${u.name}(${u.id}) [${cls.name}] 站在不可通行地形 ${t.name} (${u.x},${u.y})`);
     if (!fromEvent && !u.ifFlag) {
       const k = `${u.x},${u.y}`;
       if (occ.has(k)) err(s, `${u.name} 与 ${occ.get(k)} 站位重叠 (${k})`);
@@ -78,38 +89,49 @@ for (const s of STAGES) {
     if (c.type === 'boss' && !all.some((u) => u.id === c.target)) err(s, `boss 目标不存在：${c.target}`);
     if (c.type === 'reach') {
       if (c.unit !== 'any' && !player.some((u) => u.id === c.unit)) err(s, `reach 单位不存在：${c.unit}`);
-      for (const [x, y] of c.tiles || []) if (!terr(x, y) || terr(x, y).cost.foot >= 99) err(s, `reach 目标格不可达 (${x},${y})`);
+      for (const [x, y] of c.tiles || []) if (!footOk(x, y)) err(s, `reach 目标格不可达 (${x},${y})`);
     }
     if (c.type === 'survive' && !(c.turns < s.turns)) err(s, 'survive 回合数应小于 turns');
   }
   for (const id of s.protect || []) if (!all.some((u) => u.id === id)) err(s, `protect 单位不存在：${id}`);
   if (s.escape) {
     for (const id of s.escape.units || []) if (!player.some((u) => u.id === id)) err(s, `escape 单位不存在：${id}`);
-    for (const [x, y] of s.escape.tiles || []) if (!terr(x, y) || terr(x, y).cost.foot >= 99) err(s, `escape 撤离点不可达 (${x},${y})`);
+    for (const [x, y] of s.escape.tiles || []) if (!footOk(x, y)) err(s, `escape 撤离点不可达 (${x},${y})`);
   }
   for (const r of s.victoryFlags || []) {
     if (!all.some((u) => u.id === r.unit)) err(s, `victoryFlags 单位不存在：${r.unit}`);
     if (typeof r.alive !== 'boolean' || !r.flag) err(s, 'victoryFlags 需要 { unit, alive: true|false, flag }');
   }
-  // 出阵覆盖（可选）：deploy: { max, required: [id], slots: [[x,y]] }
+  // 出阵覆盖：deploy: { max, required: [id], slots: [[x,y]] }；重做后的大地图（mapVersion 2）必须显式写出 slots
+  if (s.mapVersion >= 2 && !s.deploy?.slots && !debug) err(s, 'mapVersion 2 的关卡必须写出 deploy.slots');
   if (s.deploy) {
     const d = s.deploy;
     const slots = d.slots || player.map((u) => [u.x, u.y]);
     if (d.slots) {
       const seen = new Set();
       for (const [x, y] of d.slots) {
-        const k = `${x},${y}`, t = terr(x, y);
-        if (!t || t.cost.foot >= 99) err(s, `deploy.slots 出阵位置不可通行 (${k})`);
+        const k = `${x},${y}`;
+        if (!terr(x, y)) err(s, `deploy.slots 出阵位置超出地图 (${k})`);
+        else if (!footOk(x, y)) err(s, `deploy.slots 出阵位置不可通行 (${k})`);
         if (seen.has(k)) err(s, `deploy.slots 出阵位置重复 (${k})`);
         seen.add(k);
         const o = s.units.find((u) => u.faction !== 'player' && !u.ifFlag && u.x === x && u.y === y);
         if (o) err(s, `deploy.slots 出阵位置与 ${o.name} 重叠 (${k})`);
       }
     }
+    // 预设我军（非条件登场）必须站在出阵位置上，否则整备后的站位与预设不符
+    if (d.slots) {
+      for (const u of player.filter((p) => !p.ifFlag)) {
+        if (!d.slots.some(([x, y]) => x === u.x && y === u.y)) err(s, `预设我军 ${u.name} (${u.x},${u.y}) 不在 deploy.slots 中`);
+      }
+    }
     if (d.max != null && !(Number.isInteger(d.max) && d.max >= 1 && d.max <= slots.length)) err(s, `deploy.max 应为 1~${slots.length} 的整数`);
     for (const id of d.required || []) if (!player.some((u) => u.id === id)) err(s, `deploy.required 不是本关预设我军单位：${id}`);
     if (new Set(['caocao', ...(d.required || [])]).size > (d.max ?? slots.length)) err(s, 'deploy.required 人数超过出阵上限');
   }
+  // 失败说明中写明的回合数必须与回合上限一致
+  const dt = /超过\s*(\d+)\s*回合/.exec(s.defeatText || '');
+  if (dt && Number(dt[1]) !== s.turns) err(s, `defeatText 写的是 ${dt[1]} 回合，与回合上限 turns ${s.turns} 不一致`);
   // 出阵推导：必须出阵人数不超过上限，默认阵容与预设我军一致
   if (player.some((u) => u.id === 'caocao')) {
     const plan = planDeploy(s);
@@ -146,21 +168,21 @@ for (const s of STAGES) {
   dialogs.forEach(checkLines);
   // 可达性：从曹操出发（忽略单位）。首领按步行判断（任意我军可接近），到达目标按指定单位的移动方式判断
   const cc = player.find((u) => u.id === 'caocao');
-  const flood = (start, moveType) => {
+  const flood = (start, cls) => {
     const seen = new Set([`${start.x},${start.y}`]);
     const q = [[start.x, start.y]];
     while (q.length) {
       const [x, y] = q.shift();
       for (const [dx, dy] of RANGES.melee) {
         const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
-        if (seen.has(k) || !terr(nx, ny) || terr(nx, ny).cost[moveType] >= 99) continue;
+        if (seen.has(k) || !canStand(cls, nx, ny)) continue;
         seen.add(k); q.push([nx, ny]);
       }
     }
     return seen;
   };
-  if (cc && s.map?.length === ROWS) {
-    const foot = flood(cc, 'foot');
+  if (cc && mapOk) {
+    const foot = flood(cc, 'infantry');
     const near = (x, y, r) => [...foot].some((k) => { const [a, b] = k.split(',').map(Number); return Math.abs(a - x) + Math.abs(b - y) <= r; });
     for (const c of conds) {
       if (c.type === 'boss') {
@@ -169,9 +191,9 @@ for (const s of STAGES) {
       }
       if (c.type === 'reach') {
         const who = c.unit === 'any' ? null : player.find((u) => u.id === c.unit);
-        const mt = who ? classOf(roleOf(who).cls)?.moveType || 'foot' : 'foot';
-        const area = flood(who || cc, mt);
-        for (const [x, y] of c.tiles) if (!area.has(`${x},${y}`)) err(s, `${who?.name || '我军'}（${mt === 'horse' ? '骑马' : '步行'}）无法到达目标格 (${x},${y})`);
+        const sc = who ? roleOf(who).cls : 'infantry';
+        const area = flood(who || cc, sc);
+        for (const [x, y] of c.tiles) if (!area.has(`${x},${y}`)) err(s, `${who?.name || '我军'}（${SERIES[sc]?.name || sc}）无法到达目标格 (${x},${y})`);
       }
     }
   }
@@ -179,8 +201,12 @@ for (const s of STAGES) {
   const nexts = typeof s.next === 'string' ? [s.next] : Object.entries(s.next || {}).flatMap(([k, v]) => (k === 'route' ? Object.values(v) : [v]));
   if (!nexts.length) err(s, '缺少 next');
   for (const n of nexts) if (!PLANNED_IDS.includes(n) && !ENDINGS[n]) err(s, `next 指向不存在的关卡：${n}`);
-  if (!PLANNED_IDS.includes(s.id)) err(s, '关卡 id 不在计划表中（见 docs/STAGE_GUIDE.md）');
+  if (!debug && !PLANNED_IDS.includes(s.id)) err(s, '关卡 id 不在计划表中（见 docs/STAGE_GUIDE.md）');
+  if (debug && PLANNED_IDS.includes(s.id)) err(s, '调试关卡的 id 不能与正式关卡重复');
 }
+
+for (const s of STAGES) checkStage(s);
+if (!groups.length) for (const s of DEBUG_STAGES.map(normalizeStage)) checkStage(s, { debug: true });
 
 // 从首关出发能否走到所有关卡
 const reach = new Set();
@@ -283,7 +309,7 @@ for (const [gid, list] of Object.entries(STARTER_TREASURES)) {
 }
 for (const id of Object.keys(ITEM_PRICE)) if (!ITEMS[id]) eqErr(`有价格的道具不存在：${id}`);
 
-console.log(`共 ${STAGES.length} 关`);
+console.log(`共 ${STAGES.length} 关${groups.length ? '' : `（另有调试关卡 ${DEBUG_STAGES.length} 个）`}`);
 warns.forEach((w) => console.log('警告', w));
 errors.forEach((e) => console.log('错误', e));
 console.log(errors.length ? `\n校验失败：${errors.length} 个错误，${warns.length} 个警告` : `\n校验通过（${warns.length} 个警告）`);
