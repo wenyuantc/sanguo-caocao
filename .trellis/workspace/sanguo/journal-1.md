@@ -101,3 +101,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: 二周目继承（ngplus）与音效父任务归档
+<!-- trellis-session: v=2 fp=37a3d1bb80637605 -->
+
+**Date**: 2026-10-12
+**Task**: 二周目继承（ngplus）与音效父任务归档
+**Branch**: `feat/ngplus`
+
+### Summary
+
+归档已完成的 10-10-audio 父任务；实现二周目继承：legacy.js（sanguo-legacy：结局记录 + 宝物图鉴）、中间路线结局（route_middle 标记）、标题画面三鸟结局标记与宝物图鉴覆盖层、颍川开场许劭二周目选项（升级/金钱/全部宝物，按 research 原文）、导出导入合并 legacy；check 修复重复登记与死导出；浏览器验证 2 结局升 2 级正确
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `954a227` | feat(ngplus): 二周目继承——结局记录（含中间路线结局）、宝物图鉴、标题结局标记与图鉴、许劭二周目选项、导出导入合并 legacy |
+| `2a2d481` | docs(spec): legacy.js 模块与 sanguo-legacy 存储约定 |
+
+### Status
+
+[OK] **Completed**
