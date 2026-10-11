@@ -167,8 +167,11 @@ export default [
       { who: '旁白', text: '建安二年，曹操南征宛城，张绣举众来降。荀彧举荐的颍川郭嘉，此时已在军中参谋。' },
       { who: '郭嘉', side: 'player', text: '在下郭嘉，字奉孝。明公知人善任，真吾主也。' },
       { who: '旁白', text: '然曹操纳张济遗孀邹氏，张绣深以为耻，遂用贾诩之计，乘夜袭营。' },
+      // 营中选项：程昱处赠胡车儿千金（camp_wan_hucheer_gold）
+      { who: '旁白', text: '曹操又私以千金赠胡车儿。张绣闻之，疑曹操欲使胡车儿刺己，反意遂决。', ifFlag: 'camp_wan_hucheer_gold' },
       { who: '贾诩', side: 'enemy', text: '典韦勇不可当，可先遣人盗其双戟，再四面纵火，曹操可擒。' },
-      { who: '胡车儿', side: 'enemy', text: '嘿嘿，那黑汉的铁戟，已被俺偷来了！' },
+      { who: '胡车儿', side: 'enemy', text: '嘿嘿，那黑汉的铁戟，已被俺偷来了！', unlessFlag: 'camp_wan_hucheer_gold' },
+      { who: '胡车儿', side: 'enemy', text: '曹公的金子俺收了，将军的军令也不敢违……铁戟偷是偷来了，俺手下的弟兄就不去拼命了。', ifFlag: 'camp_wan_hucheer_gold' },
       { who: '张绣', side: 'enemy', text: '曹贼辱我太甚！今夜定要取你首级！' },
       { who: '曹操', side: 'player', text: '营中何故喧哗？……不好，四面火起，张绣反了！' },
       { who: '典韦', side: 'player', text: '主公快从西营门走！俺典韦就是赤手空拳，也要守住这营门！' },
@@ -186,8 +189,9 @@ export default [
       E('zhangxiu', '张绣', 'cavalry', 16, 14, 0, { leader: true, ai: 'hold', bonus: { atk: 6, hp: 20 } }),
       E('jiaxu_e', '贾诩', 'strategist', 15, 16, 0, { ai: 'hold', bonus: { int: 10 } }),
       E('hucheer', '胡车儿', 'fighter', 14, 14, 8, { focus: 'dianwei', bonus: { atk: 8, hp: 20 } }),
-      E('wan1', '宛城兵', 'infantry', 11, 10, 9),
-      E('wan2', '宛城兵', 'infantry', 11, 8, 10),
+      // 赠金后胡车儿部下按兵不动：营中少两队宛城兵
+      E('wan1', '宛城兵', 'infantry', 11, 10, 9, { unlessFlag: 'camp_wan_hucheer_gold' }),
+      E('wan2', '宛城兵', 'infantry', 11, 8, 10, { unlessFlag: 'camp_wan_hucheer_gold' }),
       E('wan3', '宛城骑兵', 'cavalry', 11, 4, 9),
       E('wan4', '宛城骑兵', 'cavalry', 11, 4, 10),
       E('wan5', '宛城弓兵', 'archer', 11, 3, 8),
@@ -200,7 +204,8 @@ export default [
     events: [
       { duel: { a: 'dianwei', b: 'hucheer', winner: 'a', result: 'draw' },
         dialog: [
-          { who: '胡车儿', side: 'enemy', text: '黑汉子，你的双戟在俺手里，看你拿什么打！' },
+          { who: '胡车儿', side: 'enemy', text: '黑汉子，你的双戟在俺手里，看你拿什么打！', unlessFlag: 'camp_wan_hucheer_gold' },
+          { who: '胡车儿', side: 'enemy', text: '黑汉子，莫怪俺！曹公的金子是金子，将军的军令是军令！', ifFlag: 'camp_wan_hucheer_gold' },
           { who: '典韦', side: 'player', text: '鼠辈！没了双戟，俺照样拆了你的骨头！' },
         ],
         after: [{ who: '胡车儿', side: 'enemy', text: '好、好大的力气……快来人围住他！' }] },
@@ -236,6 +241,7 @@ export default [
       { who: '典韦', side: 'player', text: '主公！俺典韦杀出来了！这点伤不算什么！', unlessFlag: 'dianwei_dead' },
       { who: '曹操', side: 'player', text: '好！好！有典韦在，吾无忧矣！', unlessFlag: 'dianwei_dead' },
       { who: '曹操', side: 'player', text: '此番宛城之败，皆因吾一时贪图女色，致使将士枉死……吾之过也。' },
+      { who: '曹操', side: 'player', text: '还有那胡车儿……收了孤千金，转手便盗了典韦双戟。孤以金买人，反为人所卖！', ifFlag: 'camp_wan_hucheer_gold' },
       { who: '郭嘉', side: 'player', text: '明公能知己过，胜败乃兵家常事。张绣、贾诩，他日必当再讨。' },
       { who: '旁白', text: '曹操收拾残兵，退回许都。然而淮南袁术僭号称帝，天下又起波澜。' },
     ],
@@ -317,6 +323,8 @@ export default [
         // 曹操自责，郭嘉劝慰
         { emote: '曹操', icon: 'dots' },
         { say: [{ who: '曹操', side: 'player', text: '此番宛城之败，皆因吾一时贪图女色，致使将士枉死……吾之过也。' }] },
+        { emote: '曹操', icon: 'anger', ms: 0, ifFlag: 'camp_wan_hucheer_gold' },
+        { say: [{ who: '曹操', side: 'player', text: '还有那胡车儿……收了孤千金，转手便盗了典韦双戟。孤以金买人，反为人所卖！', ifFlag: 'camp_wan_hucheer_gold' }], ifFlag: 'camp_wan_hucheer_gold' },
         { move: '郭嘉', to: sd(4, 11), face: 'ul', speed: 4 },
         { act: '郭嘉', pose: 'bow', ms: 200 },
         { say: [{ who: '郭嘉', side: 'player', text: '明公能知己过，胜败乃兵家常事。张绣、贾诩，他日必当再讨。' }] },
@@ -582,6 +590,9 @@ export default [
       { who: '吕布', side: 'enemy', text: '哼，曹操的援兵来得倒快。曹性，用你的冷箭招呼那独来独往的家伙！' },
       { who: '陈宫', side: 'enemy', text: '曹军先锋孤军深入，可先围而歼之，再取小沛。' },
       { who: '曹操', side: 'player', text: '元让冒进了！全军火速渡河北上，与先锋会合！' },
+      // 营中选项：程昱处“暗中留意刘备动静”（camp_watch_liubei）
+      { who: '斥候', side: 'player', text: '禀主公！程昱大人遣往小沛的细作回报：吕布部将侯成领后军，正自东南绕道而来。', ifFlag: 'camp_watch_liubei' },
+      { who: '曹操', side: 'player', text: '好！本为盯着刘备，倒先探得了吕布的虚实。传令后队，提防东南！', ifFlag: 'camp_watch_liubei' },
     ],
     units: [
       P('caocao', '曹操', 'lord', 13, 5, 24, { leader: true, bonus: { atk: 4, int: 6 } }),
@@ -631,10 +642,20 @@ export default [
           { who: '刘备', side: 'ally', text: '吕布兵势太盛……二弟、三弟，暂且退入城中！' },
           { who: '张飞', side: 'ally', text: '可恨！三姓家奴，改日再与你决个高下！' },
         ] },
+      // 营中选项 camp_watch_liubei：细作提前一回合标出侯成后军的来路（无标记时本事件什么也不做）
+      { turn: 5, faction: 'player', units: [],
+        stage: [
+          { camera: [18, 19], ifFlag: 'camp_watch_liubei' },
+          { highlight: [[19, 19], [19, 20], [18, 19]], color: 0xff7a6a, ifFlag: 'camp_watch_liubei' },
+        ],
+        dialog: [{ who: '斥候', side: 'player', text: '细作急报：侯成的后军已到东南河岸，下回合便要杀到！', ifFlag: 'camp_watch_liubei' }] },
     ],
     epilogue: [
       { who: '吕布', side: 'enemy', text: '曹操大军已至……陈宫，退回下邳！' },
       { who: '刘备', side: 'ally', text: '多谢曹公救援！备愿随曹公征讨吕布，以绝后患。' },
+      { who: '曹操', side: 'player', text: '玄德与孤同讨国贼，何谢之有。', unlessFlag: 'camp_watch_liubei' },
+      { who: '旁白', text: '程昱所遣细作暗中回报：小沛被围多日，关、张所部却几无折损；刘备又屡遣使者往来下邳城外。', ifFlag: 'camp_watch_liubei' },
+      { who: '曹操', side: 'player', text: '（玄德……果非久居人下之辈。且容他随军，孤自看着。）', ifFlag: 'camp_watch_liubei' },
       { who: '曹操', side: 'player', text: '元让，你的眼睛……' },
       { who: '夏侯惇', side: 'player', text: '区区一目，何足挂齿！孟德，趁势直取下邳，莫让吕布喘息！' },
       { who: '郭嘉', side: 'player', text: '吕布新败，锐气已挫。可引沂、泗之水灌城，下邳不日可破。' },
@@ -689,6 +710,7 @@ export default [
       { who: '貂蝉', side: 'enemy', text: '将军，城外凶险，妾身只愿与将军同守此城。' },
       { who: '郭嘉', side: 'player', text: '吕布有勇无谋，陈宫有谋而迟。今掘堤灌城，城中人心已乱，可从东、北、西三门同时攻入。' },
       { who: '刘备', side: 'ally', text: '曹公，备兄弟三人从东门助攻！' },
+      { who: '郭嘉', side: 'player', text: '（明公，程昱的细作仍盯着刘备。东门交给他，我军主力却不可离他太远。）', ifFlag: 'camp_watch_liubei' },
       { who: '曹操', side: 'player', text: '好！今日务必生擒吕布，平定徐州！' },
     ],
     units: [

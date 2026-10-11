@@ -67,6 +67,8 @@ export default [
       { who: '曹操', side: 'player', text: '得子扬相助，吾无忧矣。刘备屯兵新野，久必为患，元让可为先锋，引兵击之！' },
       { who: '夏侯惇', side: 'player', text: '刘备鼠辈，诸葛村夫，何足道哉！末将必生擒二人献于丞相！' },
       { who: '刘晔', side: 'player', text: '博望坡山路狭窄，两旁皆是芦苇树林。将军切莫轻进，提防火攻。' },
+      { who: '夏侯惇', side: 'player', text: '丞相在邺城已再三嘱咐过了。也罢，入谷之前，先叫曼成、文则看清两旁林木。', ifFlag: 'camp_bowang_warned' },
+      { who: '夏侯惇', side: 'player', text: '子扬多虑了！区区几把野火，能奈我何？', unlessFlag: 'camp_bowang_warned' },
       { who: '诸葛亮', side: 'enemy', text: '曹军远来，骄兵必败。子龙佯败诱敌，待敌入谷，伏兵举火为号。' },
       { who: '赵云', side: 'enemy', text: '军师放心，子龙定将曹军引入谷中！' },
     ],
@@ -107,14 +109,19 @@ export default [
         ] },
       { turn: 2, faction: 'enemy',
         units: [
-          E('fb1', '伏兵', 'strategist', 23, 4, 10), E('fb2', '伏兵', 'strategist', 23, 15, 10),
+          // 营中嘱咐过提防火攻（camp_bowang_warned）时，放火的伏兵被李典识破，迟一回合才得举火（见末尾第 3 回合事件）
+          E('fb1', '伏兵', 'strategist', 23, 4, 10, { unlessFlag: 'camp_bowang_warned' }),
+          E('fb2', '伏兵', 'strategist', 23, 15, 10, { unlessFlag: 'camp_bowang_warned' }),
           E('fb3', '伏兵', 'archer', 23, 5, 12), E('fb4', '伏兵', 'archer', 23, 14, 12),
         ],
         setAi: { zhaoyun: 'aggressive', e3: 'aggressive', e4: 'aggressive' },
         dialog: [
-          { who: '旁白', text: '忽听一声炮响，两旁芦苇中火光冲天，伏兵四起！' },
-          { who: '于禁', side: 'player', text: '南道路狭，山川相逼，树木丛杂，若敌用火攻奈何？' },
-          { who: '夏侯惇', side: 'player', text: '中计了！诸军莫乱，结阵自保！' },
+          { who: '旁白', text: '忽听一声炮响，两旁芦苇中火光冲天，伏兵四起！', unlessFlag: 'camp_bowang_warned' },
+          { who: '于禁', side: 'player', text: '南道路狭，山川相逼，树木丛杂，若敌用火攻奈何？', unlessFlag: 'camp_bowang_warned' },
+          { who: '夏侯惇', side: 'player', text: '中计了！诸军莫乱，结阵自保！', unlessFlag: 'camp_bowang_warned' },
+          { who: '旁白', text: '忽听一声炮响，两旁林中弓弩手齐出！', ifFlag: 'camp_bowang_warned' },
+          { who: '李典', side: 'player', text: '芦苇中藏着引火之物！元让，切莫再往前追，敌军尚未举火！', ifFlag: 'camp_bowang_warned' },
+          { who: '夏侯惇', side: 'player', text: '果然被丞相料中……前军止步，就地结阵！', ifFlag: 'camp_bowang_warned' },
         ] },
       { turn: 4, faction: 'enemy',
         units: [
@@ -129,15 +136,27 @@ export default [
         ] },
       { turn: 12, faction: 'enemy', units: [], setAi: { liubei: 'aggressive', guanping: 'aggressive' },
         dialog: [{ who: '刘备', side: 'enemy', text: '曹军已乱，随我掩杀！' }] },
+      // 营中嘱咐过提防火攻：放火的伏兵迟一回合登场
+      { turn: 3, faction: 'enemy',
+        units: [
+          E('fb1w', '伏兵', 'strategist', 23, 4, 10, { ifFlag: 'camp_bowang_warned' }),
+          E('fb2w', '伏兵', 'strategist', 23, 15, 10, { ifFlag: 'camp_bowang_warned' }),
+        ],
+        dialog: [
+          { who: '诸葛亮', side: 'enemy', text: '曹军竟在谷口止步……也罢，就在此处举火！', ifFlag: 'camp_bowang_warned' },
+          { who: '夏侯惇', side: 'player', text: '幸得丞相提醒，前军未入深谷。诸军莫乱，结阵自保！', ifFlag: 'camp_bowang_warned' },
+        ] },
     ],
     epilogues: {
       win: [
         { who: '诸葛亮', side: 'enemy', text: '曹军竟能冲破火阵……主公，且退回新野，再作计较。' },
         { who: '曹操', side: 'player', text: '诸葛孔明，果然名不虚传。若非诸将死战，几为所算。' },
         { who: '刘晔', side: 'player', text: '刘备兵微将寡，新野难守，必弃城南走。丞相宜速进兵荆州。' },
+        { who: '夏侯惇', side: 'player', text: '若非丞相临行嘱咐，惇已葬身火海矣。', ifFlag: 'camp_bowang_warned' },
       ],
       retreat: [
         { who: '夏侯惇', side: 'player', text: '惇轻敌冒进，折了许多人马，请丞相治罪！' },
+        { who: '夏侯惇', side: 'player', text: '丞相临行再三嘱咐提防火攻，惇却仍被诸葛村夫所算……惭愧！', ifFlag: 'camp_bowang_warned' },
         { who: '曹操', side: 'player', text: '胜败乃兵家常事。诸葛亮初出茅庐便有此手段，不可小觑。' },
         { who: '刘晔', side: 'player', text: '刘备兵微将寡，新野难守，必弃城南走。丞相宜亲率大军南下。' },
       ],
@@ -183,6 +202,8 @@ export default [
     deploy: { slots: [[2, 11], [1, 12], [1, 10], [3, 12], [3, 10], [4, 9], [4, 11], [4, 13], [2, 14], [2, 9]] },
     prologue: [
       { who: '旁白', text: '建安十三年，刘表病逝，刘琮举荆州而降。刘备弃樊城南走，新野、樊城百姓十余万扶老携幼，相随而行。' },
+      { who: '旁白', text: '刘琮受封青州刺史，赴任途中，为一队曹军截杀于道。消息传开，荆襄士民无不寒心，多有投奔刘备者。', ifFlag: 'camp_liucong_killed' },
+      { who: '旁白', text: '曹操表刘琮为青州刺史，厚礼送其赴任。荆襄士人闻之，多有归附之心。', unlessFlag: 'camp_liucong_killed' },
       { who: '旁白', text: '曹操亲率精骑，一日一夜行三百余里，追及刘备于当阳长坂。' },
       { who: '刘备', side: 'enemy', text: '举大事者必以人为本，今人归吾，吾何忍弃去！' },
       { who: '张飞', side: 'enemy', text: '哥哥先走，俺守住长坂桥，曹贼休想过河！' },
@@ -239,10 +260,17 @@ export default [
           { who: '旁白', text: '赵云一枪刺夏侯恩落马，夺其所佩宝剑，剑上金嵌“青釭”二字。' },
           { who: '赵云', side: 'enemy', text: '好剑！有此青釭，更可于万军之中救出小主人！' },
         ] },
-      { turn: 4, faction: 'enemy', units: [],
+      { turn: 4, faction: 'enemy',
+        // 营中密令除去刘琮（camp_liucong_killed）：荆州义兵愤而投奔刘备，从南面杀来
+        units: [
+          E('jy1', '荆州义兵', 'infantry', 23, 24, 22, { ifFlag: 'camp_liucong_killed' }),
+          E('jy2', '荆州义兵', 'archer', 23, 25, 23, { ifFlag: 'camp_liucong_killed' }),
+        ],
         dialog: [
           { who: '赵云', side: 'enemy', text: '（怀抱阿斗）小主人莫怕，子龙这便杀出重围！' },
           { who: '曹操', side: 'player', text: '好一员虎将！传令：只许活捉赵子龙，不许放冷箭！' },
+          { who: '荆州义兵', side: 'enemy', text: '曹贼害我少主刘琮！荆州儿郎，随刘皇叔报仇！', ifFlag: 'camp_liucong_killed' },
+          { who: '贾诩', side: 'player', text: '……刘琮之死，终究传开了。荆州人心，怕是一时难收。', ifFlag: 'camp_liucong_killed' },
         ] },
       { turn: 7, faction: 'enemy',
         units: [
@@ -286,7 +314,7 @@ export default [
         { map: { show: '刘备', at: '樊城', side: 'enemy' } },
         { arrow: ['樊城', '襄阳', '长坂'], side: 'enemy', ms: 1600 },
         { map: { move: '刘备', to: '长坂' } },
-        { say: [{ who: '旁白', text: '建安十三年，刘表病逝，刘琮举荆州而降。刘备弃樊城南走，新野、樊城百姓十余万扶老携幼，相随而行。' }] },
+        { say: [{ who: '旁白', text: '建安十三年，刘表病逝，刘琮举荆州而降。刘备弃樊城南走，新野、樊城百姓十余万扶老携幼，相随而行。' }, { who: '旁白', text: '刘琮受封青州刺史，赴任途中，为一队曹军截杀于道。消息传开，荆襄士民无不寒心，多有投奔刘备者。', ifFlag: 'camp_liucong_killed' }, { who: '旁白', text: '曹操表刘琮为青州刺史，厚礼送其赴任。荆襄士人闻之，多有归附之心。', unlessFlag: 'camp_liucong_killed' }] },
         { map: { show: '曹操', at: '宛', side: 'player' } },
         { arrow: ['宛', '新野', '襄阳', '长坂'], side: 'player', ms: 1000 },
         { map: { move: '曹操', to: '襄阳', ms: 600 } },
@@ -996,6 +1024,9 @@ export default [
       P('yuejin', '乐进', 'infantry', 26, 8, 7, { bonus: { atk: 4 } }),
       P('xuhuang', '徐晃', 'infantry', 26, 10, 8, { bonus: { atk: 6 } }),
       P('zhanghe', '张郃', 'cavalry', 26, 11, 7, { mark: '郃', bonus: { atk: 6 } }),
+      // 营中同意将计就计（camp_hefei_bait）：西门两侧城上预先埋伏弓兵
+      A('hfb1', '合肥伏兵', 'archer', 25, 5, 3, { ifFlag: 'camp_hefei_bait', ai: 'hold', mark: '伏' }),
+      A('hfb2', '合肥伏兵', 'archer', 25, 5, 8, { ifFlag: 'camp_hefei_bait', ai: 'hold', mark: '伏' }),
       E('taishici', '太史慈', 'cavalry', 30, 2, 11, { ai: 'hold', bonus: { atk: 10, def: 6, hp: 30 } }),
       E('ws1', '吴军步兵', 'infantry', 26, 3, 12, { ai: 'hold' }),
       E('ws2', '吴军弓兵', 'archer', 26, 0, 13, { ai: 'hold' }),
@@ -1013,11 +1044,14 @@ export default [
     ],
     events: [
       { turn: 2, faction: 'enemy',
-        units: [E('geding', '戈定', 'infantry', 27, 12, 3), E('pb1', '叛兵', 'infantry', 26, 5, 2)],
+        // 营中尽捕可疑之人（camp_hefei_purge）时，叛兵已被拿下，只有戈定漏网
+        units: [E('geding', '戈定', 'infantry', 27, 12, 3), E('pb1', '叛兵', 'infantry', 26, 5, 2, { unlessFlag: 'camp_hefei_purge' })],
         setAi: { taishici: 'aggressive', ws1: 'aggressive', ws2: 'aggressive', ws3: 'aggressive', ws4: 'aggressive' },
         dialog: [
           { who: '戈定', side: 'enemy', text: '反了！反了！城中放火，迎太史将军入城！' },
-          { who: '张辽', side: 'player', text: '果不出所料！叛贼伏诛，就在今夜！开西门，诱太史慈入瓮！' },
+          { who: '张辽', side: 'player', text: '果不出所料！叛贼伏诛，就在今夜！开西门，诱太史慈入瓮！', unlessFlag: 'camp_hefei_purge' },
+          { who: '李典', side: 'player', text: '西门两侧城上，弓弩手早已伏好，只等吴军入门！', ifFlag: 'camp_hefei_bait' },
+          { who: '张辽', side: 'player', text: '城中可疑之人捕了大半，竟叫戈定漏了网！……也罢，太史慈既来，迎战便是！', ifFlag: 'camp_hefei_purge' },
           { who: '太史慈', side: 'enemy', text: '城中火起，内应已成！诸军随我杀入西门！' },
         ] },
       { duel: { a: 'zhangliao', b: 'taishici', winner: 'a', result: 'hurt' },
@@ -1045,6 +1079,8 @@ export default [
     ],
     epilogue: [
       { who: '孙权', side: 'enemy', text: '合肥城坚，张辽善守……罢了，传令撤回江东！' },
+      { who: '曹操', side: 'player', text: '文远将计就计，叛贼与太史慈一网成擒，此真良将也！', ifFlag: 'camp_hefei_bait' },
+      { who: '曹操', side: 'player', text: '城中株连甚众，人心惶惶……若依文远之计，何至于此。', ifFlag: 'camp_hefei_purge' },
       { who: '曹操', side: 'player', text: '文远守城有功。合肥乃江淮门户，今后便由你与李典、乐进镇守。' },
       { who: '张辽', side: 'player', text: '末将领命！有辽在此，孙权休想越合肥一步！' },
       { who: '旁白', text: '江东暂平。然而关西马超、韩遂闻曹操将西征汉中，疑其袭己，遂举兵十万反于潼关。' },

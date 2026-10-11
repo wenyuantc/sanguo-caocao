@@ -85,3 +85,10 @@ node scripts/validate-stages.mjs c      # 只校验 C 组（其他组正在编�
 必须 0 错误，每条警告都要排查（当前基线：57 关全部 mapVersion 2，0 警告）。正式关卡用旧版 18×13 地图（mapVersion 1）算错误，只有调试关卡可以用。
 校验内容：地图尺寸（mapVersion 2 = `MAP_SIZES`，并须写 `deploy.slots`，预设我军必须在 slots 中）/字符、`defeatText` 中的回合数等于 `turns`、按兵种系列通行规则的站位、单位站位与地形、站位重叠、胜利/撤离/保护目标、事件结构、对白字段、
 未登记外形的说话人、`next` 指向和首领可达性。
+
+## 营中剧情标记的后果（`src/camp/talks_*.js` → `src/stages/*.js`）
+
+- 营中选项设置的每个标记都必须被读取（关卡数据或营中台词的 `ifFlag` / `unlessFlag`、`GENERALS[].gone`、`REWARDS`），`validate-stages.mjs` 会对未读取的标记报错。
+- 营中对话是可选的：**不设任何标记时必须保持原剧情、原玩法**。反向选项要另设标记并用 `ifFlag` 读取，不能用“正向标记不存在”（`unlessFlag`）表示反向选择。踩过的坑：合肥“尽捕可疑之人”原先用 `unlessFlag: camp_hefei_bait` 去掉叛兵，导致不对话的玩家也少了叛兵。
+- 新事件一律追加在 `events` 末尾，不改已有事件下标（战斗中存档按下标记录已触发事件）；事件本身不能带 `ifFlag`，条件写在事件内的单位、对白、`stage` 指令上。
+- 新增我军发言者会被推为必须出阵，只能用该关确定在候选名单中的武将，否则改为旁白或“斥候”等免登记名字。

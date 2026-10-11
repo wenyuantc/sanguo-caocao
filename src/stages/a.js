@@ -571,6 +571,8 @@ export default [
           { who: '旁白', text: '刘关张三人围住吕布，丁字儿厮杀，走马灯般战了数十回合。' },
           { who: '吕布', side: 'enemy', text: '三人合战，算什么英雄！……可恶，这一刀竟……' },
           { who: '曹操', side: 'player', text: '吕布已然负伤，正是合围之机！' },
+          { who: '关羽', side: 'ally', text: '曹将军帐前厚意，关某记下了。今日只为讨贼，他日……再论不迟。', ifFlag: 'camp_guanyu_courted' },
+          { who: '曹操', side: 'player', text: '（好刀法！此人若能为我所用……）', ifFlag: 'camp_guanyu_courted' },
         ] },
     ],
     epilogue: [
@@ -812,17 +814,30 @@ export default [
         dialog: [{ who: '吕布', side: 'enemy', text: '徐荣无能！看来还得我亲自出马！' }] },
       { turn: 11, faction: 'enemy', setAi: { lvbu: 'aggressive', lbg1: 'aggressive' },
         dialog: [{ who: '吕布', side: 'enemy', text: '观望已久，曹操，纳命来！' }] },
+      // 营中分粮赈济洛阳难民（camp_luoyang_relief）：难民报信伏兵所在，乡里义民前来相助
+      { turn: 1, faction: 'player',
+        units: [A('ym1', '洛阳义民', 'infantry', 5, 16, 9, { ifFlag: 'camp_luoyang_relief' })],
+        stage: [
+          { highlight: [[16, 2], [23, 13]], color: 0xff6a4a, ifFlag: 'camp_luoyang_relief' },
+        ],
+        dialog: [
+          { who: '旁白', text: '曾受曹军分粮的洛阳难民冒死赶来，报说北面林中、东面山里都藏着兵马。', ifFlag: 'camp_luoyang_relief' },
+          { who: '曹操', side: 'player', text: '三日之粮，换来这一句话，值了！诸将留神两侧伏兵！', ifFlag: 'camp_luoyang_relief' },
+          { who: '旁白', text: '几名乡里壮丁感念曹军恩德，执械随军助战。', ifFlag: 'camp_luoyang_relief' },
+        ] },
     ],
     epilogues: {
       annihilate: [
         { who: '吕布', side: 'enemy', text: '曹操……竟有如此能耐……撤！' },
         { who: '曹操', side: 'player', text: '伏兵尽破！可惜天子已远，追之不及了。' },
+        { who: '旁白', text: '沿途难民闻曹军得胜，焚香路旁。曹孟德仁义之名，自此传于洛阳故地。', ifFlag: 'camp_luoyang_relief' },
         { who: '旁白', text: '曹操以孤军大破董卓伏兵，威名震于关东。然诸侯联军终究瓦解，各自割据。' },
       ],
       retreat: [
         { who: '旁白', text: '曹操中箭落马，徐荣军蜂拥而来。危急之际，曹洪下马让马。' },
         { who: '曹操', side: 'player', text: '子廉，你如何是好？' },
         { who: '曹洪', side: 'player', text: '天下可无洪，不可无公！兄长快走！' },
+        { who: '旁白', text: '受过曹军赈济的难民指点汴水浅滩所在，曹洪背负曹操，方得涉水脱身。', ifFlag: 'camp_luoyang_relief' },
         { who: '旁白', text: '曹洪护曹操涉汴水而逃，收拾残兵返回酸枣。诸侯联军不久亦告瓦解。' },
       ],
     },
@@ -954,6 +969,7 @@ export default [
       { who: '夏侯惇', side: 'player', text: '孟德节哀！三军已尽缟素，只待一声令下！' },
       { who: '陶谦', side: 'enemy', text: '张闿之罪，实非老夫本意……奈何曹操不听分辩，只得死守。' },
       { who: '曹豹', side: 'enemy', text: '使君放心，末将在城外迎敌，必不教曹军近城！' },
+      { who: '于禁', side: 'player', text: '青州兵已申明军法，敢有擅离行伍者，末将立斩不赦！今日一营青州兵听候主公调遣。', ifFlag: 'camp_yujin_strict' },
       { who: '程昱', side: 'player', text: '主公，徐州之民何罪？此番攻破城池，当如何处置？' },
       { who: '曹操', side: 'player', text: '……', choices: [
         { text: '屠尽徐州，以祭吾父在天之灵！', red: -2, flag: 'xuzhou_tucheng', reply: [
@@ -989,7 +1005,9 @@ export default [
         dialog: [{ who: '糜竺', side: 'enemy', text: '使君，北海孔融、平原刘备已允发兵来救，只须再撑几日！' }] },
       { turn: 10, faction: 'enemy', units: [
         E('liubei', '刘备', 'lord', 9, 0, 9, { bonus: { atk: 2, hp: 20 } }),
-        E('guanyu', '关羽', 'cavalry', 10, 1, 8, { bonus: { atk: 14, hp: 20 } }),
+        E('guanyu', '关羽', 'cavalry', 10, 1, 8, { unlessFlag: 'camp_guanyu_courted', bonus: { atk: 14, hp: 20 } }),
+        // 虎牢关前曹操以上将之礼相邀（camp_guanyu_courted）：关羽念此情，先按兵不动三回合
+        E('guanyu_x', '关羽', 'cavalry', 10, 1, 8, { ifFlag: 'camp_guanyu_courted', ai: 'hold', bonus: { atk: 14, hp: 20 } }),
         E('zhangfei', '张飞', 'cavalry', 10, 0, 7, { bonus: { atk: 12, hp: 20 } }),
         E('zhaoyun', '赵云', 'cavalry', 10, 0, 8, { bonus: { atk: 10, agi: 6 } }),
         E('lbj1', '刘备军', 'infantry', 8, 1, 9),
@@ -999,9 +1017,23 @@ export default [
           { who: '张飞', side: 'enemy', text: '大哥何必与他多言，看俺杀他个片甲不留！' },
           { who: '曹操', side: 'player', text: '大耳贼也来送死！我与陶谦有杀父之仇，谁敢阻我，一并诛之！' },
           { who: '荀彧', side: 'player', text: '刘关张皆万人之敌，宜坚守营寨，以计破之。' },
+          { who: '关羽', side: 'enemy', text: '曹将军，虎牢关前蒙将军以上将相待，关某不忘。今日各为其主，关某且守本阵，不先与将军交锋。', ifFlag: 'camp_guanyu_courted' },
+          { who: '曹操', side: 'player', text: '云长重义如此……传令，莫去招惹关羽一军！', ifFlag: 'camp_guanyu_courted' },
         ] },
       { onDeath: 'caobao',
         dialog: [{ who: '曹豹', side: 'enemy', text: '曹军势大，末将抵挡不住……' }] },
+      // 营中于禁严申军法（camp_yujin_strict）：一营青州兵令行禁止，随军出战
+      { turn: 2, faction: 'player',
+        units: [A('qzb1', '青州兵', 'infantry', 7, 15, 21, { ifFlag: 'camp_yujin_strict' })],
+        dialog: [
+          { who: '于禁', side: 'player', text: '青州兵听令！列阵随主公前进，有敢劫掠百姓者，斩！', ifFlag: 'camp_yujin_strict' },
+        ] },
+      // 关羽按兵三回合后出战
+      { turn: 13, faction: 'enemy', setAi: { guanyu_x: 'aggressive' },
+        dialog: [
+          { who: '张飞', side: 'enemy', text: '二哥！你还要看到几时？', ifFlag: 'camp_guanyu_courted' },
+          { who: '关羽', side: 'enemy', text: '……曹将军，恩已报过，接下来便休怪关某青龙刀无情了！', ifFlag: 'camp_guanyu_courted' },
+        ] },
     ],
     epilogue: [
       { who: '陶谦', side: 'enemy', text: '老夫……愧对徐州百姓……' },
@@ -1093,6 +1125,8 @@ export default [
         dialog: [
           { who: '吕布', side: 'enemy', text: '哈哈哈！谁能挡我方天画戟！赤兔，冲！' },
           { who: '夏侯惇', side: 'player', text: '吕布亲自杀出来了！孟德，是战是退，须早作决断！' },
+          { who: '于禁', side: 'player', text: '青州兵结阵！军法在前，一步不许后退！', ifFlag: 'camp_yujin_strict' },
+          { who: '旁白', text: '青州兵素经于禁严训，虽见吕布冲阵，竟无一人奔逃。', ifFlag: 'camp_yujin_strict' },
           { who: '曹操', side: 'player', text: '（吕布骁勇难当……若力有不逮，当退往西南大营。）' },
         ] },
       { turn: 7, faction: 'enemy', units: [
@@ -1162,6 +1196,8 @@ export default [
       { who: '吕布', side: 'enemy', text: '何必躲在城里！待曹军近前，我自出城破之！' },
       { who: '荀彧', side: 'player', text: '濮阳有南、东、西三门。若分兵三路齐攻，吕布首尾难顾。' },
       { who: '典韦', side: 'player', text: '主公，俺打头阵，把城门给你撞开！' },
+      { who: '典韦', side: 'player', text: '营里那几个濮阳百姓说了，陈宫在城外东西两边藏了骑兵，等咱们攻城就抄营寨！', ifFlag: 'camp_puyang_guides' },
+      { who: '荀彧', side: 'player', text: '既已知其伏兵所在，可命两翼营寨多设鹿角，伏骑一时难以近前。', ifFlag: 'camp_puyang_guides' },
       { who: '曹操', side: 'player', text: '好！诸将分兵攻城。若事有不谐，即刻退回两翼营寨。' },
     ],
     units: [
@@ -1184,10 +1220,14 @@ export default [
       E('py10', '并州弓兵', 'archer', 8, 29, 8),
     ],
     events: [
-      { turn: 5, faction: 'enemy', units: [E('pyr1', '并州骑兵', 'cavalry', 9, 0, 22), E('pyr2', '并州骑兵', 'cavalry', 9, 31, 22)],
+      { turn: 5, faction: 'enemy', units: [
+        E('pyr1', '并州骑兵', 'cavalry', 9, 0, 22, { unlessFlag: 'camp_puyang_guides' }),
+        E('pyr2', '并州骑兵', 'cavalry', 9, 31, 22, { unlessFlag: 'camp_puyang_guides' }),
+      ],
         dialog: [
-          { who: '陈宫', side: 'enemy', text: '城外伏骑出击，袭其营寨！' },
-          { who: '于禁', side: 'player', text: '两翼营寨遭袭！主公当心后路！' },
+          { who: '陈宫', side: 'enemy', text: '城外伏骑出击，袭其营寨！', unlessFlag: 'camp_puyang_guides' },
+          { who: '于禁', side: 'player', text: '两翼营寨遭袭！主公当心后路！', unlessFlag: 'camp_puyang_guides' },
+          { who: '陈宫', side: 'enemy', text: '伏骑为何迟迟不出？……什么，曹军营前早设了鹿角？', ifFlag: 'camp_puyang_guides' },
         ] },
       { turn: 6, faction: 'enemy', setAi: { lvbu: 'aggressive', gaoshun: 'aggressive', zhangliao: 'aggressive', weixu: 'aggressive' },
         dialog: [
@@ -1196,6 +1236,15 @@ export default [
         ] },
       { onDeath: 'gaoshun',
         dialog: [{ who: '高顺', side: 'enemy', text: '陷阵营……竟也挡不住曹军……' }] },
+      // 营中留濮阳逃民为向导（camp_puyang_guides）：陈宫伏骑被识破，晚两回合才绕出
+      { turn: 7, faction: 'enemy', units: [
+        E('pyr3', '并州骑兵', 'cavalry', 9, 0, 22, { ifFlag: 'camp_puyang_guides' }),
+        E('pyr4', '并州骑兵', 'cavalry', 9, 31, 22, { ifFlag: 'camp_puyang_guides' }),
+      ],
+        dialog: [
+          { who: '陈宫', side: 'enemy', text: '鹿角拦路，便绕道而行！伏骑，出击！', ifFlag: 'camp_puyang_guides' },
+          { who: '典韦', side: 'player', text: '哼，晚了两天才来，俺们早等着了！', ifFlag: 'camp_puyang_guides' },
+        ] },
     ],
     epilogues: {
       annihilate: [
@@ -1254,6 +1303,7 @@ export default [
       { who: '陈宫', side: 'enemy', text: '曹操中计矣！四门伏兵齐出，休教走了曹贼！' },
       { who: '吕布', side: 'enemy', text: '哈哈哈！曹操，今夜便是你的死期！' },
       { who: '典韦', side: 'player', text: '主公莫慌！俺典韦在此，谁也伤不了你！' },
+      { who: '典韦', side: 'player', text: '那几个濮阳百姓也跟来了，说南门外的路他们熟，俺护着主公往南杀出去！', ifFlag: 'camp_puyang_guides' },
       { who: '曹操', side: 'player', text: '好个陈宫……诸将结阵自保，先退出城外，再与吕布决战！' },
       { who: '夏侯惇', side: 'player', text: '孟德，田氏既是诈降，城中恐再无援手。是战是退，还须速决！' },
     ],

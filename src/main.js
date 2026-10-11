@@ -4,6 +4,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { BattleScene } from './scenes/BattleScene.js';
 import { StoryScene } from './scenes/StoryScene.js';
 import { EndingScene } from './scenes/EndingScene.js';
+import { CampScene } from './scenes/CampScene.js';
 
 window.game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -14,8 +15,8 @@ window.game = new Phaser.Game({
   antialias: SETTINGS.quality !== 'low',
   fps: { limit: SETTINGS.fps },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  // StoryScene 排在 BattleScene 之后：结尾场景叠加在战场之上播放
-  scene: [TitleScene, BattleScene, StoryScene, EndingScene],
+  // StoryScene 排在 BattleScene 之后：结尾场景叠加在战场之上播放；CampScene 为两关之间的营中
+  scene: [TitleScene, BattleScene, StoryScene, CampScene, EndingScene],
 });
 
 // 帧率角标：DOM 叠加，与场景无关

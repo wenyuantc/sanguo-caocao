@@ -9,7 +9,7 @@ import { DEMO_SCENES } from '../story/demo.js';
 import { afterPre } from '../story/flow.js';
 
 // 剧情场景：执行场景脚本（手写 scenes 或由 prologue / epilogue 自动生成），结束后按 flow.js 跳转。
-// data：{ stage, part: 'pre' | 'post' | 'preview', outcome?, annihilated?, onDone?（叠加在战场上播放时的回调）, script?, demo?, notice? }
+// data：{ stage, part: 'pre' | 'post' | 'preview', outcome?, annihilated?, onDone?（叠加在战场上播放时的回调）, script?, demo?, notice?, deploy?（营中选好的出阵武将，转交战场） }
 // 两台相机：主相机渲染场景层（depth < 1000：背景、人物、地图标记、黑幕），可推近；界面相机渲染对白、标题、按钮。
 // 加速：按住鼠标 / Ctrl 时 5 倍速并自动推进对白，单击后短暂 3 倍速；“跳过演出”快速播完（选项仍需选择）。场景中不能存档。
 export class StoryScene extends Phaser.Scene {
@@ -126,7 +126,7 @@ export class StoryScene extends Phaser.Scene {
       this.scene.stop();
       return;
     }
-    if (o.part === 'pre' && this.stage) { afterPre(this, this.stage.id); return; }
+    if (o.part === 'pre' && this.stage) { afterPre(this, this.stage.id, o.deploy); return; }
     this.scene.start('Title'); // 预览 / 演示
   }
 

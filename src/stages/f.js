@@ -81,6 +81,7 @@ export default [
       { who: '张卫', side: 'enemy', text: '阳平关南关、东关互为犄角，曹军纵有百万，也休想踏进汉中一步！' },
       { who: '贾诩', side: 'player', text: '南关与东关须一并拿下，否则我军攻一关时，另一关守军必抄我后路。' },
       { who: '曹操', side: 'player', text: '张鲁以道法教化百姓，并非暴虐之徒。若能兵临南郑，孤愿亲往劝降。' },
+      { who: '张辽', side: 'player', text: '丞相许张鲁以礼相待之意，末将已遣细作传入南郑。汉中军心，必有动摇。', ifFlag: 'jcamp_zhanglu_mercy' },
       { who: '阎圃', side: 'enemy', text: '主公，西凉庞令明尚在城中，可令其率兵出城迎敌。' },
       { who: '张鲁', side: 'enemy', text: '……且看曹孟德究竟是何等人物。' },
     ],
@@ -119,8 +120,11 @@ export default [
       { turn: 6, faction: 'enemy', units: [], setAi: { zhangwei: 'aggressive', yangren: 'aggressive' },
         dialog: [{ who: '张卫', side: 'enemy', text: '两关齐出，夹击曹军！' }] },
       { turn: 8, faction: 'enemy',
-        units: [E('hzr3', '汉中伏兵', 'infantry', 29, 25, 16), E('hzr4', '汉中伏兵', 'archer', 29, 26, 17)],
-        dialog: [{ who: '阎圃', side: 'enemy', text: '林中伏兵，截断曹军后路！' }] },
+        units: [E('hzr3', '汉中伏兵', 'infantry', 29, 25, 16), E('hzr4', '汉中伏兵', 'archer', 29, 26, 17, { unlessFlag: 'jcamp_zhanglu_mercy' })],
+        dialog: [
+          { who: '阎圃', side: 'enemy', text: '林中伏兵，截断曹军后路！' },
+          { who: '阎圃', side: 'enemy', text: '……曹公许我主以礼相待之事已传遍营中，道众多不肯死战，林中只出了一队。', ifFlag: 'jcamp_zhanglu_mercy' },
+        ] },
       { duel: { a: 'xuchu', b: 'e_pangde', winner: 'a', result: 'hurt' },
         dialog: [
           { who: '许褚', side: 'player', text: '虎痴许褚在此，看刀！' },
@@ -136,12 +140,14 @@ export default [
         { who: '曹操', side: 'player', text: '公祺，孤孤身至此，只为保全汉中百姓。可愿归降？' },
         { who: '张鲁', side: 'enemy', text: '鲁本欲归顺朝廷，只因弟张卫妄动刀兵。今府库封存，尽献明公。' },
         { who: '曹操', side: 'player', text: '封库而去，足见公之仁心。孤拜公为镇南将军，善待五斗米道众。' },
+        { who: '张辽', side: 'player', text: '丞相仁厚，汉中果然不战而定。', ifFlag: 'jcamp_zhanglu_mercy' },
         { who: '旁白', text: '张鲁举族归降，汉中平定。被俘的庞德感曹操厚待，亦愿效力。' },
         { who: '庞德', side: 'player', text: '庞德蒙丞相不杀之恩，愿以此身报效！' },
       ],
     },
     epilogue: [
       { who: '张鲁', side: 'enemy', text: '大势已去……开城，降了吧。' },
+      { who: '张鲁', side: 'enemy', text: '曹公早有善待之意，鲁封存府库，以待王师。', ifFlag: 'jcamp_zhanglu_mercy' },
       { who: '曹操', side: 'player', text: '汉中已定。听闻城中尚有一员西凉猛将？' },
       { who: '旁白', text: '张鲁出降，汉中平定。被俘的庞德感曹操厚待，愿归曹营效力。' },
       { who: '庞德', side: 'player', text: '庞德蒙丞相不杀之恩，愿以此身报效！' },
@@ -197,6 +203,7 @@ export default [
       { who: '孙权', side: 'enemy', text: '合肥区区数千人，一鼓可下！诸将随我攻城！' },
       { who: '张辽', side: 'player', text: '丞相密令：孙权至，张、李二将军出战。趁敌立足未稳，折其锐气！' },
       { who: '李典', side: 'player', text: '国家大事，岂敢以私憾忘公义！李典愿随文远出战。' },
+      { who: '张辽', side: 'player', text: '丞相未遣一将前来节制，是信得过我等。合肥城中尚有守军，愿随辽死战者，一并出城！', ifFlag: 'jcamp_hefei_trust' },
       { who: '曹操', side: 'player', text: '孤率援军已至合肥以南。文远且战且退，与孤会合后再行反击！' },
       { who: '凌统', side: 'enemy', text: '主公，小师桥是退路所在，凌统誓死守住此桥！' },
     ],
@@ -233,6 +240,7 @@ export default [
       { turn: 6, faction: 'player', units: [],
         dialog: [
           { who: '张辽', side: 'player', text: '丞相援军已到！全军回身反击，直取孙权！' },
+          { who: '张辽', side: 'player', text: '丞相用人不疑，辽敢不以死相报！', ifFlag: 'jcamp_hefei_trust' },
           { who: '旁白', text: '张辽威震逍遥津，江东小儿闻其名而止啼。' },
         ] },
       { turn: 7, faction: 'enemy', units: [], setAi: { sunquan: 'aggressive', lingtong: 'aggressive' },
@@ -246,6 +254,13 @@ export default [
           { who: '张辽', side: 'player', text: '败军之将，也敢言勇！' },
         ],
         after: [{ who: '太史慈', side: 'enemy', text: '大丈夫生于乱世……竟未能……' }] },
+      // 营中信任张辽（jcamp_hefei_trust）：合肥守军随张辽出城助战
+      { turn: 1, faction: 'player',
+        units: [
+          A('hf_g1', '合肥守军', 'infantry', 29, 4, 3, { ifFlag: 'jcamp_hefei_trust' }),
+          A('hf_g2', '合肥守军', 'infantry', 29, 6, 3, { ifFlag: 'jcamp_hefei_trust' }),
+        ],
+        dialog: [{ who: '合肥守军', side: 'ally', text: '张将军有丞相全权，我等愿随将军死战！', ifFlag: 'jcamp_hefei_trust' }] },
     ],
     epilogue: [
       { who: '孙权', side: 'enemy', text: '张辽之勇，竟至于此……全军退回濡须！' },
@@ -305,6 +320,7 @@ export default [
         { say: [{ who: '李典', side: 'player', text: '国家大事，岂敢以私憾忘公义！李典愿随文远出战。' }] },
         { emote: '张辽', icon: 'joy' },
         { act: '张辽', pose: 'bow' },
+        { say: [{ who: '张辽', side: 'player', text: '丞相未遣一将前来节制，是信得过我等。合肥城中尚有守军，愿随辽死战者，一并出城！', ifFlag: 'jcamp_hefei_trust' }], ifFlag: 'jcamp_hefei_trust' },
         { act: '乐进', pose: 'raise1', ms: 500 },
 
         // 曹操援军南下
@@ -501,6 +517,7 @@ export default [
       { who: '旁白', text: '建安二十四年，刘备亲率大军攻汉中。法正献计，老将黄忠屯兵于定军山对面高处。' },
       { who: '夏侯渊', side: 'player', text: '定军山乃汉中门户，渊在此，刘备休想过去！' },
       { who: '曹操', side: 'player', text: '妙才，为将当有怯弱时，不可但恃勇也。切勿轻出！' },
+      { who: '夏侯渊', side: 'player', text: '孟德在营中已叮嘱过了。渊在鹿角外又添了一营守兵，绝不与那老匹夫单打独斗。', ifFlag: 'jcamp_miaocai_warned' },
       { who: '曹彰', side: 'player', text: '儿臣曹彰在此！刘备织席小儿，交给儿臣便是！' },
       { who: '法正', side: 'enemy', text: '黄将军，待夏侯渊兵疲，便可一鼓击之。' },
       { who: '黄忠', side: 'enemy', text: '老夫这口刀，今日便要取夏侯渊首级！' },
@@ -518,6 +535,9 @@ export default [
       H('xuchu', 31, 22, 18),
       H('simayi', 31, 22, 15),
       H('guojia', 31, 23, 15),
+      // 营中告诫夏侯渊（jcamp_miaocai_warned）：夏侯渊营前多两队守兵
+      A('dj_g1', '鹿角守兵', 'infantry', 30, 13, 14, { ai: 'hold', ifFlag: 'jcamp_miaocai_warned' }),
+      A('dj_g2', '鹿角守兵', 'infantry', 30, 14, 15, { ai: 'hold', ifFlag: 'jcamp_miaocai_warned' }),
       E('liubei', '刘备', 'lord', 36, 2, 25, { leader: true, ai: 'hold', bonus: { atk: 4, def: 6, hp: 40 } }),
       E('fazheng', '法正', 'strategist', 34, 3, 25, { ai: 'hold', bonus: { int: 10 } }),
       E('huangzhong', '黄忠', 'archercav', 35, 4, 16, { bonus: { atk: 12, hp: 20 } }),
@@ -552,12 +572,14 @@ export default [
         dialog: [
           { who: '黄忠', side: 'enemy', text: '夏侯渊！老将黄忠在此，纳命来！' },
           { who: '夏侯渊', side: 'player', text: '老匹夫，休要猖狂！' },
+          { who: '夏侯渊', side: 'player', text: '（孟德的叮嘱犹在耳边……可这老匹夫已杀到眼前了！）', ifFlag: 'jcamp_miaocai_warned' },
         ],
         after: [{ who: '黄忠', side: 'enemy', text: '一刀斩汝于马下，定军山是老夫的了！' }] },
       { onDeath: 'xiahouyuan', setFlag: 'j_xiahouyuan_dead',
         dialog: [
           { who: '夏侯渊', side: 'player', text: '孟德……渊……先走一步了……' },
           { who: '曹操', side: 'player', text: '妙才！！刘备，孤与你不共戴天！' },
+          { who: '曹操', side: 'player', text: '孤叮嘱过你的……妙才，你为何还是……', ifFlag: 'jcamp_miaocai_warned' },
         ] },
     ],
     epilogues: {
@@ -714,6 +736,9 @@ export default [
       { who: '曹操', side: 'player', text: '……鸡肋，鸡肋。' },
       { who: '杨修', side: 'player', text: '鸡肋者，食之无肉，弃之有味。丞相已有退兵之意，诸位早早收拾行装吧。' },
       { who: '曹操', side: 'player', text: '杨修竟敢乱我军心！……然汉中之地，确是鸡肋。全军退出斜谷！' },
+      { who: '曹操', side: 'player', text: '德祖，孤在营中便告诫过你，揣度孤心，不是好事。你却当众说破——左右，推出辕门斩了！', ifFlag: 'jcamp_yangxiu_warned' },
+      { who: '杨修', side: 'player', text: '丞相当日已有告诫……是修自恃聪明，终究管不住这张嘴……', ifFlag: 'jcamp_yangxiu_warned' },
+      { who: '旁白', text: '杨修被斩于辕门之外。诸将噤若寒蝉，再无一人敢议退兵之事。', ifFlag: 'jcamp_yangxiu_warned' },
       { who: '吴兰', side: 'enemy', text: '曹军要逃了！先烧了斜谷粮仓，断其归路！' },
       { who: '曹彰', side: 'player', text: '父亲先走，儿守住北面寨门，必将吴兰斩于马下！' },
       { who: '孟达', side: 'enemy', text: '刘封将军，你我从后追杀，莫放走了曹操！' },
@@ -776,6 +801,7 @@ export default [
     epilogue: [
       { who: '刘备', side: 'enemy', text: '曹操竟能全身而退……' },
       { who: '曹操', side: 'player', text: '斜谷一战，蜀军锐气已挫。汉中且让与刘备，来日再取。' },
+      { who: '曹操', side: 'player', text: '（杨修……孤斩了他，到头来却还是依他所言退了兵。）', ifFlag: 'jcamp_yangxiu_warned' },
       { who: '旁白', text: '曹操回到长安。此时荆州急报传来：关羽大举北伐，曹仁困守樊城。' },
     ],
   },
@@ -829,6 +855,7 @@ export default [
       { who: '曹仁', side: 'player', text: '樊城粮尽援绝，诸将死守待援！' },
       { who: '庞德', side: 'player', text: '某受魏王厚恩，誓以死报！今抬榇出征，不是关羽死，便是庞德亡！' },
       { who: '于禁', side: 'player', text: '七军屯于罾口川低处……只是连日大雨，汉水暴涨，令人不安。' },
+      { who: '于禁', side: 'player', text: '丞相既信令明，于禁不敢再有异议。令明自领本部亲兵便是。', ifFlag: 'jcamp_pangde_trusted' },
       { who: '关羽', side: 'enemy', text: '于禁七军屯于低洼之地，岂不闻兵法？时至矣，决堤放水！' },
       { who: '曹操', side: 'player', text: '孤亲率大军南下，务必解樊城之围！徐晃所部随后便到。' },
     ],
@@ -845,6 +872,8 @@ export default [
       H('lidian', 34, 6, 7),
       H('caoren', 34, 15, 23),
       A('manchong', '满宠', 'strategist', 33, 15, 22, { ai: 'hold', bonus: { int: 6 } }),
+      // 营中信任庞德（jcamp_pangde_trusted）：庞德自领本部亲兵
+      A('pd_q1', '庞德亲兵', 'infantry', 33, 6, 8, { ifFlag: 'jcamp_pangde_trusted' }),
       E('guanyu', '关羽', 'cavalry', 39, 12, 16, { leader: true, ai: 'hold', bonus: { atk: 16, def: 8, hp: 50 } }),
       E('guanping', '关平', 'cavalry', 37, 14, 15, { bonus: { atk: 6 } }),
       E('zhoucang', '周仓', 'fighter', 37, 2, 9, { ai: 'hold', bonus: { atk: 8, hp: 20 } }),
@@ -886,6 +915,7 @@ export default [
         dialog: [
           { who: '关羽', side: 'enemy', text: '庞德，你一介无名之辈，也敢口出狂言！' },
           { who: '庞德', side: 'player', text: '魏王命我来取你首级！看刀！' },
+          { who: '庞德', side: 'player', text: '丞相信我不疑，庞德今日便以此身相报！', ifFlag: 'jcamp_pangde_trusted' },
         ],
         after: [
           { who: '旁白', text: '两人斗百余合不分胜负，庞德诈败回身一箭，正中关羽左臂。' },
@@ -901,7 +931,10 @@ export default [
         ],
         after: [{ who: '关羽', side: 'enemy', text: '箭疮迸裂……可恨！' }] },
       { onDeath: 'pangde', setFlag: 'j_pangde_dead',
-        dialog: [{ who: '曹操', side: 'player', text: '令明……以身殉国，孤痛失良将！' }] },
+        dialog: [
+          { who: '曹操', side: 'player', text: '令明……以身殉国，孤痛失良将！' },
+          { who: '曹操', side: 'player', text: '孤信令明不疑，令明果然不负孤……', ifFlag: 'jcamp_pangde_trusted' },
+        ] },
       { onDeath: 'yujin', setFlag: 'j_yujin_captured',
         dialog: [
           { who: '于禁', side: 'player', text: '洪水之中无路可走……于禁……降了。' },
@@ -1183,6 +1216,7 @@ export default [
       { who: '旁白', text: '曹军兵临成都城下。曹氏宗族诸将尽数请战，誓要一举荡平西蜀。' },
       { who: '曹操', side: 'player', text: '元让、子孝、子廉、子文，今日我曹氏一门，同破成都！' },
       { who: '夏侯惇', side: 'player', text: '孟德放心，成都城门交给我等！' },
+      { who: '曹洪', side: 'player', text: '丞相有令：破城之日严禁掳掠，违者斩！诸军都已记下了。', ifFlag: 'jcamp_chengdu_noloot' },
       { who: '诸葛亮', side: 'enemy', text: '城外两门、城内二道城墙俱已设伏。曹军若入，必教其有来无回。' },
       { who: '刘备', side: 'enemy', text: '孤起兵三十余年，岂能坐以待毙！子龙、孟起，随孤死守成都！' },
       { who: '关兴', side: 'enemy', text: '先父之仇，关兴、张苞今日一并讨还！' },
@@ -1261,6 +1295,7 @@ export default [
     epilogue: [
       { who: '刘备', side: 'enemy', text: '成都……孤的基业……孔明，随孤东走白帝城！' },
       { who: '曹操', side: 'player', text: '刘备弃城而逃了。益州已定，传檄蜀中各郡！' },
+      { who: '旁白', text: '曹军入城，秋毫无犯。蜀中百姓见之，渐渐安定下来。', ifFlag: 'jcamp_chengdu_noloot' },
       { who: '贾诩', side: 'player', text: '刘备若入白帝城，与东吴连结，后患无穷。须速追之。' },
       { who: '曹操', side: 'player', text: '大军顺江东下，务必在白帝城擒住刘备！' },
     ],
@@ -1337,10 +1372,12 @@ export default [
     ],
     events: [
       { turn: 2, faction: 'enemy',
-        units: [E('sr1', '蜀军伏兵', 'infantry', 39, 6, 5), E('sr2', '蜀军伏兵', 'archer', 39, 7, 6)],
+        // 成都严禁掳掠（jcamp_chengdu_noloot）：百姓报信，一路伏兵事先被截住
+        units: [E('sr1', '蜀军伏兵', 'infantry', 39, 6, 5), E('sr2', '蜀军伏兵', 'archer', 39, 7, 6, { unlessFlag: 'jcamp_chengdu_noloot' })],
         dialog: [
           { who: '蜀军伏兵', side: 'enemy', text: '军师有令，烧毁曹军投石车！' },
           { who: '张辽', side: 'player', text: '敌军伏兵冲投石车去了！快回援！' },
+          { who: '旁白', text: '成都百姓感念曹军入城秋毫无犯，连夜报知伏兵去向，蜀军一路弓手已在途中被截住。', ifFlag: 'jcamp_chengdu_noloot' },
         ] },
       { turn: 7, faction: 'enemy', units: [], setAi: { madai: 'aggressive', s7: 'aggressive' },
         dialog: [{ who: '马岱', side: 'enemy', text: '庞德在哪里！马岱今日要为兄长报仇！' }] },

@@ -61,20 +61,25 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 | localStorage key | 内容 |
 |------------------|------|
 | `sanguo-slots` | 100 个手动存档位的数组（`SLOT_COUNT`），`null` 表示空 |
-| `sanguo-save` | 单个自动存档，每关胜利后由 `victory()` 写入，`kind: 'stage'` |
+| `sanguo-save` | 单个自动存档：每关胜利后由 `victory()` 写入 `kind: 'camp'`（下一关、`talked: []`，读取回到营中；没有下一关时仍为 `'stage'`）；营门出征时由 `CampScene.depart` 覆盖为 `kind: 'stage'`（含营中选项后的状态与 `deploy`，读取播下一关开场） |
+
+- 存档类型 `kind`：`'stage'`（关卡开头，营门出征时的自动存档；读取后先播开场场景，不经过营中，`deploy` 经 `BattleScene` → `StoryScene` 带进整备；旧存档没有 `deploy`，行为不变）、`'battle'`（战斗中）、`'camp'`（营中，见下）。
 
 - 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、`mapVersion`、回合、道具、红色指数、标记、roster、
   `joined`、`firedEvents`、`weatherIdx`、`mapPatches`、`start`（本关开头的 `red` / `flags`，重新挑战时恢复，旧存档缺失时取存档值）、`inventory`、`gold`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` / `equip` / `fruits` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
   （旧存档单位缺 `tier` 时我军视为一阶、其他按难度门槛定阶，兵种按武将总表 / 登记表覆盖）。
   不要持久化派生数据或 Phaser 对象。
 - 只有在我军阶段、`state` 为 `'idle'`/`'move'` 时才允许存档（`openSave`）。
+- 营中存档来自 `CampScene.snapshot()`（`kind: 'camp'`）：`stage` 为**下一关** id，`talked`（已播放本关专属台词的人物名）、`deploy`（营中整备选好的阵容，可为 `null`）、`pos`（曹操所在格），以及与自动存档相同的战役状态（`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`、`summary.lordLvl`）。营中任意时刻（没有对白 / 弹窗时）都能存档。
+  `applyLoad` 遇到 `camp` 时写入 registry 后 `scene.start('Camp', { stage, talked, deploy, pos })`；`validSave` 接受 `camp`（`talked` 缺失或为数组）；存档列表显示“营中 · 下一战：<关名>”。`pos` 不可走时回到出生点。
+- 营中没有战斗状态：`CampScene` 只复制 `inventory` / `gold` / `items` 给整备界面（`openPrep` 直接读写 `scene.inventory` 等并立即写回 registry），对白选项（`applyChoice`）直接写 registry 的 `red` / `flags`。营中选好的阵容经 `goStage(scene, id, { deploy })` → `StoryScene` → `afterPre` 带进 `BattleScene`（`campDeploy`），由 `deploy.initialDeploy` 过滤后作为整备的初始阵容；重新挑战（`retry`）沿用 `campDeploy`；读档不带阵容。
 - `EndingScene` 会调用 `clearAuto()`。
 - 导出/导入的文件格式为 `{ app: 'sanguo-caocao-save', version: 1, type: 'all' | 'single', ... }`；
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。
-- 自动存档（`writeAuto`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`。
+- 自动存档（`writeAuto(data, kind = 'stage')`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`、`summary.lordLvl`；胜利时为 `'camp'`（另有 `talked: []`、`deploy: null`），出征时为 `'stage'`（取 `CampScene.snapshot()` 去掉 `talked` / `pos`，保留 `deploy`）。调试关卡不写。
 - 兼容没有装备的旧存档：`applyLoad` 把 `inventory` 设为 `[]`、`gold` 设为 0；进入战斗时 `kitFor` 按原版规则补发初始装备；战斗中存档里没有 `equip` 的我军武将单位同样补发。`validSave` 不要求这两个字段。
 - 地图版本：快照记录关卡的 `mapVersion`（旧存档缺失视为 1）。读档时与当前关卡的 `mapVersion` 不一致（地图已重做、坐标失效），
-  `BattleScene.create` 丢弃 `load`、置 `mapReset`，由 `restartFromStageStart` 把 registry 恢复为本关开头的战役状态后重开，开场前提示“关卡地图已更新，将从本关开头重新开始”。起点优先级：第一关用新游戏状态（按存档难度）；其他关用 `stageStartSave` 找到的自动存档（`stage` 指向本关、难度相同、`savedAt` 不晚于战斗存档）；都没有时退回 `applyLoad` 写入的战斗存档数据（道具、红色指数、标记、roster 停留在存档时刻，开场选项可能重复累加红色指数）。自动存档（关卡开头）不受影响。
+  `BattleScene.create` 丢弃 `load`、置 `mapReset`，由 `restartFromStageStart` 把 registry 恢复为本关开头的战役状态后重开，开场前提示“关卡地图已更新，将从本关开头重新开始”。起点优先级：第一关用新游戏状态（按存档难度）；其他关用 `stageStartSave` 找到的自动存档（`kind` 为 `'stage'` 或 `'camp'`、`stage` 指向本关、难度相同、`savedAt` 不晚于战斗存档；出征时那份覆盖胜利时那份，含营中选项，优先被用到）；都没有时退回 `applyLoad` 写入的战斗存档数据（道具、红色指数、标记、roster 停留在存档时刻，开场选项可能重复累加红色指数）。自动存档（关卡开头）不受影响。
 - 地形变化：`this.map` 是每局复制的字符串数组（`[...stage.map]`），战场演出改地形时按行替换字符串（`battleStage.patchMap`），并在 `mapPatches` 记 `[[x, y, 地形字符], ...]`（同一格只保留最后一次）。快照写入 `mapPatches`，读档时在 `drawMap` 之前由 `replayPatches` 重放；旧存档没有该字段视为无变化。不要直接改 `stage.map`（关卡数据是共享的，整备 `planDeploy` 也读它）。
 - 兼容没有天气的旧存档：战斗快照缺 `weatherIdx`（或不是 0~5 的整数）时取关卡起始序号；天气类别不入存档，始终按关卡决定。自动存档不需要天气（新关卡从起始值开始）。
 - `getStage(id)` 仍通过 `LEGACY`（`stageMeta.js`）兼容旧存档中的数字关卡下标；导入校验 `validSave`

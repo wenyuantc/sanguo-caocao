@@ -6,7 +6,8 @@ import { applyLoad } from '../saves.js';
 import { FIRST_STAGE, getStage } from '../stages.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
-import { goStage } from '../story/flow.js';
+import { goStage, goCamp } from '../story/flow.js';
+import { planDeploy } from '../deploy.js';
 import { DEMO_SCENES } from '../story/demo.js';
 
 // 调试入口只在页面加载后第一次进入标题时生效（返回标题后正常显示）
@@ -21,7 +22,18 @@ export class TitleScene extends Phaser.Scene {
     //   ?stage=<关卡 id>（如 test_bigmap）以普通难度新开该关（先播开场场景）；加 &story=0 跳过开场场景直接整备
     //   ?scene=<关卡 id>:pre|post 预览该关的开场 / 结尾场景（新游戏状态，播完回到标题），可加 &flags=a,b 预设剧情标记以预览分支；
     //   ?scene=demo / gallery / poses 播放演示场景
+    //   ?camp=<关卡 id> 以普通难度进入该关之前的营中（已加入的武将取该关的候选名单），可加 &flags=a,b
     const q = new URLSearchParams(location.search);
+    const debugCamp = !debugEntered && q.get('camp');
+    if (debugCamp && getStage(debugCamp)) {
+      debugEntered = true;
+      this.resetCampaign('normal');
+      const flags = (q.get('flags') || '').split(',').map((f) => f.trim()).filter(Boolean);
+      if (flags.length) this.registry.set('flags', Object.fromEntries(flags.map((f) => [f, true])));
+      this.registry.set('joined', planDeploy(getStage(debugCamp), { flags: this.registry.get('flags') }).pool.map((c) => c.id));
+      goCamp(this, debugCamp);
+      return;
+    }
     const debugStage = !debugEntered && q.get('stage');
     if (debugStage && getStage(debugStage)) {
       debugEntered = true;

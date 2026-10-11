@@ -32,6 +32,17 @@
 - 加速 / 跳过只改 `tweens.timeScale` 与 `time.timeScale`（跳过 60 倍），遇到选项停下等玩家选择；`shutdown` 时恢复 1 倍并释放 `st-*` / `sbg-*` 贴图（`pt-*` 头像由下一个 `BattleScene` 释放）。
 - 剧情小人贴图 key `st-<名>-<阵营>-<兵种>-<动作>-<帧>-<f|b>`，`drawHuman(k, L, F, oy, mounted, S)` 的 `S` 缺省时与战场小人逐行一致；跪姿（`seat`）裁掉腰以下再画折叠的腿，作揖（`bend`）以腰为轴压扁上半身。
 
+## 营中场景（`src/scenes/CampScene.js`、`src/camp/`）
+
+- 流程：`goNext` → `goCamp`（`Camp`，data `{ stage: 下一关, talked?, deploy?, pos? }`）→ 营门确认（回车确认 / ESC 取消；键盘监听延后一帧注册并忽略按住重复，避免打开确认框的那次回车直接出征）→ 写 `kind: 'stage'` 自动存档 → `goStage(scene, id, { deploy })`。第一关之前、结局之后不进营中。
+- 两台相机同剧情场景：主相机（depth < 1000：背景、物件、人物、头顶标记 / 提示）放大 `ZOOM` 倍并平滑跟随曹操（夹在背景范围内）；`ui` 相机渲染顶栏、按钮、`DialogBox`（1000）与弹窗（3000）。场景层文字用 `worldText`（分辨率 `RES × ZOOM`）。
+- 人物复用 `StoryActor`，坐标为等角整数格；物件（`camp/props.js`）按中心的屏幕 y 设 depth（`100 + y / 4`，与人物同一套排序）。背景是整张图，高大物件身后的格子在布局里划为障碍，避免人物画在帐篷上。
+- 移动：`story/path.js` 的 `findPath`（八方向，不切拐角，`near` 走到目标旁边）；方向键按屏幕方向映射为格子对角步。每步一个补间，`update` 中决定下一步；人物占格含正在走向的格（`to`）。规划长路径时忽略远处闲逛的人物，走到跟前被挡再按全部人物重新规划。
+- 弹窗 / 对白期间（`busy()`）不响应移动与互动；整备、商店复用 `openPrep(scene, plan, onConfirm, { tabs, title, confirmLabel, selected })`，场景需提供 `inventory` / `gold` / `items` 字段。
+- `shutdown` 时销毁人物并释放 `st-*` / `sbg-*` 贴图。
+- 布局（`camp/layouts.js`）新增或改动后必须过 `checkLayout`（校验脚本与 `scripts/test-path.mjs` 都会调用）：出生点、商人、整备人物、站岗位、百姓两两不能同格，且从出生点都能走到。踩过的坑：府邸布局的商人与出生点同格。
+- 营中摆人：`joined` 武将 → 本关台词里已在 `plan.pool`（预设我军 / `joinAt` 已到）但还没记入 `joined` 的武将 → 客人（非登记人物，或登记武将但条目写明 `side`）→ 布局百姓；按名字去重。新增“剧情中已归降、下一关才预设出场”的武将时，确认他能通过 `plan.pool` 进营。
+
 ## 镜头（`src/mapCamera.js`）
 
 - `BattleScene.cam = new MapCamera(scene, map, { canScroll })`：两台相机。`cameras.main` 只渲染**地图层**，视口限定在地图区并滚动；
