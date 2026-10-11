@@ -39,12 +39,13 @@ export default [
 
 | 字段 | 读取位置 |
 |------|----------|
-| `map`（13 行 × 18 字符） | `drawMap`、`terrainAt`、`reachable`；字符是 `data.js` 中 `TERRAIN` 的 key |
+| `map`（行数 × 列数 = `MAP_SIZES[id]`；旧版 13 × 18） | `drawMap`、`terrainAt`、`reachable`、镜头 / 小地图；字符是 `terrain.js` 中 `TERRAIN` 的 key（30 种，一字符一格） |
+| `mapVersion`（1 旧版 / 2 原版尺寸） | `normalizeStage` 默认 1；写入战斗中存档，读档不一致时从本关开头重开；校验按版本检查尺寸 |
 | `units` | 敌军/友军：`BattleScene.create` → `createUnit(def, null, difficulty)`；我军：`deploy.planDeploy` 推导出阵位置、上限、必须 / 不可出阵，整备后 `buildPlayerDefs` → `createUnit(def, roster[id], difficulty)`。都先按 `flagOk`（`ifFlag`/`unlessFlag`）过滤 |
 | `deploy`（可选） | `planDeploy`：`{ max?, required?, slots? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式 |
 | `victory[]` | `checkEnd`（`boss`/`all`/`reach`）、`nextPhase`（`survive`）、`drawGoals`（`reach` 目标格） |
 | `protect`、`escape`、`victoryFlags` | `checkEnd`、`tryEscape`、`victory()` |
-| `events[]` | `fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
+| `events[]` | 援军落点被占时 `spawnTile` 在曼哈顿 3 格内找该兵种可站的空格，都没有才放弃该单位；`fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
 | `prologue` / `epilogue` / `epilogues{annihilate,retreat,win,…}` | `DialogBox.show`；结尾对白选择顺序：`annihilate`（敌军全灭时）→ `epilogues[outcome]` → `epilogue` |
 | `next` | `stages.js` 中的 `resolveNext(stage, outcome, annihilated, red)` |
 | `victoryText`、`defeatText`、`turns` | `Hud` 右侧面板 / 顶栏 |
@@ -79,6 +80,6 @@ node scripts/validate-stages.mjs        # 全部组 + 从 FIRST_STAGE 出发的�
 node scripts/validate-stages.mjs c      # 只校验 C 组（其他组正在编辑时使用）
 ```
 
-必须 0 错误，每条警告都要排查（当前基线：57 关，0 警告）。
-校验内容：地图尺寸/字符、单位站位与地形、站位重叠、胜利/撤离/保护目标、事件结构、对白字段、
+必须 0 错误，每条警告都要排查（当前基线：57 关全部 mapVersion 2，0 警告）。正式关卡用旧版 18×13 地图（mapVersion 1）算错误，只有调试关卡可以用。
+校验内容：地图尺寸（mapVersion 2 = `MAP_SIZES`，并须写 `deploy.slots`，预设我军必须在 slots 中）/字符、`defeatText` 中的回合数等于 `turns`、按兵种系列通行规则的站位、单位站位与地形、站位重叠、胜利/撤离/保护目标、事件结构、对白字段、
 未登记外形的说话人、`next` 指向和首领可达性。

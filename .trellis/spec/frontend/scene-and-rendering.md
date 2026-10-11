@@ -13,8 +13,23 @@
 - 每次运行的临时状态在 `init(data)` 中重置（`BattleScene.init` 重置 `modal/over/state/sel/menu`）。
 - 场景切换用 `this.scene.start('Battle', { stage, load })` / `('Ending', { route })` / `('Title')`。
   场景是重启而不是暂停；`BattleScene.create` 会调用 `purgeTextures()` 释放上一关的 `hero-*` / `pt-*` 贴图。
-- 地图坐标：格子 `(x, y)` → 像素 `MAP_X + x*TILE`、`MAP_Y + y*TILE`；格子中心用 `unitView.js` 的
-  `tileCenter(x, y)`，反向换算用 `BattleScene.tileAt(pointer)`。
+- 地图坐标（世界坐标）：格子 `(x, y)` → 像素 `MAP_X + x*TILE`、`MAP_Y + y*TILE`；格子中心用 `unitView.js` 的
+  `tileCenter(x, y)`，反向换算用 `BattleScene.tileAt(pointer)`（按镜头换算，不要用 `pointer.worldX`）。
+  地图尺寸由关卡决定（`map[0].length × map.length`，最大 40×40），屏幕上的地图区固定为 `VIEW_COLS × VIEW_ROWS`（18×13）。
+
+## 镜头（`src/mapCamera.js`）
+
+- `BattleScene.cam = new MapCamera(scene, map, { canScroll })`：两台相机。`cameras.main` 只渲染**地图层**，视口限定在地图区并滚动；
+  `cam.ui` 整屏不滚动，渲染**界面层**。每帧 `prerender` 按 `isMapSpace(go)` 设置 `cameraFilter` 分配对象：
+  depth < 50 或 700~799，或 `go.mapSpace === true` 为地图层（世界坐标）；其余为界面层（屏幕坐标）。
+  新增显示对象按下表的层级放置即可；界面层却要用 < 50 / 700~799 的 depth 时设 `mapSpace = false`，地图层的飘字类对象设 `mapSpace = true`（`floatText` 已设）。
+- 镜头位置 `cam.x / cam.y` 是视口左上角的世界坐标（初始 `(MAP_X, MAP_Y)`，18×13 地图不滚动、与旧版一致）。
+  换算：`cam.tileAt(p)`、`cam.screenOf(p)`、`cam.toWorld / toScreen`、`cam.tileToScreen(x, y)`（界面层对象贴着格子摆放时用，如指令菜单）、`viewRect(s)`（当前视口的世界矩形，全屏特效 / 天气用）。
+- 移动：`cam.panTo(x, y, ms?)`（视口左上角，补间，返回 Promise）、`cam.centerTile(x, y, ms?)`、`cam.follow(tiles)` / `scene.follow(...units)`（都在视口内则不动）。
+  AI 行动前 `await s.follow(u, plan.tile, plan.target)`；援军登场、选择单位、我军阶段开始（曹操）、部队情报跳转都会跟随。
+- 输入：场景级 `pointerdown` 只调用 `cam.press(p)`（右键直接取消），`pointerup` 时 `cam.release(p)` 为真（未拖动超过 6px）才调用 `onClick`。
+  方向键 / WASD、鼠标停在视口边缘 24px（250ms 后）滚动；`canScroll` 为假（弹窗、对话、指令菜单）时禁止手动滚动。
+- 小地图 `src/minimap.js`（地图大于视口时才创建）：视口右上角悬浮（depth 60），地形为每格 1 像素的画布贴图最近邻放大，单位点与视口框在 `update` 中按签名重画；点击 / 拖动跳转，按钮或 M 键折叠。
 
 ## UI 工厂函数（`src/ui.js`）
 
@@ -49,14 +64,16 @@ wait(scene, ms)                                         // 基于 scene.time.del
 
 | 深度 | 内容 |
 |------|------|
-| 0 | 地图（`drawMap` 烘焙成的 `map-bake` 贴图 Image） |
+| 0 | 地图（`drawMap` 按 20×20 格分块烘焙的 `map-bake-*` 贴图 Image） |
 | 4–6 | 目标格、高亮 `hl`、光标 |
 | 10 + y | 单位容器（按行排序） |
-| 30–31 | 天气遮罩、天气粒子（`weatherFx.js`） |
-| 50–52 | HUD 顶栏、面板、HUD 按钮 |
+| 30–31 | 天气遮罩、天气粒子（`weatherFx.js`，每帧跟随视口） |
+| 50–52 | HUD 顶栏、面板、HUD 按钮（以下为界面层） |
+| 60 | 小地图 |
 | 600 | 指令菜单 |
-| 800–801 | 横幅 |
-| 900–951 | 飘字、败北遮罩、单挑 |
+| 700–799 | 攻击 / 策略特效（地图层） |
+| 800–801 | 横幅、天气切换提示 |
+| 900–951 | 飘字（`mapSpace`，地图层）、败北遮罩、单挑 |
 | 1000 | DialogBox |
 | 3000 | 弹窗（存档菜单、难度选择） |
 
@@ -77,8 +94,8 @@ return key;
 - 同样的写法：`portraits.portraitTexture`（`pt-${name}-${side}`，×4）、`spellFx.canvasTex`（`fx-*`，×3）。
 - 按逻辑尺寸绘制，再用分辨率倍数（`TEX`、`PT`、`R`）缩放 context。
 - 如果临时修改共享色板（heroSprites 中的 `C`），要在 `finally` 中恢复。
-- 地图格子用 `Graphics` 绘制，配合确定性伪随机 `rnd(x, y, i)`，保证每次加载外观一致；画完后按 `RES` 倍
-  烘焙进 DynamicTexture（`map-bake`）并销毁 Graphics。大量静态 Graphics 指令在 WebGL 下每帧都会重新处理，
+- 地图格子用 `Graphics` 绘制，配合确定性伪随机 `rnd(x, y, i)`，保证每次加载外观一致；按 20×20 格分块，每块画完后按 `RES` 倍
+  烘焙进 DynamicTexture（`map-bake-<x>-<y>`，避免 40×40 单张贴图超出显卡尺寸）并销毁 Graphics。30 种地形各有 `drawDetail` 分支，细节不要超出格子左右边界（上方可超出 4px）。大量静态 Graphics 指令在 WebGL 下每帧都会重新处理，
   静态内容一律烘焙。
 
 ## 游戏设置与性能
@@ -116,5 +133,7 @@ if (killed) await killUnit(s, d);
 
 - 导入图片/音频文件或新增 `assets/` 目录：所有图形都是程序生成的。
 - 地图位置写死像素值，而不是用 `TILE`/`MAP_X`/`MAP_Y`/`tileCenter`。
+- 用 `pointer.worldX/worldY` 或 `WIDTH/HEIGHT`、整张地图尺寸摆放地图层对象（应换算镜头 / 用 `viewRect`）；把界面对象放到地图层 depth。
+- 假设地图为 18×13：尺寸一律从 `map` 取（`logic.mapCols/mapRows`），`inMap(x, y, map)`、`attackTiles(map, u)`、`spellTiles(map, u, id)` 都要传地图。
 - 创建贴图前不检查 `textures.exists(key)`（会泄漏，或报重复 key 错误）。
 - 弹窗关闭后键盘监听仍未移除。

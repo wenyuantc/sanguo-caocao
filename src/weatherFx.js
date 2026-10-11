@@ -1,6 +1,8 @@
 // 天气画面：雨 / 豪雨为斜线粒子，雪为飘落的白点，阴天整体变暗；顶部栏天气图标
 // 粒子是一张 Graphics 每帧重画（不用贴图），同屏最多 MAX_PARTICLES 个；遮罩与粒子位于单位之上、HUD 之下
-import { TILE, COLS, ROWS, MAP_X, MAP_Y, FONT } from './config.js';
+// 遮罩与粒子只覆盖地图视口：粒子坐标相对视口，每帧把遮罩和 Graphics 移到镜头当前位置（地图层）
+import { MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT } from './config.js';
+import { viewRect } from './mapCamera.js';
 import { text } from './ui.js';
 import { WEATHERS, SUN, CLOUD, RAIN, STORM, SNOW } from './weather.js';
 
@@ -22,7 +24,7 @@ const tween = (s, cfg) => new Promise((r) => s.tweens.add({ ...cfg, onComplete: 
 export class WeatherFx {
   constructor(scene) {
     this.scene = scene;
-    this.rect = { x: MAP_X, y: MAP_Y, w: COLS * TILE, h: ROWS * TILE };
+    this.rect = { x: 0, y: 0, w: VIEW_W, h: VIEW_H }; // 视口内的相对坐标
     this.veil = scene.add.rectangle(MAP_X, MAP_Y, this.rect.w, this.rect.h, 0x000000, 0).setOrigin(0).setDepth(DEPTH);
     this.g = scene.add.graphics().setDepth(DEPTH + 1);
     this.drops = [];
@@ -60,6 +62,9 @@ export class WeatherFx {
   }
 
   update(dt) {
+    const v = viewRect(this.scene);
+    this.veil.setPosition(v.x, v.y);
+    this.g.setPosition(v.x, v.y);
     const g = this.g.clear();
     if (!this.kind) return;
     const t = Math.min(dt, 100) / 1000, r = this.rect, bottom = r.y + r.h;
@@ -88,7 +93,8 @@ export class WeatherFx {
   // 天气切换动画：粒子与遮罩淡出，换成新天气后淡入，地图中央显示新天气
   async transition(w) {
     const s = this.scene, L = LOOK[w];
-    const label = text(s, this.rect.x + this.rect.w / 2, this.rect.y + 120, `天气转为「${WEATHERS[w]}」`, 30, WEATHER_CSS[w], FONT)
+    // 提示文字在界面层（屏幕坐标，depth 801）
+    const label = text(s, MAP_X + VIEW_W / 2, MAP_Y + 120, `天气转为「${WEATHERS[w]}」`, 30, WEATHER_CSS[w], FONT)
       .setOrigin(0.5).setStroke('#1a1008', 6).setDepth(801).setAlpha(0);
     s.tweens.add({ targets: label, alpha: 1, y: label.y - 10, duration: 300 });
     await Promise.all([

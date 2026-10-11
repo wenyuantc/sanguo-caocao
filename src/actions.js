@@ -45,7 +45,7 @@ async function pierce(s, a, d) {
 
 // 方天画戟：击破目标后继续攻击攻击范围内防御最低的敌人（每次行动一次，反击时不触发）
 async function chain(s, a) {
-  const foes = attackTiles(a).map((t) => s.unitAt?.(t.x, t.y)).filter((o) => o && isFoe(o, a));
+  const foes = attackTiles(s.map, a).map((t) => s.unitAt?.(t.x, t.y)).filter((o) => o && isFoe(o, a));
   if (!foes.length) return;
   const t = foes.reduce((m, o) => (effStats(o).def < effStats(m).def ? o : m));
   await wait(s, 150);
@@ -277,9 +277,11 @@ export async function runAI(s, faction) {
     if (s.over) return;
     if (!u.alive || !canAct(u)) continue; // 混乱：本阶段不能行动
     const plan = planAI(s.map, s.units, u, s.weather);
-    s.setCursor(u.x, u.y);
     if (plan) {
       try {
+        // 镜头跟随：行动单位、目的地与目标都移入视口
+        await s.follow?.(u, plan.tile, plan.target);
+        s.setCursor(u.x, u.y);
         const node = reachable(s.map, s.units, u).get(key(plan.tile.x, plan.tile.y));
         const path = node ? pathTo(node) : [{ x: u.x, y: u.y }];
         const last = path[path.length - 1];

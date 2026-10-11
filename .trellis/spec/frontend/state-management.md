@@ -63,7 +63,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 | `sanguo-slots` | 100 个手动存档位的数组（`SLOT_COUNT`），`null` 表示空 |
 | `sanguo-save` | 单个自动存档，每关胜利后由 `victory()` 写入，`kind: 'stage'` |
 
-- 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、回合、道具、红色指数、标记、roster、
+- 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、`mapVersion`、回合、道具、红色指数、标记、roster、
   `joined`、`firedEvents`、`weatherIdx`、`inventory`、`gold`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` / `equip` / `fruits` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
   （旧存档单位缺 `tier` 时我军视为一阶、其他按难度门槛定阶，兵种按武将总表 / 登记表覆盖）。
   不要持久化派生数据或 Phaser 对象。
@@ -73,6 +73,8 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。
 - 自动存档（`writeAuto`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`。
 - 兼容没有装备的旧存档：`applyLoad` 把 `inventory` 设为 `[]`、`gold` 设为 0；进入战斗时 `kitFor` 按原版规则补发初始装备；战斗中存档里没有 `equip` 的我军武将单位同样补发。`validSave` 不要求这两个字段。
+- 地图版本：快照记录关卡的 `mapVersion`（旧存档缺失视为 1）。读档时与当前关卡的 `mapVersion` 不一致（地图已重做、坐标失效），
+  `BattleScene.create` 丢弃 `load`、置 `mapReset`，由 `restartFromStageStart` 把 registry 恢复为本关开头的战役状态后重开，开场前提示“关卡地图已更新，将从本关开头重新开始”。起点优先级：第一关用新游戏状态（按存档难度）；其他关用 `stageStartSave` 找到的自动存档（`stage` 指向本关、难度相同、`savedAt` 不晚于战斗存档）；都没有时退回 `applyLoad` 写入的战斗存档数据（道具、红色指数、标记、roster 停留在存档时刻，开场选项可能重复累加红色指数）。自动存档（关卡开头）不受影响。
 - 兼容没有天气的旧存档：战斗快照缺 `weatherIdx`（或不是 0~5 的整数）时取关卡起始序号；天气类别不入存档，始终按关卡决定。自动存档不需要天气（新关卡从起始值开始）。
 - `getStage(id)` 仍通过 `LEGACY`（`stageMeta.js`）兼容旧存档中的数字关卡下标；导入校验 `validSave`
   的关卡字段同样接受非空字符串 id 或非负整数。

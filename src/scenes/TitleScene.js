@@ -3,15 +3,25 @@ import { WIDTH, HEIGHT, FONT, COLORS, hiDpi } from '../config.js';
 import { button, text, panel } from '../ui.js';
 import { DIFFICULTIES } from '../data.js';
 import { applyLoad } from '../saves.js';
-import { FIRST_STAGE } from '../stages.js';
+import { FIRST_STAGE, getStage } from '../stages.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
+
+// 调试入口只在页面加载后第一次进入标题时生效（返回标题后正常显示）
+let debugEntered = false;
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
 
   create() {
     hiDpi(this);
+    // 调试入口：地址带 ?stage=<关卡 id>（如 test_bigmap）时以普通难度新开该关；只在首次进入标题时生效
+    const debugStage = !debugEntered && new URLSearchParams(location.search).get('stage');
+    if (debugStage && getStage(debugStage)) {
+      debugEntered = true;
+      this.newGame('normal', debugStage);
+      return;
+    }
     const g = this.add.graphics();
     // 背景：暮色渐变 + 远山
     for (let i = 0; i < 40; i++) {
@@ -53,6 +63,19 @@ export class TitleScene extends Phaser.Scene {
       '左键：选择 / 移动 / 指令　右键或 ESC：取消　骑兵克步兵，步兵克弓兵，弓兵克骑兵', 16, '#e8d6ae').setOrigin(0.5);
   }
 
+  // 新游戏：重置全部战役状态后进入 stage
+  newGame(id, stage) {
+    this.registry.set('difficulty', id);
+    this.registry.set('roster', {});
+    this.registry.set('joined', []);
+    this.registry.set('items', { ...DIFFICULTIES[id].items });
+    this.registry.set('red', 0);
+    this.registry.set('flags', {});
+    this.registry.set('inventory', []);
+    this.registry.set('gold', 0);
+    this.scene.start('Battle', { stage });
+  }
+
   // 难度选择
   chooseDifficulty() {
     const root = this.add.container(0, 0).setDepth(3000);
@@ -79,15 +102,7 @@ export class TitleScene extends Phaser.Scene {
       zone.on('pointerdown', (p, lx, ly, e) => {
         e?.stopPropagation?.();
         close();
-        this.registry.set('difficulty', id);
-        this.registry.set('roster', {});
-        this.registry.set('joined', []);
-        this.registry.set('items', { ...d.items });
-        this.registry.set('red', 0);
-        this.registry.set('flags', {});
-        this.registry.set('inventory', []);
-        this.registry.set('gold', 0);
-        this.scene.start('Battle', { stage: FIRST_STAGE });
+        this.newGame(id, FIRST_STAGE);
       });
       root.add([g, zone,
         text(this, cx + cw / 2, cy + 43, d.name, 40, d.color, FONT).setOrigin(0.5).setStroke('#000', 5),

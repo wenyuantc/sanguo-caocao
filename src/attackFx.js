@@ -1,7 +1,8 @@
 import { tileCenter } from './unitView.js';
 import { weaponOf, mountedOf } from './heroSprites.js';
 import { text } from './ui.js';
-import { WIDTH, HEIGHT, FONT } from './config.js';
+import { FONT } from './config.js';
+import { viewRect } from './mapCamera.js';
 
 // 每种兵器不同的攻击动画。onImpact 在命中瞬间调用（结算伤害 / 飘字）
 const D = 720; // 特效层级
@@ -56,7 +57,8 @@ function dust(s, x, y, n = 5, spread = 16) {
 // 会心一击：闪白 + 字样
 async function critCutIn(s, a) {
   const p = tileCenter(a.x, a.y);
-  const flash = s.add.rectangle(0, 0, WIDTH, HEIGHT, 0xffffff, 0.55).setOrigin(0).setDepth(D + 50);
+  const v = viewRect(s);
+  const flash = s.add.rectangle(v.x, v.y, v.w, v.h, 0xffffff, 0.55).setOrigin(0).setDepth(D + 50);
   const t = text(s, p.x, p.y - 44, '会心！', 30, '#ffe05a', FONT).setOrigin(0.5).setStroke('#7a1200', 6).setDepth(D + 51).setScale(1.8);
   s.tweens.add({ targets: flash, alpha: 0, duration: 260, onComplete: () => flash.destroy() });
   await tween(s, { targets: t, scale: 1, duration: 180, ease: 'Back.easeOut' });

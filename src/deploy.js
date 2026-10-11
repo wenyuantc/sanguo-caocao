@@ -1,6 +1,6 @@
 // 出阵推导：根据关卡预设我军、武将总表与战役状态，推导出阵位置、上限、必须出阵 / 不可出阵与候选名单
 // 纯函数，不依赖 Phaser（Node 可直接导入）
-import { TERRAIN, classOf } from './data.js';
+import { passable } from './data.js';
 import { roleOf, tierFor } from './logic.js';
 import { GENERALS, isGeneral } from './generals.js';
 import { getStage } from './stages.js';
@@ -144,9 +144,8 @@ export function buildPlayerDefs(plan, selectedIds) {
   }
   for (const id of rest) {
     const p = plan.pool.find((o) => o.id === id);
-    const move = classOf(p.cls).moveType;
     const free = plan.slots.filter(([x, y]) => !used.has(k(x, y)));
-    const slot = free.find(([x, y]) => TERRAIN[plan.map[y][x]].cost[move] < 99) || free[0];
+    const slot = free.find(([x, y]) => passable(p.cls, plan.map[y][x])) || free[0];
     if (!slot) continue;
     used.add(k(slot[0], slot[1]));
     const g = GENERALS[id];

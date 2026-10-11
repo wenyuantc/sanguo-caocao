@@ -1,5 +1,4 @@
-import { COLS, ROWS } from './config.js';
-import { TERRAIN, RANGES, ADVANTAGE, SPELLS, SERIES, GRADE, STAT5, PROMOTE_LVL, classOf } from './data.js';
+import { TERRAIN, moveCost, terrainDef, IMPASSABLE, RANGES, ADVANTAGE, SPELLS, SERIES, GRADE, STAT5, PROMOTE_LVL, classOf } from './data.js';
 import { GENERALS, isGeneral } from './generals.js';
 import { CLASS_BY_NAME } from './characters.js';
 import {
@@ -8,8 +7,13 @@ import {
 import { equipStats, defaultKit, copyKit, fx, fxSum, fxMax, FRUIT_GAIN, EQUIP, SLOTS } from './equipment.js';
 import { isBad, SUN, CLOUD } from './weather.js';
 
-export const key = (x, y) => y * COLS + x;
-export const inMap = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
+// 格子键：地图最大 40 × 40，按 KEY_W 列展开（与地图实际宽度无关，可跨地图复用）
+export const KEY_W = 64;
+export const key = (x, y) => y * KEY_W + x;
+// 地图尺寸由关卡数据决定
+export const mapCols = (map) => map[0].length;
+export const mapRows = (map) => map.length;
+export const inMap = (x, y, map) => x >= 0 && y >= 0 && y < map.length && x < map[0].length;
 export const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 export const isFoe = (a, b) => (a.faction === 'enemy') !== (b.faction === 'enemy');
 
@@ -151,6 +155,8 @@ export function promote(u) {
 export function terrainAt(map, x, y) {
   return TERRAIN[map[y][x]];
 }
+// 单位在所在格（或指定格）的地形防御加成：按兵种系列查 TERRAIN_RULES
+export const defAt = (map, u, x = u.x, y = u.y) => terrainDef(u.cls, map[y][x]);
 
 // 移动力：兵种 + 增益（强行）+ 装备（马、风车轮）
 export const effMove = (u) => classOf(u.cls, u.tier).move + moveBonus(u) + fxSum(u, 'move');
@@ -158,7 +164,6 @@ export const effMove = (u) => classOf(u.cls, u.tier).move + moveBonus(u) + fxSum
 // Dijkstra 计算可移动范围；敌对单位阻挡（赤兔马可穿过），友方可穿过但不可停留；麻痹 / 混乱时只有原地，强行使移动力 +2
 // 的卢：可通行地形的消耗都为 1
 export function reachable(map, units, u) {
-  const cls = classOf(u.cls, u.tier);
   if (!canMove(u)) return new Map([[key(u.x, u.y), { x: u.x, y: u.y, cost: 0, prev: null }]]);
   const move = effMove(u);
   const pass = !!fx(u, 'passThrough'), flat = !!fx(u, 'allTerrain');
@@ -171,11 +176,11 @@ export function reachable(map, units, u) {
     const cur = open.shift();
     for (const [dx, dy] of RANGES.melee) {
       const nx = cur.x + dx, ny = cur.y + dy;
-      if (!inMap(nx, ny)) continue;
+      if (!inMap(nx, ny, map)) continue;
       const o = occ.get(key(nx, ny));
       if (o && isFoe(o, u) && !pass) continue;
-      const tc = terrainAt(map, nx, ny).cost[cls.moveType];
-      const c = cur.cost + (flat && tc < 99 ? 1 : tc);
+      const tc = moveCost(u.cls, map[ny][nx]);
+      const c = cur.cost + (flat && tc < IMPASSABLE ? 1 : tc);
       if (c > move) continue;
       const k = key(nx, ny);
       if (best.has(k) && best.get(k).cost <= c) continue;
@@ -207,18 +212,18 @@ export function canAttackFrom(u, x, y, target) {
   return attackOffsets(u).some(([dx, dy]) => x + dx === target.x && y + dy === target.y);
 }
 
-export function attackTiles(u, x = u.x, y = u.y) {
-  return attackOffsets(u).map(([dx, dy]) => ({ x: x + dx, y: y + dy })).filter((p) => inMap(p.x, p.y));
+export function attackTiles(map, u, x = u.x, y = u.y) {
+  return attackOffsets(u).map(([dx, dy]) => ({ x: x + dx, y: y + dy })).filter((p) => inMap(p.x, p.y, map));
 }
 
 // 策略射程内的格子；全图策略为全部格子，自身策略只有所在格
-export function spellTiles(u, spellId, x = u.x, y = u.y) {
+export function spellTiles(map, u, spellId, x = u.x, y = u.y) {
   const sp = SPELLS[spellId];
-  const r = sp.range === 'map' ? COLS + ROWS : sp.range;
+  const r = sp.range === 'map' ? mapCols(map) + mapRows(map) : sp.range;
   const out = [];
   for (let dy = -r; dy <= r; dy++)
     for (let dx = -r; dx <= r; dx++)
-      if (Math.abs(dx) + Math.abs(dy) <= r && inMap(x + dx, y + dy)) out.push({ x: x + dx, y: y + dy });
+      if (Math.abs(dx) + Math.abs(dy) <= r && inMap(x + dx, y + dy, map)) out.push({ x: x + dx, y: y + dy });
   return out;
 }
 
@@ -248,18 +253,17 @@ const isRider = (u) => { const c = classOf(u.cls, u.tier); return c.moveType ===
 // 装备：镜铠使距离 2 格以上的攻击无效（伤害 0）；青釭剑打骑兵类 ×1.5
 export function physDamage(map, a, d) {
   if (dist(a, d) > 1 && fx(d, 'rangedImmune')) return 0;
-  const t = terrainAt(map, d.x, d.y);
+  const def = defAt(map, d);
   const base = (effStats(a).atk - effStats(d).def * 0.5) * 0.75;
   const lvl = 1 + (a.lvl - d.lvl) * 0.03;
   const horse = isRider(d) ? fx(a, 'vsHorse')?.mult || 1 : 1;
-  return Math.max(5, Math.round(base * lvl * affinity(a, d) * horse * (1 - t.def) * taken(d)));
+  return Math.max(5, Math.round(base * lvl * affinity(a, d) * horse * (1 - def) * taken(d)));
 }
 
 // 倚天剑 / 风神盾：敌人对装备者的命中率降低（在上下限之后扣除）
 export function hitRate(map, a, d) {
   if (alwaysHit(d)) return 100;
-  const t = terrainAt(map, d.x, d.y);
-  return Math.round(clamp(92 + (effStats(a).burst - effStats(d).burst) * 0.8 - t.def * 40, 55, 100)) - fxSum(d, 'hitDown');
+  return Math.round(clamp(92 + (effStats(a).burst - effStats(d).burst) * 0.8 - defAt(map, d) * 40, 55, 100)) - fxSum(d, 'hitDown');
 }
 
 // 玉玺：每次攻击都会心；黄金铠：不会被会心一击（优先）
@@ -297,24 +301,27 @@ const FORMULA = {
 };
 const spellX = (a, d) => a.lvl + (effStats(a).int - effStats(d).int) / 3;
 
-// 野外地形（砂暴）、水边地形（水系）、山林地形（地系）
-const WILD = new Set(['.', ',', 'F', 'M']);
-const WET = new Set(['W', 'B', 'S']);
-const ROUGH = new Set(['M', 'F']);
-const nearAny = (map, x, y, set) => [[0, 0], ...RANGES.cross].some(([dx, dy]) => inMap(x + dx, y + dy) && set.has(map[y + dy][x + dx]));
-export const isWild = (map, x, y) => WILD.has(map[y][x]);
+// 野外地形（砂暴可作用）：见 terrain.js 的 wild
+const wildCh = (ch) => !!TERRAIN[ch]?.wild;
+export const isWild = (map, x, y) => wildCh(map[y][x]);
 // 只作用于野外的全图策略（砂暴）；玄武 / 白虎的全图不看地形
 const wildOnly = (sp) => sp.area === 'map' && sp.target === 'foe';
 
-// 地形限制（自行设计，参考 research P5）：可以施放时返回 null，否则返回中文原因；以目标（范围中心）所在格判断
+// 地形限制（原版，research maps.md §6）：可以施放时返回 null，否则返回中文原因；以目标（范围中心）所在格判断
+// 各地形可用的属性见 terrain.js 的 elems（f 火 / w 水 / n 风 / e 地）；船上可用火、水为自行设计
+const ELEM_CODE = { fire: 'f', water: 'w', wind: 'n', earth: 'e' };
+const ELEM_BLOCK = {
+  fire: '火系策略不能朝着位于荒地、山地、浅滩、沼泽、大河、雪原上的部队使用',
+  water: '水系策略只能朝着位于桥梁、浅滩、沼泽、大河、雪原、船上的部队使用',
+  wind: '风系策略不能对位于建筑物和林中的部队使用',
+  earth: '地系策略只能朝着位于山地和荒地的部队使用',
+};
 export function spellBlock(map, spellId, x, y) {
   const sp = SPELLS[spellId];
   const c = map[y][x];
-  if (wildOnly(sp)) return WILD.has(c) ? null : '砂暴只能攻击身处野外的敌军';
-  if (sp.elem === 'fire' && (c === 'W' || c === 'B')) return '火系策略无法攻击河流、桥梁上的目标';
-  if (sp.elem === 'water' && !nearAny(map, x, y, WET)) return '水系策略需目标处在河流、桥梁、战船上或旁边';
-  if (sp.elem === 'earth' && !nearAny(map, x, y, ROUGH)) return '地系策略需目标处在山地、森林上或旁边';
-  if (sp.elem === 'wind' && c === 'G') return '风系策略无法攻击城池内的目标';
+  if (wildOnly(sp)) return wildCh(c) ? null : '砂暴只能攻击身处野外的敌军';
+  const code = ELEM_CODE[sp.elem];
+  if (code && !TERRAIN[c]?.elems.includes(code)) return ELEM_BLOCK[sp.elem];
   return null;
 }
 
@@ -334,10 +341,10 @@ export function areaTiles(map, spellId, c) {
   const sp = SPELLS[spellId];
   if (sp.area === 'map') {
     const out = [];
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (!wildOnly(sp) || WILD.has(map[y][x])) out.push({ x, y });
+    for (let y = 0; y < mapRows(map); y++) for (let x = 0; x < mapCols(map); x++) if (!wildOnly(sp) || wildCh(map[y][x])) out.push({ x, y });
     return out;
   }
-  return (AREA[sp.area] || [[0, 0]]).map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy })).filter((p) => inMap(p.x, p.y));
+  return (AREA[sp.area] || [[0, 0]]).map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy })).filter((p) => inMap(p.x, p.y, map));
 }
 
 // 受影响的单位：范围内全部合法目标（敌对策略只打敌人，友方策略只作用于友方）
@@ -349,7 +356,7 @@ export function spellVictims(map, units, a, spellId, c) {
   if (sp.target === 'self') return [a];
   if (!sp.area) return [c];
   const side = (o) => o.alive && (sp.target === 'foe' ? isFoe(o, a) : !isFoe(o, a));
-  if (sp.area === 'map') return units.filter((o) => side(o) && WILD.has(map[o.y][o.x]));
+  if (sp.area === 'map') return units.filter((o) => side(o) && wildCh(map[o.y][o.x]));
   const offs = AREA[sp.area];
   return units.filter((o) => side(o) && offs.some(([dx, dy]) => o.x === c.x + dx && o.y === c.y + dy));
 }
@@ -360,7 +367,7 @@ export function spellDamage(map, a, d, spellId) {
   const sp = SPELLS[spellId];
   if (sp.formula === 'kill') return Math.max(1, Math.round(d.hp * spellTaken(d)));
   const t = terrainAt(map, d.x, d.y);
-  let m = SPELL_SCALE * (AREA_SCALE[sp.area] || 1) * (1 - t.def * 0.5) * spellTaken(d);
+  let m = SPELL_SCALE * (AREA_SCALE[sp.area] || 1) * (1 - defAt(map, d) * 0.5) * spellTaken(d);
   if (sp.elem === 'fire') m *= t.fire || 1;
   if (sp.special === 'drain' && a.cls === 'dancer') m *= 2;
   if (d.cls === 'xiliang') m *= 1.1;
@@ -538,20 +545,23 @@ export function tickGear(u) {
 }
 
 // ---------- 敌军/友军 AI ----------
-function distanceField(map, foes, moveType) {
-  const field = new Array(COLS * ROWS).fill(Infinity);
-  const open = foes.map((f) => ({ x: f.x, y: f.y, c: 0 }));
-  open.forEach((n) => (field[key(n.x, n.y)] = 0));
-  while (open.length) {
-    open.sort((a, b) => a.c - b.c);
-    const cur = open.shift();
-    for (const [dx, dy] of RANGES.melee) {
-      const nx = cur.x + dx, ny = cur.y + dy;
-      if (!inMap(nx, ny)) continue;
-      const c = cur.c + terrainAt(map, nx, ny).cost[moveType];
-      if (c >= 99 || c >= field[key(nx, ny)]) continue;
-      field[key(nx, ny)] = c;
-      open.push({ x: nx, y: ny, c });
+function distanceField(map, foes, cls) {
+  const field = new Array(KEY_W * mapRows(map)).fill(Infinity);
+  // 消耗为 1~3 的小整数：按累计消耗分桶（Dial 算法），40 × 40 地图也只需线性时间
+  const buckets = [foes.map((f) => [f.x, f.y])];
+  foes.forEach((f) => (field[key(f.x, f.y)] = 0));
+  for (let c0 = 0; c0 < buckets.length; c0++) {
+    for (const [x, y] of buckets[c0] || []) {
+      if (field[key(x, y)] < c0) continue;
+      for (const [dx, dy] of RANGES.melee) {
+        const nx = x + dx, ny = y + dy;
+        if (!inMap(nx, ny, map)) continue;
+        const step = moveCost(cls, map[ny][nx]);
+        const c = c0 + step;
+        if (step >= IMPASSABLE || c >= field[key(nx, ny)]) continue;
+        field[key(nx, ny)] = c;
+        (buckets[c] ||= []).push([nx, ny]);
+      }
     }
   }
   return field;
@@ -559,11 +569,11 @@ function distanceField(map, foes, moveType) {
 
 // 威胁图：每格能被多少个敌人在本回合移动后攻击到（用于受保护单位的 AI 避险）；混乱的敌人不算
 function dangerMap(map, units, foes) {
-  const field = new Array(COLS * ROWS).fill(0);
+  const field = new Array(KEY_W * mapRows(map)).fill(0);
   for (const f of foes) {
     if (!canAct(f)) continue;
     const hit = new Set();
-    for (const t of reachable(map, units, f).values()) for (const a of attackTiles(f, t.x, t.y)) hit.add(key(a.x, a.y));
+    for (const t of reachable(map, units, f).values()) for (const a of attackTiles(map, f, t.x, t.y)) hit.add(key(a.x, a.y));
     for (const k of hit) field[k] += 1;
   }
   return field;
@@ -656,7 +666,7 @@ export function planAI(map, units, u, weather = SUN) {
   const consider = (score, plan) => { if (!best || score > best.score) best = { score, ...plan }; };
   for (const tile of tiles) {
     // 受保护单位不冒进：每多一个能打到该格的敌人扣 25 分
-    const tdef = terrainAt(map, tile.x, tile.y).def * 30 - (danger ? danger[key(tile.x, tile.y)] * 25 : 0);
+    const tdef = defAt(map, u, tile.x, tile.y) * 30 - (danger ? danger[key(tile.x, tile.y)] * 25 : 0);
     const self = { ...u, x: tile.x, y: tile.y };
     for (const f of foes) {
       if (!canAttackFrom(u, tile.x, tile.y, f)) continue;
@@ -672,7 +682,7 @@ export function planAI(map, units, u, weather = SUN) {
   }
   if (best) return best;
   if (u.ai !== 'aggressive') return null;
-  const field = distanceField(map, foes, classOf(u.cls, u.tier).moveType);
+  const field = distanceField(map, foes, u.cls);
   let tile = null;
   for (const t of tiles) if (!tile || field[key(t.x, t.y)] < field[key(tile.x, tile.y)]) tile = t;
   return tile && (tile.x !== u.x || tile.y !== u.y) ? { tile, type: 'wait' } : null;

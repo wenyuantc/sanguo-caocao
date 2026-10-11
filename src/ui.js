@@ -66,7 +66,8 @@ export class DialogBox {
     this.hint = text(scene, WIDTH - 70, y + h - 30, '▼', 18, '#e9c46a').setOrigin(1, 0);
     scene.tweens.add({ targets: this.hint, alpha: 0.2, yoyo: true, repeat: -1, duration: 500 });
     this.root.add([shade, bg, this.portraitHolder, this.nameText, this.bodyText, this.hint]);
-    shade.on('pointerdown', () => this.next());
+    // 阻止冒泡：推进对白的点击不传到场景（战场在抬起时按地图点击处理，否则最后一句关闭后会点到下面的格子）
+    shade.on('pointerdown', (p, lx, ly, ev) => { ev?.stopPropagation?.(); this.next(); });
   }
 
   show(lines) {
@@ -130,8 +131,10 @@ export class DialogBox {
   }
 }
 
+// 上浮数字：位于地图层（世界坐标，随镜头滚动），见 mapCamera.isMapSpace
 export function floatText(scene, x, y, str, color = '#ffffff', size = 22) {
   const t = text(scene, x, y, str, size, color, FONT).setOrigin(0.5).setStroke('#000', 5).setDepth(900);
+  t.mapSpace = true;
   scene.tweens.add({ targets: t, y: y - 40, alpha: { from: 1, to: 0 }, duration: 1100, ease: 'Cubic.easeOut', onComplete: () => t.destroy() });
   return t;
 }

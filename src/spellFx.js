@@ -1,7 +1,8 @@
 import * as Phaser from 'phaser';
 import { tileCenter } from './unitView.js';
 import { text } from './ui.js';
-import { FONT, TILE, COLS, ROWS, MAP_X, MAP_Y } from './config.js';
+import { FONT } from './config.js';
+import { viewRect } from './mapCamera.js';
 import { ITEMS, SPELLS, TERRAIN } from './data.js';
 import { EQUIP, KINDS } from './equipment.js';
 
@@ -433,9 +434,10 @@ function xuanwuHit(s, p, e) {
   return st ? st(s, p) : aura(s, p, false);
 }
 
-// 全图半透明遮罩（四神用）
+// 全图半透明遮罩（四神用）：覆盖当前视口
 function mapVeil(s, color, alpha, ms, hold) {
-  const veil = s.add.rectangle(MAP_X, MAP_Y, COLS * TILE, ROWS * TILE, color, 0).setOrigin(0).setDepth(D - 3);
+  const v = viewRect(s);
+  const veil = s.add.rectangle(v.x, v.y, v.w, v.h, color, 0).setOrigin(0).setDepth(D - 3);
   s.tweens.add({ targets: veil, fillAlpha: alpha, duration: ms, yoyo: true, hold, onComplete: () => veil.destroy() });
 }
 
@@ -482,8 +484,9 @@ async function firebird(s, from, to) {
 async function blackMist(s) {
   mapVeil(s, 0x1a0e2a, 0.5, 400, 900);
   s.cameras.main.shake(500, 0.004);
+  const v = viewRect(s);
   for (let i = 0; i < 24; i++) {
-    const sm = img(s, 'fx-smoke', MAP_X + rand(0, COLS * TILE), MAP_Y + rand(0, ROWS * TILE), rand(1.8, 2.8), D - 2).setTint(0x2a1a40).setAlpha(0);
+    const sm = img(s, 'fx-smoke', v.x + rand(0, v.w), v.y + rand(0, v.h), rand(1.8, 2.8), D - 2).setTint(0x2a1a40).setAlpha(0);
     s.tweens.add({ targets: sm, alpha: 0.8, x: sm.x + rand(-40, 40), delay: rand(0, 500), duration: 700, yoyo: true, onComplete: () => sm.destroy() });
   }
   await delay(s, 600);
@@ -715,17 +718,17 @@ async function drain(s, p, from, color) {
 
 // 砂暴：全图黄沙横扫、镜头震动
 async function sandstorm(s) {
-  const w = COLS * TILE, h = ROWS * TILE;
-  const veil = s.add.rectangle(MAP_X, MAP_Y, w, h, 0xc8a060, 0).setOrigin(0).setDepth(D - 3);
+  const { x: X0, y: Y0, w, h } = viewRect(s);
+  const veil = s.add.rectangle(X0, Y0, w, h, 0xc8a060, 0).setOrigin(0).setDepth(D - 3);
   s.tweens.add({ targets: veil, fillAlpha: 0.38, duration: 400, yoyo: true, hold: 700, onComplete: () => veil.destroy() });
   s.cameras.main.shake(900, 0.005);
   for (let i = 0; i < 60; i++) {
-    const y = MAP_Y + rand(0, h), len = rand(30, 90);
-    const st = s.add.rectangle(MAP_X - len, y, len, rand(1.5, 3), i % 3 ? 0xe8d0a0 : 0xa88050, 0.8).setOrigin(0, 0.5).setDepth(D + 5);
-    s.tweens.add({ targets: st, x: MAP_X + w + len, delay: rand(0, 900), duration: rand(500, 800), onComplete: () => st.destroy() });
+    const y = Y0 + rand(0, h), len = rand(30, 90);
+    const st = s.add.rectangle(X0 - len, y, len, rand(1.5, 3), i % 3 ? 0xe8d0a0 : 0xa88050, 0.8).setOrigin(0, 0.5).setDepth(D + 5);
+    s.tweens.add({ targets: st, x: X0 + w + len, delay: rand(0, 900), duration: rand(500, 800), onComplete: () => st.destroy() });
   }
   for (let i = 0; i < 24; i++) {
-    const sm = img(s, 'fx-smoke', MAP_X + rand(0, w), MAP_Y + rand(0, h), rand(1.5, 2.5), D + 4).setTint(0xd8b880).setAlpha(0);
+    const sm = img(s, 'fx-smoke', X0 + rand(0, w), Y0 + rand(0, h), rand(1.5, 2.5), D + 4).setTint(0xd8b880).setAlpha(0);
     s.tweens.add({ targets: sm, alpha: 0.7, x: sm.x + rand(60, 140), delay: rand(0, 600), duration: 700, yoyo: true, onComplete: () => sm.destroy() });
   }
   await delay(s, 600);

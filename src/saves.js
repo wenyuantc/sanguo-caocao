@@ -52,8 +52,8 @@ export function migrateItems(items = {}) {
   return { ...rest, rice: (rest.rice || 0) + (wheat || 0), water: (rest.water || 0) + (wine || 0) };
 }
 
-// 读取存档：写入全局状态后进入战场
-export function applyLoad(scene, data) {
+// 把存档中的战役状态写入 registry（读档与地图版本不一致时的重开共用）
+export function restoreRegistry(scene, data) {
   data = { ...data, items: migrateItems(data.items) };
   // 旧存档的 roster 没有 tier（阶级）：视为一阶
   const roster = Object.fromEntries(Object.entries(data.roster || {}).map(([id, r]) => [id, { ...r, tier: r.tier || 1 }]));
@@ -67,7 +67,24 @@ export function applyLoad(scene, data) {
   // 旧存档没有装备与金钱：背包为空，进入战斗时按原版规则补发初始装备
   scene.registry.set('inventory', Array.isArray(data.inventory) ? data.inventory : []);
   scene.registry.set('gold', data.gold ?? 0);
+}
+
+// 读取存档：写入全局状态后进入战场
+export function applyLoad(scene, data) {
+  restoreRegistry(scene, data);
   scene.scene.start('Battle', { stage: data.stage, load: data.kind === 'battle' ? data : null });
+}
+
+// 战斗中存档的地图版本与关卡不一致时，找本关开头的状态作为重开起点：
+// 自动存档在上一关胜利时写入（stage = 下一关 id），所以 stage 指向本关的自动存档就是本关开头的快照。
+// 还要求难度相同、且不晚于该战斗存档（更晚的自动存档属于之后另一次进入本关，状态不同）。
+// idOf 把关卡字段（旧存档可能是数字下标）换成关卡 id。找不到时返回 null。
+export function stageStartSave(load, stageId, idOf = (s) => s) {
+  const auto = readAuto();
+  if (!auto || auto.kind !== 'stage' || idOf(auto.stage) !== stageId) return null;
+  if ((auto.difficulty || 'normal') !== (load.difficulty || 'normal')) return null;
+  if (auto.savedAt && load.savedAt && auto.savedAt > load.savedAt) return null;
+  return auto;
 }
 
 // ---------- 导出 / 导入 ----------
