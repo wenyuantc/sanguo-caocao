@@ -7,6 +7,8 @@ import { DEBUG_STAGES } from '../src/stages/debug.js';
 
 const argv = process.argv.slice(2);
 const groups = argv.filter((a) => !a.startsWith('--'));
+// --camp-strict：营中台词覆盖率不足（某关少于 3 位人物、某武将通用台词少于 3 段）算错误（台词全部写完后的整合阶段使用）
+const CAMP_STRICT = argv.includes('--camp-strict');
 const STAGES = groups.length
   ? (await Promise.all(groups.map((g) => import(`../src/stages/${g}.js`)))).flatMap((m) => m.default).map(normalizeStage)
   : (await import('../src/stages.js')).STAGES;
@@ -22,6 +24,8 @@ import { TABLE, STAGE_WEATHER, SET_WEATHER, stageWeather, validIdx } from '../sr
 import { TERRAIN_PRESETS } from '../src/terrain.js';
 import { checkScript, POSES } from '../src/story/defs.js';
 import { autoScene } from '../src/story/auto.js';
+import { TALKS_BY_GROUP, GENERIC_TALKS, FOLK_TALKS } from '../src/camp/talks.js';
+import { LAYOUTS, CAMP_OF, FOLK, checkLayout } from '../src/camp/layouts.js';
 
 const errors = [], warns = [];
 const err = (s, m) => errors.push(`[${s.id}] ${m}`);
@@ -373,6 +377,105 @@ for (const [gid, list] of Object.entries(STARTER_TREASURES)) {
   for (const id of list) if (!EQUIP[id]?.treasure) eqErr(`${gid} 初始宝物不存在：${id}`);
 }
 for (const id of Object.keys(ITEM_PRICE)) if (!ITEMS[id]) eqErr(`有价格的道具不存在：${id}`);
+
+// ---------- 营中（camp/）：布局、本关专属台词（talks_<组>.js）、通用台词（generic.js） ----------
+{
+  const campErr = (m) => errors.push(`[camp] ${m}`);
+  const GROUP_IDS = Object.fromEntries(await Promise.all([...'abcdef'].map(async (g) => [g, (await import(`../src/stages/${g}.js`)).default.map((x) => x.id)])));
+  const GENERAL_NAMES = new Set(Object.values(GENERALS).map((g) => g.name));
+  const known = (n) => n === '旁白' || GENERAL_NAMES.has(n) || !!CHARACTERS[n] || !!FOLK[n] || GENERIC.test(n);
+  const FLAG_RE = /^[a-z][a-z0-9_]*$/;
+  const LINE_KEYS = new Set(['who', 'side', 'text', 'ifFlag', 'unlessFlag', 'choices']);
+  const ENTRY_KEYS = new Set(['who', 'side', 'cls', 'lines', 'again', 'ifFlag', 'unlessFlag']);
+  const flagField = (o, at) => { for (const f of ['ifFlag', 'unlessFlag']) if (o[f] != null && (typeof o[f] !== 'string' || !FLAG_RE.test(o[f]))) campErr(`${at} ${f} 格式错误：${o[f]}（小写字母开头，只含小写字母、数字、下划线）`); };
+  const lines = (arr, at, noChoice) => {
+    if (!Array.isArray(arr) || !arr.length) { campErr(`${at} 对白必须是非空数组`); return; }
+    arr.forEach((l, i) => {
+      const w = `${at} 第 ${i + 1} 行`;
+      if (!l || typeof l !== 'object') { campErr(`${w} 不是对象`); return; }
+      if (typeof l.who !== 'string' || typeof l.text !== 'string' || !l.text.trim()) campErr(`${w} 缺少 who / text`);
+      else if (!known(l.who)) campErr(`${w} 说话人未登记：${l.who}（武将名 / characters 登记 / layouts.FOLK / 通用士兵名）`);
+      for (const k of Object.keys(l)) if (!LINE_KEYS.has(k)) campErr(`${w} 未知字段：${k}`);
+      if (l.side && !['player', 'enemy', 'ally'].includes(l.side)) campErr(`${w} side 无效：${l.side}`);
+      flagField(l, w);
+      if (l.choices == null) return;
+      if (noChoice) { campErr(`${w} 此处不能带选项（可反复触发的台词）`); return; }
+      if (!Array.isArray(l.choices) || l.choices.length < 2 || l.choices.length > 3) { campErr(`${w} choices 须为 2~3 个选项`); return; }
+      l.choices.forEach((c, j) => {
+        const cw = `${w} 选项 ${j + 1}`;
+        if (!c || typeof c.text !== 'string' || !c.text.trim()) campErr(`${cw} 缺少 text`);
+        if (c.red != null && !(Number.isInteger(c.red) && Math.abs(c.red) <= 3)) campErr(`${cw} red 须为 −3~3 的整数：${c.red}`);
+        if (c.flag != null && (typeof c.flag !== 'string' || !FLAG_RE.test(c.flag))) campErr(`${cw} flag 格式错误：${c.flag}`);
+        for (const k of Object.keys(c || {})) if (!['text', 'red', 'flag', 'reply'].includes(k)) campErr(`${cw} 未知字段：${k}`);
+        if (c.reply != null) lines(c.reply, `${cw} 回复`, false);
+      });
+    });
+  };
+  // 布局
+  for (const [id, L] of Object.entries(LAYOUTS)) {
+    if (L.id !== id) campErr(`布局 id 与键不一致：${id}`);
+    checkLayout(L).forEach((m) => campErr(`布局 ${id}：${m}`));
+  }
+  for (const [sid, lid] of Object.entries(CAMP_OF)) {
+    if (!PLANNED_IDS.includes(sid)) campErr(`CAMP_OF 的关卡不存在：${sid}`);
+    if (!LAYOUTS[lid]) campErr(`CAMP_OF[${sid}] 布局不存在：${lid}`);
+  }
+  for (const st of STAGES) if (st.camp != null && !LAYOUTS[st.camp]) campErr(`${st.id} 的 camp 布局不存在：${st.camp}`);
+  // 本关专属台词：键为即将开始的关卡 id，写在该关所属组的 talks_<组>.js
+  let covered = 0, total = 0;
+  for (const g of groups.length ? groups : Object.keys(GROUP_IDS)) {
+    const talks = TALKS_BY_GROUP[g];
+    if (!talks || typeof talks !== 'object') { campErr(`talks_${g}.js 没有导出 CAMP_TALKS_${g.toUpperCase()}`); continue; }
+    for (const [sid, list] of Object.entries(talks)) {
+      const at = `talks_${g}.${sid}`;
+      if (!PLANNED_IDS.includes(sid)) { campErr(`${at} 关卡不存在`); continue; }
+      if (!GROUP_IDS[g].includes(sid)) campErr(`${at} 关卡不属于 ${g.toUpperCase()} 组（应写在 ${Object.keys(GROUP_IDS).find((k) => GROUP_IDS[k].includes(sid))} 组）`);
+      if (sid === FIRST_STAGE) campErr(`${at} 第一关之前不进营中，不需要台词`);
+      if (!Array.isArray(list) || !list.length) { campErr(`${at} 必须是非空数组`); continue; }
+      const seen = new Set();
+      list.forEach((e, i) => {
+        const ew = `${at}[${i}]`;
+        if (!e || typeof e.who !== 'string') { campErr(`${ew} 缺少 who`); return; }
+        if (!known(e.who)) campErr(`${ew} 人物未登记：${e.who}`);
+        if (e.who === '曹操') campErr(`${ew} 不能与曹操自己对话`);
+        for (const k of Object.keys(e)) if (!ENTRY_KEYS.has(k)) campErr(`${ew} 未知字段：${k}`);
+        if (e.side && !['player', 'enemy', 'ally'].includes(e.side)) campErr(`${ew} side 无效：${e.side}`);
+        if (e.cls && !SERIES[e.cls]) campErr(`${ew} 兵种不存在：${e.cls}`);
+        flagField(e, ew);
+        const k = `${e.who}|${e.ifFlag || ''}|${e.unlessFlag || ''}`;
+        if (seen.has(k)) campErr(`${ew} ${e.who} 的台词重复（同一人物多条须用 ifFlag / unlessFlag 区分）`);
+        seen.add(k);
+        lines(e.lines, `${ew}.lines`, false);
+        if (e.again != null) lines(e.again, `${ew}.again`, true);
+      });
+      const n = new Set(list.map((e) => e?.who)).size;
+      if (CAMP_STRICT && (n < 3 || n > 6)) campErr(`${at} 应有 3~6 位人物的台词，实际 ${n}`);
+    }
+    for (const sid of GROUP_IDS[g]) {
+      if (sid === FIRST_STAGE) continue;
+      total += 1;
+      if (talks?.[sid]) covered += 1;
+      else if (CAMP_STRICT) campErr(`talks_${g}.${sid} 缺少营中台词`);
+    }
+  }
+  // 通用台词
+  let genOk = 0;
+  const genTotal = Object.keys(GENERALS).filter((id) => id !== 'caocao').length;
+  for (const [gid, convs] of Object.entries(GENERIC_TALKS)) {
+    if (!GENERALS[gid]) { campErr(`generic.${gid} 武将不存在（键为武将 id）`); continue; }
+    if (gid === 'caocao') campErr('generic.caocao 曹操不需要通用台词');
+    if (!Array.isArray(convs) || !convs.length) { campErr(`generic.${gid} 必须是非空数组`); continue; }
+    convs.forEach((c, i) => lines(c, `generic.${gid}[${i}]`, true));
+    if (convs.length >= 3) genOk += 1;
+  }
+  if (CAMP_STRICT) for (const gid of Object.keys(GENERALS)) if (gid !== 'caocao' && !(GENERIC_TALKS[gid]?.length >= 3)) campErr(`generic.${gid} 通用台词少于 3 段`);
+  for (const [name, convs] of Object.entries(FOLK_TALKS)) {
+    if (!FOLK[name]) campErr(`FOLK_TALKS.${name} 通用角色未在 layouts.FOLK 登记`);
+    if (!Array.isArray(convs) || !convs.length) { campErr(`FOLK_TALKS.${name} 必须是非空数组`); continue; }
+    convs.forEach((c, i) => lines(c, `FOLK_TALKS.${name}[${i}]`, true));
+  }
+  console.log(`营中台词：本关专属 ${covered} / ${total} 关，通用台词满 3 段的武将 ${genOk} / ${genTotal}${CAMP_STRICT ? '（严格模式）' : ''}`);
+}
 
 console.log(`共 ${STAGES.length} 关${groups.length ? '' : `（另有调试关卡 ${DEBUG_STAGES.length} 个）`}`);
 warns.forEach((w) => console.log('警告', w));
