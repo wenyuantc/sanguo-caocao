@@ -12,5 +12,6 @@ export default {
   曹性: { hat: 'cap', beard: 'mustache', brow: 0.3, weapon: 'bow' },
   魏续: { hat: 'helmet', beard: 'stubble', brow: 0.36 },
   宋宪: { hat: 'helmet', beard: 'mustache', brow: 0.32, horse: '#7a5a3a' },
+  许劭: { hat: 'scholar', robe: true, robeColor: '#8a9a7a', beard: 'long', hairColor: '#8a847c', brow: 0.06 },
   田氏: { hat: 'cap', hatColor: '#5a3a2a', robe: true, robeColor: '#8a6a3a', beard: 'goatee', brow: 0.12, weapon: 'none' },
 };
