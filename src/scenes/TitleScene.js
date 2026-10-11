@@ -11,6 +11,9 @@ import { planDeploy } from '../deploy.js';
 import { DEMO_SCENES } from '../story/demo.js';
 import { engine } from '../audio/engine.js';
 import { playMusic } from '../audio/music.js';
+import { readLegacy, ENDING_ROUTES, ENDING_INFO, TREASURES } from '../legacy.js';
+import { EQUIP, SLOT_NAME, gearDesc } from '../equipment.js';
+import { ensureTextures, gearIcon } from '../spellFx.js';
 
 // 调试入口只在页面加载后第一次进入标题时生效（返回标题后正常显示）
 let debugEntered = false;
@@ -89,6 +92,7 @@ export class TitleScene extends Phaser.Scene {
     title.setShadow(4, 4, '#000', 8, true, true);
     this.tweens.add({ targets: title, scale: { from: 0.96, to: 1.02 }, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.easeInOut' });
     text(this, WIDTH / 2, 310, '— Phaser 4 战棋复刻版 —', 20, '#f1e3c2', FONT).setOrigin(0.5);
+    this.drawBirds();
     if (started || engine.unlocked) this.showMenu();
     else this.pressStart();
   }
@@ -112,7 +116,62 @@ export class TitleScene extends Phaser.Scene {
     this.events.once('shutdown', () => { this.input.off('pointerdown', go); this.input.keyboard?.off('keydown', go); });
   }
 
+  // 结局标记（原版标题下的鸟）：红 = 奸雄、黄 = 中间路线、蓝 = 忠臣；未达成为暗色剪影
+  drawBirds() {
+    const lg = readLegacy();
+    ENDING_ROUTES.forEach((r, i) => {
+      const got = !!lg.endings[r];
+      const g = this.add.graphics().setPosition(WIDTH / 2 + (i - 1) * 64, 346);
+      const col = got ? ENDING_INFO[r].color : 0x2a1a10, a = got ? 1 : 0.45;
+      g.fillStyle(col, a);
+      // 双翼上扬，身体、头、尾
+      g.fillTriangle(-3, 0, -24, -13, -13, 3);
+      g.fillTriangle(-12, -6, -26, -9, -20, -2);
+      g.fillTriangle(3, 0, 24, -13, 13, 3);
+      g.fillTriangle(12, -6, 26, -9, 20, -2);
+      g.fillEllipse(0, 2, 10, 15);
+      g.fillCircle(0, -6, 4);
+      g.fillTriangle(-5, 7, 5, 7, 0, 15);
+      if (got) {
+        g.lineStyle(1, 0xfff2c0, 0.7).strokeEllipse(0, 2, 10, 15);
+        this.tweens.add({ targets: g, y: 340, yoyo: true, repeat: -1, duration: 1400 + i * 200, ease: 'Sine.easeInOut' });
+      }
+    });
+  }
+
+  // 宝物图鉴：曾经得到过的宝物（永久记录，不随存档），未收集的显示剪影
+  openCodex() {
+    ensureTextures(this);
+    const lg = readLegacy();
+    const root = this.add.container(0, 0).setDepth(3000);
+    const shade = this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.65).setOrigin(0).setInteractive();
+    shade.on('pointerdown', (p, x, y, e) => e?.stopPropagation?.());
+    const w = 940, h = 620, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
+    root.add([shade, panel(this, x0, y0, w, h, 0.98)]);
+    root.add(text(this, WIDTH / 2, y0 + 32, '宝 物 图 鉴', 28, '#ffd36a', FONT).setOrigin(0.5));
+    const got = TREASURES.filter((id) => lg.codex.includes(id)).length;
+    root.add(text(this, x0 + 30, y0 + 64, `已收集　${got} / ${TREASURES.length}`, 18, got === TREASURES.length ? '#ffd36a' : '#f1e3c2'));
+    root.add(text(this, x0 + w - 30, y0 + 64, ENDING_ROUTES.map((r) => `${ENDING_INFO[r].name}${lg.endings[r] ? '　已达成' : '　未达成'}`).join('　｜　'), 16, '#bfae88').setOrigin(1, 0));
+    const info = text(this, WIDTH / 2, y0 + 524, '将鼠标移到宝物上查看说明', 16, '#bfae88').setOrigin(0.5, 0).setAlign('center').setWordWrapWidth(w - 60);
+    root.add(info);
+    const cw = 88, ch = 86, gx = x0 + (w - cw * 10) / 2, gy = y0 + 94;
+    TREASURES.forEach((id, i) => {
+      const e = EQUIP[id], known = lg.codex.includes(id);
+      const cx = gx + (i % 10) * cw, cy = gy + Math.floor(i / 10) * ch;
+      const icon = this.add.image(cx + cw / 2, cy + 28, gearIcon(id)).setScale(48 / 72);
+      if (!known) icon.setTint(0x000000).setAlpha(0.5);
+      const name = text(this, cx + cw / 2, cy + 58, known ? e.name : '？？？', 13, known ? '#f1e3c2' : '#7a6a50').setOrigin(0.5, 0);
+      const zone = this.add.zone(cx, cy, cw, ch).setOrigin(0).setInteractive();
+      zone.on('pointerover', () => info.setText(known ? `${e.name}（${SLOT_NAME[e.slot]}）　Lv9：${gearDesc(id, 9)}` : '尚未取得').setColor(known ? '#f1e3c2' : '#bfae88'));
+      root.add([icon, name, zone]);
+    });
+    const close = () => { this.input.keyboard?.off('keydown-ESC', close); root.destroy(); };
+    root.add(button(this, WIDTH / 2 - 60, y0 + h - 56, 120, 40, '关　闭', close, 18));
+    this.input.keyboard?.on('keydown-ESC', close);
+  }
+
   showMenu() {
+    button(this, WIDTH - 170, 20, 150, 42, '宝物图鉴', () => this.openCodex(), 18);
     button(this, WIDTH / 2 - 110, 380, 220, 52, '新 的 征 程', () => this.chooseDifficulty(), 24);
     button(this, WIDTH / 2 - 110, 446, 220, 52, '读 取 进 度', () => {
       openSaveMenu(this, { mode: 'load', onLoad: (data) => applyLoad(this, data) });
@@ -122,11 +181,12 @@ export class TitleScene extends Phaser.Scene {
       '左键：选择 / 移动 / 指令　右键或 ESC：取消　骑兵克步兵，步兵克弓兵，弓兵克骑兵', 16, '#e8d6ae').setOrigin(0.5);
   }
 
-  // 新游戏：重置全部战役状态后进入 stage（先播开场场景；skipStory 为调试用，直接进入整备）
+  // 新游戏：重置全部战役状态后进入 stage（先播开场场景；skipStory 为调试用，直接进入整备）；等级、装备、金钱不跨周目继承
   newGame(id, stage, skipStory = false) {
     this.resetCampaign(id);
     if (skipStory) this.scene.start('Battle', { stage, skipStory: true });
-    else goStage(this, stage);
+    // 第一关开场：已达成结局或图鉴集满时，许劭给出二周目选项（legacy.js）
+    else goStage(this, stage, { ngplus: stage === FIRST_STAGE });
   }
 
   resetCampaign(id) {

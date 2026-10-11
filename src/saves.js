@@ -1,6 +1,7 @@
 // 存档：100 个手动存档位 + 1 个自动存档（每章胜利后写入）
 // 存档类型 kind：'stage' 关卡开头（营门出征时的自动存档，可带 deploy 营中选好的阵容）/ 'battle' 战斗中 / 'camp' 营中（stage 为下一关 id，另记 talked 已对话人物、deploy 营中选好的阵容、pos 曹操位置）
 import { isGeneral } from './generals.js';
+import { readLegacy, writeLegacy, mergeLegacy, normalizeLegacy, recordTreasures } from './legacy.js';
 
 const SLOT_KEY = 'sanguo-slots';
 const AUTO_KEY = 'sanguo-save';
@@ -69,6 +70,8 @@ export function restoreRegistry(scene, data) {
   // 旧存档没有装备与金钱：背包为空，进入战斗时按原版规则补发初始装备
   scene.registry.set('inventory', Array.isArray(data.inventory) ? data.inventory : []);
   scene.registry.set('gold', data.gold ?? 0);
+  // 存档里持有的宝物补登图鉴（有图鉴之前的存档）
+  if (Array.isArray(data.inventory)) recordTreasures(data.inventory.map((it) => it?.id));
 }
 
 // 读取存档：写入全局状态后进入战场；营中存档（kind: 'camp'）回到营中；
@@ -111,7 +114,7 @@ function download(obj, name) {
 const stamp = () => formatTime(Date.now()).replace(/[-: ]/g, '').replace(/^(\d{8})/, '$1-');
 
 export function exportAll() {
-  download({ app: FILE_TAG, version: 1, type: 'all', exportedAt: Date.now(), auto: readAuto(), slots: listSlots() }, `曹操传-全部存档-${stamp()}.json`);
+  download({ app: FILE_TAG, version: 1, type: 'all', exportedAt: Date.now(), auto: readAuto(), slots: listSlots(), legacy: readLegacy() }, `曹操传-全部存档-${stamp()}.json`);
 }
 
 export function exportSlot(i) {
@@ -123,6 +126,9 @@ const validStage = (v) => (typeof v === 'string' && v.length > 0) || (Number.isI
 const validSave = (d) => d && typeof d === 'object' && validStage(d.stage)
   && d.items && typeof d.items === 'object' && (d.joined == null || Array.isArray(d.joined))
   && (d.kind === 'stage' || (d.kind === 'battle' && Array.isArray(d.units)) || (d.kind === 'camp' && (d.talked == null || Array.isArray(d.talked))));
+
+// 本地是否有可导出的结局记录 / 图鉴
+export const hasLegacy = () => { const d = readLegacy(); return !!(Object.keys(d.endings).length || d.codex.length); };
 
 // 解析导入文件，返回导入计划（不写入）；格式错误时抛出中文错误信息
 export function planImport(textContent) {
@@ -140,10 +146,13 @@ export function planImport(textContent) {
     const slots = {};
     obj.slots.slice(0, SLOT_COUNT).forEach((d, i) => { if (validSave(d)) slots[i] = d; });
     const auto = validSave(obj.auto) ? obj.auto : null;
+    // 结局记录与图鉴（旧导出文件没有）：导入时与本地合并
+    const lg = normalizeLegacy(obj.legacy);
+    const legacy = Object.keys(lg.endings).length || lg.codex.length ? lg : null;
     const count = Object.keys(slots).length + (auto ? 1 : 0);
-    if (!count) throw new Error('文件中没有可导入的存档');
+    if (!count && !legacy) throw new Error('文件中没有可导入的存档');
     const overwrite = Object.keys(slots).filter((i) => local[i]).length + (auto && readAuto() ? 1 : 0);
-    return { slots, auto, overwrite, count };
+    return { slots, auto, legacy, overwrite, count };
   }
   throw new Error('无法识别的存档格式');
 }
@@ -153,6 +162,7 @@ export function applyImport(plan) {
   for (const [i, d] of Object.entries(plan.slots)) arr[i] = d;
   localStorage.setItem(SLOT_KEY, JSON.stringify(arr));
   if (plan.auto) localStorage.setItem(AUTO_KEY, JSON.stringify(plan.auto));
+  if (plan.legacy) writeLegacy(mergeLegacy(readLegacy(), plan.legacy));
 }
 
 // 打开系统文件选择框，读取文本

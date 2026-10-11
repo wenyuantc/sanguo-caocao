@@ -4,7 +4,7 @@ import { getStage } from './stages.js';
 import { diffOf } from './data.js';
 import { panel, text, button } from './ui.js';
 import {
-  listSlots, writeSlot, deleteSlot, readAuto, formatTime, SLOT_COUNT, exportAll, exportSlot, planImport, applyImport, pickFile,
+  listSlots, writeSlot, deleteSlot, readAuto, formatTime, SLOT_COUNT, exportAll, exportSlot, planImport, applyImport, pickFile, hasLegacy,
 } from './saves.js';
 
 function describe(data) {
@@ -61,11 +61,12 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
 
   // 导入 / 导出
   const say = (msg, color = '#9ce0a8') => toast.setColor(color).setText(msg);
+  const done = (plan) => (plan.count ? `已导入 ${plan.count} 个存档` : '') + (plan.legacy ? `${plan.count ? '，' : '已'}合并结局记录与宝物图鉴` : '');
   let pending = null;
   const importBtn = button(scene, x0 + 24, y0 + 14, 92, 32, '导　入', async () => {
     if (pending) {
       applyImport(pending);
-      say(`已导入 ${pending.count} 个存档`);
+      say(done(pending));
       pending = null;
       importBtn.label.setText('导　入');
       scene.time.delayedCall(0, render);
@@ -83,14 +84,14 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
       }
       applyImport(plan);
       if (plan.target != null) page = Math.floor(plan.target / PER_PAGE);
-      say(plan.target != null ? `已导入到存档 ${String(plan.target + 1).padStart(3, '0')}` : `已导入 ${plan.count} 个存档`);
+      say(plan.target != null ? `已导入到存档 ${String(plan.target + 1).padStart(3, '0')}` : done(plan));
       scene.time.delayedCall(0, render);
     } catch (e) {
       say(e.message, '#ff8a7a');
     }
   }, 15);
   const exportBtn = button(scene, x0 + 124, y0 + 14, 92, 32, '导出全部', () => {
-    if (!readAuto() && !listSlots().some(Boolean)) { say('暂无可导出的存档', '#ff8a7a'); return; }
+    if (!readAuto() && !listSlots().some(Boolean) && !hasLegacy()) { say('暂无可导出的存档', '#ff8a7a'); return; }
     exportAll();
     say('已导出全部存档');
   }, 15);

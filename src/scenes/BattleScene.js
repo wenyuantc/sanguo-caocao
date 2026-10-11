@@ -1,6 +1,6 @@
 import * as Phaser from 'phaser';
 import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, hiDpi } from '../config.js';
-import { getStage, resolveNext, FIRST_STAGE, PLANNED_IDS } from '../stages.js';
+import { getStage, resolveNext, routeOf, FIRST_STAGE, PLANNED_IDS } from '../stages.js';
 import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf, passable } from '../data.js';
 import {
   createUnit, restoreUnit, promoteBlock, reachable, pathTo, key, inMap, isFoe, attackTiles, spellTiles, terrainAt,
@@ -33,6 +33,7 @@ import {
   SLOTS, DROPS, issueKit, kitFrom, copyKit, newGear, pickGear, stageRewards, goldFor, gearName,
 } from '../equipment.js';
 import { sfx } from '../audio/sfx.js';
+import { recordTreasures } from '../legacy.js';
 import { playMusic, battleMusic, isCrisis } from '../audio/music.js';
 
 export class BattleScene extends Phaser.Scene {
@@ -252,6 +253,7 @@ export class BattleScene extends Phaser.Scene {
       const n = this.inventory.length;
       const lv = Math.max(lvl || 1, roster[id]?.lvl || 0);
       roster[id] = { ...roster[id], equip: issueKit(this.inventory, id, GENERALS[id].cls, lv) };
+      recordTreasures(this.inventory.slice(n).map((it) => it.id));
       this.registry.set('roster', { ...roster });
       this.registry.set('inventory', [...(this.registry.get('inventory') || []), ...this.inventory.slice(n).map((it) => ({ ...it }))]);
     }
@@ -459,6 +461,7 @@ export class BattleScene extends Phaser.Scene {
     if (!id) return;
     const it = newGear(this.inventory, id, this.lordLvl());
     this.gained.push(it);
+    recordTreasures([it.id]);
     this.hud.log(`★ 获得宝物「${gearName(it)}」`);
     await lootFx(this, u.x, u.y, it.id, `获得「${gearName(it)}」`);
   }
@@ -721,6 +724,12 @@ export class BattleScene extends Phaser.Scene {
     await playPost(this, { outcome, annihilated });
     this.red = this.registry.get('red') ?? this.red;
     this.flags = { ...(this.registry.get('flags') || this.flags) };
+    // 分路关卡（马超迎击战）：中间路线剧情走奸雄线，记标记 route_middle，终关胜利后显示中间路线结局
+    if (this.stage.next?.route) {
+      if (routeOf(this.red) === 'middle') this.flags.route_middle = true;
+      else delete this.flags.route_middle;
+      this.registry.set('flags', { ...this.flags });
+    }
     this.hud.setRed(this.red);
     // 成长记录与装备 / 果子引用合并保存；战斗中的装备熟练度按 uid 写回背包
     const roster = this.registry.get('roster') || {};
@@ -746,6 +755,8 @@ export class BattleScene extends Phaser.Scene {
       const id = r.item && pickGear(this.inventory, r.item);
       if (id) gear.push(newGear(this.inventory, id, lordLvl));
     }
+    // 击破掉落已在 dropLoot 登记，这里只登记关卡奖励
+    recordTreasures(gear.slice(this.gained.length).map((it) => it.id));
     this.gold += gold;
     this.registry.set('inventory', this.inventory.map((it) => ({ ...it })));
     this.registry.set('gold', this.gold);
