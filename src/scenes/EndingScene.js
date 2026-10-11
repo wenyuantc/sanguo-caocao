@@ -2,6 +2,7 @@ import * as Phaser from 'phaser';
 import { WIDTH, HEIGHT, FONT, hiDpi } from '../config.js';
 import { button, text } from '../ui.js';
 import { clearAuto } from '../saves.js';
+import { playMusic } from '../audio/music.js';
 
 // 两种结局：忠臣线（魔王复活）/ 奸雄线（天下统一）
 const ENDING_TEXT = {
@@ -36,6 +37,7 @@ export class EndingScene extends Phaser.Scene {
 
   create() {
     hiDpi(this);
+    playMusic('ending', { fadeIn: 1.5, fadeOut: 2 });
     this.add.rectangle(0, 0, WIDTH, HEIGHT, 0x120a06).setOrigin(0);
     const lines = ENDING_TEXT[this.route] || ENDING_TEXT.villain;
     const t = text(this, WIDTH / 2, HEIGHT + 20, lines.join('\n'), 30, '#f1e3c2', FONT).setOrigin(0.5, 0).setAlign('center').setLineSpacing(16);

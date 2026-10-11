@@ -8,12 +8,16 @@ import { CampScene } from './scenes/CampScene.js';
 import { initAudio } from './audio/engine.js';
 import { audition } from './audio/instruments.js';
 import { sfx } from './audio/sfx.js';
+import { playMusic, stopMusic, currentMusic } from './audio/music.js';
 
 // 音频：实时合成，首次点击 / 按键后解锁；音量取自游戏设置
 initAudio(SETTINGS);
 // 调试：__audioTest('zheng') 试听音色（不传参依次试听全部），__sfxTest('attack', { weapon: 'spear' }) 触发音效
 window.__audioTest = audition;
 window.__sfxTest = sfx;
+// 调试：__musicTest('battle1') 播放场合 / 曲目（不传参时停止），__musicNow() 当前曲目 id
+window.__musicTest = (name) => (name ? playMusic(name) : stopMusic());
+window.__musicNow = currentMusic;
 
 window.game = new Phaser.Game({
   type: Phaser.AUTO,

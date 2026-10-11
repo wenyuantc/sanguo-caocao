@@ -7,6 +7,7 @@ import { sceneFor } from '../story/auto.js';
 import { isoToScreen } from '../story/defs.js';
 import { DEMO_SCENES } from '../story/demo.js';
 import { afterPre } from '../story/flow.js';
+import { playMusic } from '../audio/music.js';
 
 // 剧情场景：执行场景脚本（手写 scenes 或由 prologue / epilogue 自动生成），结束后按 flow.js 跳转。
 // data：{ stage, part: 'pre' | 'post' | 'preview', outcome?, annihilated?, onDone?（叠加在战场上播放时的回调）, script?, demo?, notice?, deploy?（营中选好的出阵武将，转交战场） }
@@ -24,6 +25,7 @@ export class StoryScene extends Phaser.Scene {
     this.boostUntil = 0;
     this.wasDown = false;
     this.lastAdv = 0;
+    this.bgCount = 0;
   }
 
   create() {
@@ -57,6 +59,20 @@ export class StoryScene extends Phaser.Scene {
     this.runner.run(script)
       .catch((e) => console.error('剧情演出出错', e))
       .finally(() => this.finish());
+  }
+
+  // 配乐随背景切换：中国地图为剧情曲；开场（军议）其余背景为军议曲；结尾的主营为军营曲、其余为剧情曲
+  musicFor(bg) {
+    const o = this.opts;
+    if (bg === 'china' || o.demo) return 'story';
+    if (o.part === 'post') return bg === 'tent' || bg === 'camp' ? 'camp' : 'story';
+    return 'council';
+  }
+
+  // runner 换背景时调用。叠加在战场上的结尾场景：第一张背景沿用胜利曲，之后再按背景切换
+  onBg(bg) {
+    if (this.bgCount++ === 0 && this.opts.part === 'post' && this.opts.onDone) return;
+    playMusic(this.musicFor(bg));
   }
 
   iso(a, b) {

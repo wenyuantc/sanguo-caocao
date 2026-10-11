@@ -33,6 +33,7 @@ import {
   SLOTS, DROPS, issueKit, kitFrom, copyKit, newGear, pickGear, stageRewards, goldFor, gearName,
 } from '../equipment.js';
 import { sfx } from '../audio/sfx.js';
+import { playMusic, battleMusic, isCrisis } from '../audio/music.js';
 
 export class BattleScene extends Phaser.Scene {
   constructor() { super('Battle'); }
@@ -52,6 +53,9 @@ export class BattleScene extends Phaser.Scene {
     this.redirecting = false;
     // 营中整备选好的出阵武将（经开场场景带入）：作为整备界面的初始阵容
     this.campDeploy = Array.isArray(data?.deploy) ? data.deploy : null;
+    // 配乐：危急判定结果；单挑期间不按战况换曲
+    this.crisis = false;
+    this.inDuel = false;
   }
 
   // 地图版本不一致时，把 registry 恢复为本关开头的战役状态（道具、红色指数、剧情标记、成长、装备、金钱）：
@@ -203,10 +207,19 @@ export class BattleScene extends Phaser.Scene {
 
   async start() {
     if (this.load) return this.resume();
-    // 开场对白已在开场场景（StoryScene）中演出
+    // 开场对白已在开场场景（StoryScene）中演出；整备时播放军议曲，开战后换本关战斗曲
+    playMusic('council');
     await this.startPrep();
+    this.updateMusic();
     await this.hud.banner(`${this.stage.chapter}　${this.stage.name}`);
     await this.startPhase('player');
+  }
+
+  // 战斗配乐：本关战斗曲，危急时换危急曲（我军 / 友军 / 敌军阶段不换曲）；战斗结束后、单挑期间不处理
+  updateMusic() {
+    if (this.over || this.inDuel || !this.units) return;
+    this.crisis = isCrisis({ stage: this.stage, units: this.units, turn: this.turn }, this.crisis);
+    playMusic(this.crisis ? 'crisis' : battleMusic(this.stageId));
   }
 
   // 当前天气（0 晴 / 1 阴 / 2 雨 / 3 豪雨 / 4 雪）
@@ -299,6 +312,7 @@ export class BattleScene extends Phaser.Scene {
     this.hud.setTurn(this.turn, this.stage.turns, 'player');
     this.units.forEach((u) => u.alive && u.faction === 'player' && this.views.get(u).setActed(u.acted));
     this.hud.log('已读取进度');
+    this.updateMusic();
     await this.hud.banner(`${this.stage.title}　第${this.turn}回合`);
     this.state = 'idle';
   }
@@ -385,6 +399,7 @@ export class BattleScene extends Phaser.Scene {
     this.phase = faction;
     this.state = 'busy';
     this.hud.setTurn(this.turn, this.stage.turns, faction);
+    this.updateMusic();
     // 第 2 回合起，每到我军阶段开始天气随机变化一次（research weather.md §3）
     if (faction === 'player' && this.turn > 1) await this.changeWeather(stepWeather(this.weatherIdx));
     const mine = this.units.filter((u) => u.alive && u.faction === faction);
@@ -605,7 +620,15 @@ export class BattleScene extends Phaser.Scene {
     this.firedEvents.add(i);
     const a = this.units.find((u) => u.id === ev.duel.a);
     const b = this.units.find((u) => u.id === ev.duel.b);
-    await playDuel(this, a, b, ev);
+    this.inDuel = true;
+    playMusic('duel', { maxWait: 0.4 });
+    try {
+      await playDuel(this, a, b, ev);
+    } finally {
+      // 单挑结束：恢复战斗曲（或危急曲）
+      this.inDuel = false;
+      this.updateMusic();
+    }
   }
 
   applyChoice(c) {
@@ -675,6 +698,7 @@ export class BattleScene extends Phaser.Scene {
       if (ok) { await this.victory(c.outcome, c.type); return true; }
     }
     if (!enemiesLeft) { await this.victory('win', 'all'); return true; }
+    this.updateMusic();
     return false;
   }
 
@@ -683,6 +707,7 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'busy';
     this.clearSelection();
     const annihilated = !this.units.some((u) => u.alive && u.faction === 'enemy');
+    playMusic('victory', { maxWait: 0.5 });
     await this.hud.banner(outcome === 'retreat' ? '撤　退' : '胜　利', '#ffe08a');
     // 胜利时按单位存亡设置剧情标记（例如郭嘉未撤退则战后病逝），先于结尾对白，便于对白按标记分支
     for (const r of this.stage.victoryFlags || []) {
@@ -750,6 +775,7 @@ export class BattleScene extends Phaser.Scene {
     if (seal) supplies.seal = (supplies.seal || 0) + 1;
     supplies[loot] = (supplies[loot] || 0) + 1;
     this.modal = true;
+    playMusic('victory');
     await openRewards(this, { gold, gear, items: supplies });
     goNext(this, next);
   }
@@ -759,6 +785,7 @@ export class BattleScene extends Phaser.Scene {
     this.state = 'busy';
     this.clearSelection();
     this.hud.log(reason);
+    playMusic('defeat', { maxWait: 0.5 });
     await this.hud.banner('败　北', '#ff8a7a');
     const cx = VIEW_W / 2, cy = MAP_Y + 300;
     this.add.rectangle(0, 0, 2000, 2000, 0x000000, 0.55).setOrigin(0).setDepth(900).setInteractive();

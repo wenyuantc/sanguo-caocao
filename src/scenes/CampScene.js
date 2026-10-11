@@ -16,6 +16,7 @@ import { openPrep } from '../prep.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { applyLoad, writeAuto } from '../saves.js';
 import { goStage } from '../story/flow.js';
+import { playMusic } from '../audio/music.js';
 
 // 营中（两关之间）：曹操在军营 / 城镇里自由走动，与部下、百姓对话，整备、购物、存档，从营门出征。
 // data：{ stage: 下一关 id, talked?: 已对话（本关专属台词已播放）的人物名, deploy?: 已选好的出阵阵容, pos?: 曹操位置 }
@@ -54,6 +55,7 @@ export class CampScene extends Phaser.Scene {
     hiDpi(this);
     const stage = (this.stage = getStage(this.stageId));
     if (!stage) { this.scene.start('Title'); return; }
+    playMusic('camp');
     const L = (this.layout = campLayoutOf(stage));
     this.grid = layoutGrid(L);
     this.reserved = reservedCells(L);

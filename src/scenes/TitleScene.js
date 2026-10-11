@@ -10,6 +10,7 @@ import { goStage, goCamp } from '../story/flow.js';
 import { planDeploy } from '../deploy.js';
 import { DEMO_SCENES } from '../story/demo.js';
 import { engine } from '../audio/engine.js';
+import { playMusic } from '../audio/music.js';
 
 // 调试入口只在页面加载后第一次进入标题时生效（返回标题后正常显示）
 let debugEntered = false;
@@ -55,6 +56,8 @@ export class TitleScene extends Phaser.Scene {
         return;
       }
     }
+    // 标题曲：音频未解锁时先登记，首次点击解锁后自动开始（渐入）
+    playMusic('title', { fadeIn: 1.5 });
     const g = this.add.graphics();
     // 背景：暮色渐变 + 远山
     for (let i = 0; i < 40; i++) {
