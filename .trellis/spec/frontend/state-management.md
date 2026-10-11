@@ -63,11 +63,16 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
 | `sanguo-slots` | 100 个手动存档位的数组（`SLOT_COUNT`），`null` 表示空 |
 | `sanguo-save` | 单个自动存档，每关胜利后由 `victory()` 写入，`kind: 'stage'` |
 
+- 存档类型 `kind`：`'stage'`（关卡开头，自动存档；读取后先播开场场景，不经过营中）、`'battle'`（战斗中）、`'camp'`（营中，见下）。
+
 - 战斗中存档来自 `BattleScene.snapshot()`（`kind: 'battle'`）：关卡、`mapVersion`、回合、道具、红色指数、标记、roster、
   `joined`、`firedEvents`、`weatherIdx`、`mapPatches`、`start`（本关开头的 `red` / `flags`，重新挑战时恢复，旧存档缺失时取存档值）、`inventory`、`gold`，以及**去掉 `stats` 的** `units`（单位自带 `tier`，`status` / `buffs` / `equip` / `fruits` 复制一份写入）；读档时用 `restoreUnit` 重新计算属性
   （旧存档单位缺 `tier` 时我军视为一阶、其他按难度门槛定阶，兵种按武将总表 / 登记表覆盖）。
   不要持久化派生数据或 Phaser 对象。
 - 只有在我军阶段、`state` 为 `'idle'`/`'move'` 时才允许存档（`openSave`）。
+- 营中存档来自 `CampScene.snapshot()`（`kind: 'camp'`）：`stage` 为**下一关** id，`talked`（已播放本关专属台词的人物名）、`deploy`（营中整备选好的阵容，可为 `null`）、`pos`（曹操所在格），以及与自动存档相同的战役状态（`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`、`summary.lordLvl`）。营中任意时刻（没有对白 / 弹窗时）都能存档。
+  `applyLoad` 遇到 `camp` 时写入 registry 后 `scene.start('Camp', { stage, talked, deploy, pos })`；`validSave` 接受 `camp`（`talked` 缺失或为数组）；存档列表显示“营中 · 下一战：<关名>”。`pos` 不可走时回到出生点。
+- 营中没有战斗状态：`CampScene` 只复制 `inventory` / `gold` / `items` 给整备界面（`openPrep` 直接读写 `scene.inventory` 等并立即写回 registry），对白选项（`applyChoice`）直接写 registry 的 `red` / `flags`。营中选好的阵容经 `goStage(scene, id, { deploy })` → `StoryScene` → `afterPre` 带进 `BattleScene`（`campDeploy`），由 `deploy.initialDeploy` 过滤后作为整备的初始阵容；读档、重新挑战不带阵容。
 - `EndingScene` 会调用 `clearAuto()`。
 - 导出/导入的文件格式为 `{ app: 'sanguo-caocao-save', version: 1, type: 'all' | 'single', ... }`；
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。

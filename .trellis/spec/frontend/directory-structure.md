@@ -45,22 +45,31 @@ src/
 ├── portraits.js        # Canvas 2D 头像（portraitTexture）
 ├── attackFx.js / spellFx.js / duel.js  # 攻击、策略/道具（含四神）、单挑过场动画
 ├── weatherFx.js        # class WeatherFx：天气粒子（≤ 200）/ 阴天遮罩 / 切换动画；顶部栏天气图标 drawWeatherIcon
+├── camp/               # 营中（两关之间自由走动）：纯数据 + 纯函数，Node 可导入（props.js 除外）
+│   ├── layouts.js      # 布局 LAYOUTS（军营 / 城镇 / 府邸 / 野营 / 水寨）、CAMP_OF 关卡 → 布局、通用角色外形 FOLK、layoutGrid / checkLayout
+│   ├── talks.js        # 汇总 talks_a..f.js（本关专属台词，键为下一关 id）与 generic.js（通用台词），pickTalk 选台词
+│   ├── talks_<组>.js / generic.js  # 台词数据（格式见 docs/STAGE_GUIDE.md §13）
+│   └── props.js        # 营门、营帐、篝火、货摊等物件的 Graphics 绘制
 ├── story/              # 剧情场景（关与关之间的演出）
 │   ├── defs.js         # 纯数据 + 纯函数：等角坐标、背景表、中国地图视野 / 城市、各关地点、动作 / 表情、指令表、checkScript（Node 可导入）
 │   ├── auto.js         # sceneFor / autoScene：手写 scenes 优先，否则由 prologue / epilogue(s) 生成脚本（纯函数，校验脚本逐关检查）
 │   ├── backgrounds.js  # Canvas 2D 程序化背景（外场景 / 内场景 / 中国地图），烘焙为 sbg-* 贴图
 │   ├── actors.js       # StoryActor：剧情小人（drawHuman 的姿态参数 S）、表情气泡，贴图 st-*
 │   ├── runner.js       # StoryRunner 指令解释器、StoryDialog；中国地图头像 / 箭头 / 文字的避让布局
-│   ├── flow.js         # 关卡之间的跳转：goStage / afterPre / goNext / playPost
+│   ├── flow.js         # 关卡之间的跳转：goStage / afterPre / goCamp / goNext（胜利后进营中）/ playPost
+│   ├── path.js         # 等角网格 A* 寻路 findPath（八方向、不切拐角、目标被占时走到旁边；纯函数，Node 可导入）
 │   └── demo.js         # 演示脚本（?scene=demo / gallery / poses）
 └── scenes/
     ├── TitleScene.js   # key 'Title'
     ├── BattleScene.js  # key 'Battle'：回合循环、输入、事件、胜负
     ├── StoryScene.js   # key 'Story'：执行剧情场景脚本，开场 / 结尾 / 预览；跳过与加速
+    ├── CampScene.js    # key 'Camp'：营中行走（点击寻路 / 方向键）、对话、整备 / 商店、存档、营门出征
     └── EndingScene.js  # key 'Ending'
 scripts/validate-stages.mjs  # 关卡数据的 Node 校验脚本（直接导入 src/ 模块）
 scripts/mapgen/              # 关卡地图重做工具：画图库、预览、写回、行军分析、与 HEAD 结构比较（用法见 STAGE_GUIDE §4）
 scripts/ai-battle.mjs        # 浏览器 AI 完整对战（planAI 驱动双方），难度复核与回合上限依据
+scripts/test-path.mjs        # 营中寻路与布局连通性测试（Node）
+scripts/camp-smoke.mjs       # 浏览器营中回归（逐关进营中、对话、整备、出征）
 docs/STAGE_GUIDE.md          # 关卡编写的权威规范
 GQ.md                        # 与 1998 原版对照的关卡清单
 ```
