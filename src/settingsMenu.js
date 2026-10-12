@@ -63,16 +63,33 @@ function audioRows(scene, root, x0, y, step) {
   chips.forEach((o, i) => o.setOn(SETTING_OPTIONS.mute[i][0] === SETTINGS.mute));
 }
 
+// 游戏速度一行：7 档，即时写入 SETTINGS 并保存（战斗场景在关闭面板时应用倍率）
+function speedRow(scene, root, x0, y) {
+  root.add(text(scene, x0 + 40, y + 19, '游戏速度', 20, '#e9c46a', FONT).setOrigin(0, 0.5));
+  const opts = SETTING_OPTIONS.speed;
+  const sync = () => chips.forEach((o, i) => o.setOn(opts[i][0] === SETTINGS.speed));
+  const chips = opts.map(([v, name], j) => {
+    const c = chip(scene, x0 + 190 + j * 66, y, 60, 38, name, () => {
+      SETTINGS.speed = v;
+      try { saveSettings({ ...SETTINGS }); } catch { /* localStorage 不可用时只在本次生效 */ }
+      sync();
+    });
+    root.add(c);
+    return c;
+  });
+  sync();
+}
+
 // 游戏设置：渲染类改动先记在草稿里，保存后重载页面生效（全屏立即生效）；音量类改动即时生效并保存。
-// audioOnly：战斗中打开，只显示音量相关的行。onClose 在关闭后调用
+// audioOnly：战斗中打开，只显示游戏速度与音量相关的行。onClose 在关闭后调用
 export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
   const draft = { ...SETTINGS };
   const root = scene.add.container(0, 0).setDepth(3000);
   const shade = scene.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.65).setOrigin(0).setInteractive();
   shade.on('pointerdown', (p, x, y, e) => e?.stopPropagation?.());
-  const w = 680, h = audioOnly ? 350 : 610, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
+  const w = 680, h = audioOnly ? 400 : 660, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
   root.add([shade, panel(scene, x0, y0, w, h, 0.98)]);
-  root.add(text(scene, WIDTH / 2, y0 + 36, audioOnly ? '音 量 设 置' : '游 戏 设 置', 30, '#ffd36a', FONT).setOrigin(0.5));
+  root.add(text(scene, WIDTH / 2, y0 + 36, audioOnly ? '战 斗 设 置' : '游 戏 设 置', 30, '#ffd36a', FONT).setOrigin(0.5));
   const hint = text(scene, WIDTH / 2, y0 + h - 104, '', 15, '#e8d6ae').setOrigin(0.5).setAlign('center').setLineSpacing(6);
   root.add(hint);
 
@@ -88,8 +105,9 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
   };
 
   if (audioOnly) {
-    audioRows(scene, root, x0, y0 + 80, 52);
-    hint.setText('音量调整即时生效');
+    speedRow(scene, root, x0, y0 + 80);
+    audioRows(scene, root, x0, y0 + 132, 52);
+    hint.setText('游戏速度与音量调整即时生效');
     root.add(button(scene, WIDTH / 2 - 90, y0 + h - 62, 180, 42, '返　回', close, 18));
     scene.input.keyboard?.on('keydown-ESC', close);
     return;
@@ -101,7 +119,7 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
     chips.forEach(({ c, k, v }) => c.setOn(draft[k] === v));
     const r = resolveRes(draft);
     hint.setText(`当前画布 ${WIDTH * RES}×${HEIGHT * RES}　→　保存后 ${WIDTH * r}×${HEIGHT * r}\n`
-      + (renderChanged() ? '画面设置已修改，保存后将重新加载页面' : '卡顿时可降低分辨率或将画质设为“低”；音量调整即时生效'));
+      + (renderChanged() ? '画面设置已修改，保存后将重新加载页面' : '卡顿时可降低分辨率或将画质设为“低”；游戏速度（仅战斗）与音量即时生效'));
   };
   ROWS.forEach(([k, label], i) => {
     const y = y0 + 76 + i * 50;
@@ -121,14 +139,15 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
   scene.scale.on('leavefullscreen', fsLabel);
   fsLabel();
   root.add(fsBtn);
-  // 音量：与画面设置之间加一条分隔线
+  // 游戏速度与音量：与画面设置之间加一条分隔线
   const ay = fy + 60;
   const line = scene.add.graphics();
   line.lineStyle(1, COLORS.gold, 0.35).lineBetween(x0 + 30, ay - 11, x0 + w - 30, ay - 11);
   root.add(line);
-  audioRows(scene, root, x0, ay, 50);
+  speedRow(scene, root, x0, ay);
+  audioRows(scene, root, x0, ay + 50, 50);
 
-  // 只有渲染类设置改动时才保存并重载；音量已即时保存
+  // 只有渲染类设置改动时才保存并重载；音量、游戏速度已即时保存
   const apply = () => {
     if (!renderChanged()) return close();
     const next = { ...SETTINGS };

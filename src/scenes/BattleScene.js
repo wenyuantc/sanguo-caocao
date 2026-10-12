@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, PANEL_X, WIDTH, HEIGHT, IS_TOUCH, hiDpi } from '../config.js';
+import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, PANEL_X, WIDTH, HEIGHT, IS_TOUCH, SETTINGS, hiDpi } from '../config.js';
 import { getStage, resolveNext, routeOf, FIRST_STAGE, PLANNED_IDS } from '../stages.js';
 import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf, passable } from '../data.js';
 import {
@@ -90,6 +90,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     hiDpi(this);
+    this.applySpeed();
     this.purgeTextures();
     const stage = (this.stage = getStage(this.stageId) || getStage(FIRST_STAGE));
     this.stageId = stage.id;
@@ -381,12 +382,17 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  // 音量设置（只显示音量相关的行）：弹窗期间不响应地图输入
+  // 游戏速度：战斗内全部补间与计时器按设置倍率播放
+  applySpeed() {
+    this.tweens.timeScale = this.time.timeScale = SETTINGS.speed;
+  }
+
+  // 战斗设置（只显示游戏速度与音量相关的行）：弹窗期间不响应地图输入
   openSettings() {
     if (this.modal || this.over || this.dialog.root.visible) return;
     this.modal = true;
     // 敌军阶段中打开时战斗可能已结束（战果面板会自行设 modal），关闭时不要覆盖
-    openSettingsMenu(this, { audioOnly: true, onClose: () => { if (!this.over) this.modal = false; } });
+    openSettingsMenu(this, { audioOnly: true, onClose: () => { this.applySpeed(); if (!this.over) this.modal = false; } });
   }
 
   // 指针所在格子：按镜头换算；指针在小地图上时视为不在地图上
