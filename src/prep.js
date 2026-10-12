@@ -13,6 +13,8 @@ import {
 } from './equipment.js';
 import { ensureTextures, gearIcon } from './spellFx.js';
 import { panel, text, button, portrait } from './ui.js';
+import { cheatOn } from './cheat.js';
+import { openCheatMenu } from './cheatMenu.js';
 
 // 第一页不叫“出阵”：确认按钮“出　阵”按文字查找，不能重名
 const TABS = [['deploy', '阵　容'], ['equip', '装　备'], ['items', '道　具'], ['shop', '商　店'], ['recruit', '招　募']];
@@ -129,6 +131,12 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     onConfirm(plan.pool.filter((c) => selected.has(c.id)).map((c) => c.id));
   }, 20);
   root.add([...tabBtns, prevBtn, nextBtn, resetBtn, okBtn]);
+  // 金手指开启时：军资金左侧放“金手指”按钮，关闭面板后写回战役状态并重绘（金钱、道具、背包）
+  if (cheatOn()) {
+    root.add(button(scene, x0 + w - 270, y0 + 16, 110, 34, '金 手 指', () => {
+      openCheatMenu(scene, { lordLvl: lordLevel(roster(), getStage(plan.stageId)), onClose: () => { save(); refresh(); } });
+    }, 16));
+  }
   scene.input.keyboard?.on('keydown-LEFT', prevKey);
   scene.input.keyboard?.on('keydown-RIGHT', nextKey);
 
