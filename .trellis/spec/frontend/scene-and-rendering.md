@@ -84,7 +84,8 @@
 
 - 点击容差：`mapCamera.js` 的 `DRAG = 6`（鼠标）/ `DRAG_TOUCH = 18`（触摸，手机横屏画面约缩小到 0.54~0.58 倍）。
 - 需要用户激活的按钮（文件选择、下载）传 `button(..., size, { onRelease: true })`：触摸按下只记标记，在按钮上抬起才触发；鼠标仍在按下时触发。不传 `opts` 时行为不变。
-- 全屏在 `main.js` 的一次性 `touchend` 中请求，目标 `#game`（`fullscreenTarget: 'game'`，竖屏遮罩在其内）；进入全屏后用原生 `screen.orientation.lock('landscape')`——Phaser 的 `scale.lockOrientation` 调用已废弃 API，无效。
+- 全屏只由玩家点左下角 DOM 按钮 `#fs-btn` 切换（不自动全屏；仅 `IS_TOUCH` 且 `scale.fullscreen.available` 时显示，iPhone Safari 不显示）。目标 `#game`（`fullscreenTarget: 'game'`，竖屏遮罩和按钮都在其内）；进入全屏后用原生 `screen.orientation.lock('landscape')`——Phaser 的 `scale.lockOrientation` 调用已废弃 API，无效。
+- 画布外的 DOM 控件必须吞掉自己的触摸：Phaser 在 window 上监听画布外的 `touchstart` / `touchend` 并当作游戏点击（营中会走路、标题会开始），只跳过 `defaultPrevented` 的事件。做法是在控件的 `touchstart` 和 `touchend` 里 `preventDefault()` + `stopPropagation()`，动作放在 `touchend` 中执行（之后不会再有 `click`）。
 - 右键 / ESC 的触屏替代：`BattleScene.cancelBtn`（仅 `IS_TOUCH`），move / menu / target 状态显示并隐藏“结束回合”；取消按钮消失后“结束回合”延迟 400ms（`endGuard`）出现，防止连点误结束回合。
 - 执行类点击要二次确认：选目标时触摸第一次点击只预览（`aimAt(t)` 记 `touchAim`，地图层标“再点确认”），再点同一格才执行；进入 / 取消目标状态、清除选择时 `aimAt(null)`。
 - 右侧预测区只容 3 行（y 392~449，450 为分隔线），提示不要往预测区追加行。
