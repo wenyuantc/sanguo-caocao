@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, hiDpi } from '../config.js';
+import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, PANEL_X, WIDTH, HEIGHT, IS_TOUCH, hiDpi } from '../config.js';
 import { getStage, resolveNext, routeOf, FIRST_STAGE, PLANNED_IDS } from '../stages.js';
 import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf, passable } from '../data.js';
 import {
@@ -48,6 +48,10 @@ export class BattleScene extends Phaser.Scene {
     this.sel = null;
     this.menu = null;
     this.hoverKey = null;
+    this.touchAim = null; // 触屏选目标：第一次点击预览的目标格，再点同一格才执行
+    this.aimTag = null;
+    this.cancelBtn = null;
+    this.endGuard = 0; // 取消按钮消失后“结束回合”延迟出现的时刻，防止连点取消误结束回合
     this.mapReset = false;
     // 开场场景（StoryScene）播完后进入时为 true；否则新开一关先转去开场场景（读档、重新挑战除外）
     this.skipStory = !!data?.skipStory;
@@ -180,10 +184,17 @@ export class BattleScene extends Phaser.Scene {
       if (this.dialog.root.visible || this.modal) { this.cam.drag = null; return; }
       this.cam.press(p);
     });
-    const up = (p) => { if (this.cam.release(p)) this.onClick(p); };
+    // 触屏单击不会触发 pointermove：点击前先按悬停刷新光标、信息面板、伤害预测与范围预览
+    const up = (p) => { if (!this.cam.release(p)) return; if (p.wasTouch) this.onHover(p); this.onClick(p); };
     this.input.on('pointerup', up);
     this.input.on('pointerupoutside', () => { this.cam.drag = null; });
     this.input.keyboard?.on('keydown-ESC', () => this.cancel());
+    // 触屏设备：右侧面板底部的“取消”按钮代替右键（与“结束回合”同位置，选中单位期间替换显示，不遮挡地图）
+    if (IS_TOUCH) {
+      this.cancelBtn = button(this, PANEL_X + 20, HEIGHT - 58, WIDTH - PANEL_X - 40, 40, '取　消', () => {
+        if (!this.dialog.root.visible && !this.modal && this.state !== 'busy' && !this.over) this.cancel();
+      }, 20).setDepth(53).setVisible(false);
+    }
     // 开局 / 读档时镜头对准曹操（曹操不在场时对准第一个我军）
     const lead = this.units.find((u) => u.alive && u.id === 'caocao') || this.units.find((u) => u.alive && u.faction === 'player');
     if (lead) this.cam.centerTile(lead.x, lead.y, 0);
@@ -196,9 +207,17 @@ export class BattleScene extends Phaser.Scene {
     if (this.cam.moved) {
       this.cam.moved = false;
       const p = this.input.activePointer;
-      if (this.input.isOver && !this.cam.drag?.moved) this.onHover(p);
+      // 触屏抬起后指针停在原处，不按旧位置刷新
+      if (this.input.isOver && !p.wasTouch && !this.cam.drag?.moved) this.onHover(p);
     }
     this.minimap?.update(this.units);
+    if (this.cancelBtn) {
+      const c = ['move', 'menu', 'target'].includes(this.state) && !this.dialog.root.visible && !this.modal && !this.over;
+      // 两个按钮同位置：取消按钮刚消失时“结束回合”晚 0.4 秒出现，连点取消不会落到结束回合上
+      if (this.cancelBtn.visible && !c) this.endGuard = this.time.now + 400;
+      this.cancelBtn.setVisible(c);
+      this.hud.endBtn.setVisible(!c && this.time.now >= this.endGuard);
+    }
   }
 
   // 镜头跟随：把相关格子（单位或 {x, y}）移入视口，返回 Promise
@@ -844,7 +863,13 @@ export class BattleScene extends Phaser.Scene {
       else this.cancel();
     } else if (this.state === 'target') {
       const inRange = this.sel.targets.some((o) => o.x === t.x && o.y === t.y);
-      if (inRange && u && this.validTarget(u)) this.execute(u);
+      // 触屏：第一次点击只预览（onHover 已显示预测与范围），再点同一格才执行；点了别的格子则重新预览
+      const aimed = this.touchAim === key(t.x, t.y);
+      this.aimAt(null);
+      if (inRange && u && this.validTarget(u)) {
+        if (p.wasTouch && !aimed) { this.aimAt(t); return; }
+        this.execute(u);
+      }
       else if (inRange && u && this.sel.action.kind === 'spell' && isFoe(u, this.sel.unit) && SPELLS[this.sel.action.id].target === 'foe') this.hud.log(spellBlock(this.map, this.sel.action.id, u.x, u.y) || '无法以此为目标');
       else if (inRange && u && this.sel.action.kind === 'item' && ITEMS[this.sel.action.id].promote && !isFoe(u, this.sel.unit)) this.hud.log(promoteBlock(u));
     }
@@ -852,6 +877,7 @@ export class BattleScene extends Phaser.Scene {
 
   cancel() {
     if (this.modal) return;
+    this.aimAt(null);
     if (['move', 'menu', 'target'].includes(this.state)) sfx('cancel');
     if (this.state === 'move' || (this.state === 'idle' && this.hl)) {
       this.clearSelection();
@@ -870,7 +896,19 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  // 触屏选目标：记下第一次点击的目标格，并在格子上方标“再点确认”（地图层，不占右侧预测区）；t 为 null 时清除
+  aimAt(t) {
+    this.touchAim = t ? key(t.x, t.y) : null;
+    this.aimTag?.destroy();
+    this.aimTag = null;
+    if (!t) return;
+    const c = tileCenter(t.x, t.y), top = t.y === 0;
+    this.aimTag = text(this, c.x, c.y + (top ? TILE / 2 : -TILE / 2), '再点确认', 14, '#ffe08a', FONT)
+      .setOrigin(0.5, top ? 0 : 1).setStroke('#000', 4).setDepth(40);
+  }
+
   clearSelection() {
+    this.aimAt(null);
     this.closeMenu();
     this.hl.clear();
     this.aoe.clear();
@@ -980,7 +1018,7 @@ export class BattleScene extends Phaser.Scene {
     if (pages > 1) entries.push([`下一页 ${page + 1}/${pages}`, () => this.spellMenu((page + 1) % pages)]);
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}　天气 ${WEATHERS[this.weather]}　共 ${spells.length} 种策略\n将鼠标移到策略上查看说明`);
+    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}　天气 ${WEATHERS[this.weather]}　共 ${spells.length} 种策略\n${IS_TOUCH ? '选择策略后显示说明' : '将鼠标移到策略上查看说明'}`);
   }
 
   // 道具目标格：自身与上下左右
@@ -1002,7 +1040,7 @@ export class BattleScene extends Phaser.Scene {
     });
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast('将鼠标移到道具上查看说明');
+    this.hud.forecast(IS_TOUCH ? '选择道具后显示说明' : '将鼠标移到道具上查看说明');
   }
 
   startTarget(kind, id) {
@@ -1015,10 +1053,13 @@ export class BattleScene extends Phaser.Scene {
     this.sel.action = { kind, id };
     this.sel.targets = tiles;
     this.state = 'target';
+    this.aimAt(null);
     const healish = kind === 'item' || (kind === 'spell' && SPELLS[id].target !== 'foe');
     this.paint(tiles, healish ? 0x40e080 : 0xff3a2a, 0.22);
     this.paint(tiles.filter((t) => { const o = this.unitAt(t.x, t.y); return o && this.validTarget(o); }), healish ? 0x40e080 : 0xff3a2a, 0.45);
-    this.hud.forecast('请选择目标（右键取消）');
+    // 触屏没有悬停：把策略 / 道具说明放进选目标提示
+    const desc = kind === 'spell' ? `【${SPELLS[id].name}】${SPELLS[id].desc}\n` : kind === 'item' ? `【${ITEMS[id].name}】${ITEMS[id].desc}\n` : '';
+    this.hud.forecast(IS_TOUCH ? `${desc}请选择目标（点目标预览，再点一次确认）` : '请选择目标（右键取消）');
   }
 
   validTarget(o) {

@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, RES, hiDpi } from '../config.js';
+import { WIDTH, HEIGHT, RES, IS_TOUCH, hiDpi } from '../config.js';
 import { button, text } from '../ui.js';
 import { getStage } from '../stages.js';
 import { StoryDialog, StoryRunner } from '../story/runner.js';
@@ -103,7 +103,7 @@ export class StoryScene extends Phaser.Scene {
   // ---------- 加速 / 跳过 ----------
   makeControls() {
     this.skipBtn = button(this, WIDTH - 150, 14, 132, 38, '跳过演出', () => this.skipAll(), 17).setDepth(1600);
-    this.hint = text(this, WIDTH - 160, 33, '按住鼠标加速', 14, '#e8d6ae').setOrigin(1, 0.5).setDepth(1600).setStroke('#000', 3);
+    this.hint = text(this, WIDTH - 160, 33, IS_TOUCH ? '按住屏幕加速' : '按住鼠标加速', 14, '#e8d6ae').setOrigin(1, 0.5).setDepth(1600).setStroke('#000', 3);
     const adv = () => { if (!this.dialog.choiceBox) this.dialog.next(); };
     this.keys = this.input.keyboard?.addKeys('CTRL');
     this.input.keyboard?.on('keydown-SPACE', adv);

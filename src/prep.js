@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, FONT, COLORS } from './config.js';
+import { WIDTH, HEIGHT, FONT, COLORS, IS_TOUCH } from './config.js';
 import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
 import { calcStats } from './logic.js';
 import { shopStock } from './deploy.js';
@@ -14,7 +14,7 @@ import { panel, text, button, portrait } from './ui.js';
 const TABS = [['deploy', '阵　容'], ['equip', '装　备'], ['items', '道　具'], ['shop', '商　店']];
 const HINT = {
   deploy: '点选武将上场 / 下场，锁定的武将必须出阵',
-  equip: '选择武将与栏位，再从背包中点选装备；鼠标移到装备上可比较能力',
+  equip: `选择武将与栏位，再从背包中点选装备；${IS_TOUCH ? '每件装备下方显示能力变化' : '鼠标移到装备上可比较能力'}`,
   items: '果子只能在整备时使用：选择武将后点“使用”',
   shop: '购买普通装备与消耗品；卖出价为买入价的一半，3 级普通装备卖出另得果子，宝物不能卖出',
 };

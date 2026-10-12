@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, RES, FONT, hiDpi } from '../config.js';
+import { WIDTH, HEIGHT, RES, FONT, IS_TOUCH, hiDpi } from '../config.js';
 import { button, text, panel, DialogBox } from '../ui.js';
 import { getStage } from '../stages.js';
 import { STAGE_PLACE, isoToScreen } from '../story/defs.js';
@@ -219,7 +219,7 @@ export class CampScene extends Phaser.Scene {
     button(this, WIDTH - (bw + 16) * 2, 20, bw, 38, '存　档', () => this.openSave('save'), 17).setDepth(1000);
     button(this, WIDTH - (bw + 16), 20, bw, 38, '读　档', () => this.openSave('load'), 17).setDepth(1000);
     this.toastText = text(this, WIDTH / 2, 96, '', 17, '#ffd27a', FONT).setOrigin(0.5).setStroke('#000', 4).setDepth(1000);
-    text(this, WIDTH / 2, HEIGHT - 18, '点击地面行走　方向键 / WASD 移动　走到人物旁按空格 / 回车或点击人物对话　右键取消', 14, '#e8d6ae')
+    text(this, WIDTH / 2, HEIGHT - 18, IS_TOUCH ? '点击地面行走　点击人物对话 / 物件互动' : '点击地面行走　方向键 / WASD 移动　走到人物旁按空格 / 回车或点击人物对话　右键取消', 14, '#e8d6ae')
       .setOrigin(0.5, 1).setStroke('#000', 3).setDepth(1000);
   }
 
@@ -606,7 +606,7 @@ export class CampScene extends Phaser.Scene {
     if (target) {
       const verb = target.kind === 'gate' ? '出征' : target.kind === 'prep' || target.role === 'prep' ? '整备' : target.role === 'shop' ? '商店' : `与${target.name}对话`;
       const at = target.actor ? { x: target.actor.c.x, y: target.actor.c.y - (target.unread || target.tag ? 124 : 100) } : target.top;
-      this.prompt.setText(`［空格］${verb}`).setPosition(at.x, at.y - (target.actor ? 0 : 22)).setVisible(true);
+      this.prompt.setText(`［${IS_TOUCH ? '点击' : '空格'}］${verb}`).setPosition(at.x, at.y - (target.actor ? 0 : 22)).setVisible(true);
     } else this.prompt.setVisible(false);
   }
 
