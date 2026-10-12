@@ -42,7 +42,7 @@ async function battle(n) {
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-  await page.goto(`http://localhost:${port}/?stage=${stage}`);
+  await page.goto(`http://localhost:${port}/?stage=${stage}&story=0`); // story=0：跳过开场场景直接进战场
   // 旧版本（没有 ?stage 调试入口）：按新游戏重置 registry 后直接进关
   await page.waitForFunction(() => window.game?.scene?.getScene('Title')?.sys?.isActive() || window.game?.scene?.getScene('Battle')?.sys?.isActive(), null, { timeout: 30000 });
   await page.waitForTimeout(1500);

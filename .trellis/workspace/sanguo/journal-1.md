@@ -124,3 +124,26 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: core-systems 收尾归档；第一关毒烟减伤与友军自动用药
+<!-- trellis-session: v=2 fp=dd2ef9c818159314 -->
+
+**Date**: 2026-10-12
+**Task**: core-systems 收尾归档；第一关毒烟减伤与友军自动用药
+**Branch**: `feat/stage1-poison-ally-items`
+
+### Summary
+
+core-systems 整体收尾：5 个代表关卡 AI 对战与旧格式存档读档回归，更新 GQ.md 差异说明，ai-battle 加 story=0 适配开场场景；第一关张宝/黄巾术士策略伤害 ×0.6、中毒 5%，友军自带补给并由 planAI 自动用药，第一关 AI 对战 6 局胜 5（main 基线 1/6）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4771b44` | docs(GQ): 更新与原版差异说明；fix(scripts): ai-battle 跳过开场场景直接进战场 |
+| `55510fb` | feat(battle): 第一关毒烟减伤；友军 AI 自动使用自带补给 |
+
+### Status
+
+[OK] **Completed**
