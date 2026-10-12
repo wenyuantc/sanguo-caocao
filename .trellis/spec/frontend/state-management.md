@@ -13,14 +13,18 @@
 |-----|------|----------|
 | `difficulty` | `'normal' \| 'hard' \| 'hell'` | `TitleScene.chooseDifficulty`、`applyLoad` |
 | `roster` | `{ [我军单位id]: { lvl, exp, cls, tier, equip?: { weapon, armor, acc }（背包 uid 或 null）, fruits?: { [能力]: 个数 } } }`（`tier` 阶级 1~3，旧存档缺失时 `applyLoad` 补为 1；`cls` 仅作记录，兵种以武将总表为准）。**只有带 `lvl` 的条目才算成长记录**：首次出阵前 `kitFor` / 整备可能先写入只有 `equip` / `fruits` 的条目，`createUnit` 与 `planDeploy` 用 `saved?.lvl` 判断是否沿用 `tier` | `BattleScene.victory`（合并写入，保留 `equip` / `fruits`）、`BattleScene.kitFor`、整备（`prep.js`）、`applyLoad` |
-| `joined` | `[武将id]`，已加入的武将（仅 `generals.js` 中的武将） | 新游戏（`[]`）、`BattleScene.victory`、`applyLoad`（旧存档缺失时用 `roster` 的键推导） |
+| `joined` | `[武将id]`，已加入的武将（`generals.js` 总表武将与招募单位 `rec<n>`；过滤用 `isGeneral`，读档时必须先 `setRecruits` 再过滤） | 新游戏（`[]`）、`BattleScene.victory`、`applyLoad`（旧存档缺失时用 `roster` 的键推导） |
 | `items` | `{ [道具id]: 数量 }`（id 见 data-contracts 的 `ITEMS`；`seal` 印绶从 `SEAL_FROM` 关起每关胜利 +1，另按关序轮流获得一件 `LOOT` 战利品） | 新游戏、`victory`（加上 `difficulty.reward`、印绶与战利品）、`applyLoad`（`migrateItems` 迁移旧道具） |
 | `red` | 整数，红色指数 | `applyChoice`、`victory`、`applyLoad` |
 | `flags` | `{ [标记名]: true }` | `setFlag`、`applyLoad` |
 | `inventory` | `[{ uid, id, lvl, exp }]`，全部持有的装备实例（含已装备的；`id` 见 `EQUIP`，宝物唯一） | 新游戏（`[]`）、`kitFor`（补发初始装备）、整备（买卖）、`victory`（写回熟练度并加入掉落与奖励）、`applyLoad`（缺失为 `[]`） |
-| `gold` | 整数，军资金 | 新游戏（0）、整备商店、`victory`（`goldFor(曹操等级)` + 奖励金钱）、`applyLoad`（缺失为 0） |
+| `gold` | 整数，军资金 | 新游戏（`START_GOLD` = 1000，见 `recruit.js`；地图更新重开第一关同）、整备商店与招募页、`victory`（`goldFor(曹操等级)` + 奖励金钱）、`applyLoad`（缺失为 0） |
 
-- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部八个** key。
+| `recruits` | `{ [rec<n>]: { name, cls, kind: 'general' \| 'soldier', bonus } }`，招募单位定义；`generals.js` 的 `RECRUITS` 是它的模块级镜像（`isGeneral` / `generalOf` 读镜像） | 新游戏（`{}`）、招募（`recruit.recruitUnit`，同时写 `roster` / `joined`）、`applyLoad`（缺失为 `{}`）。**三处都必须调用 `setRecruits`** |
+| `recruitPool` | `{ stageId, names: [武将名], refreshLeft }` 当前关卡间隙的武将候选（每批 4 名，刷新 3 次，`stageId` 变化时 `ensurePool` 换批重置） | 新游戏（`null`）、`BattleScene.create` / `CampScene.create` / 胜利写自动存档前（`ensurePool`）、招募页刷新、`applyLoad`（缺失为 `null`） |
+
+- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部十个** key（并 `setRecruits({})`）。
+  候选必须在可存档之前生成（`ensurePool`），否则读档会换批、绕过刷新次数限制。
   新增 key 时，要在这里重置，并在 `saves.applyLoad` 中恢复。
 - 写入时一律写副本：`this.registry.set('flags', { ...this.flags })`、`items = { ...this.items }`。
 

@@ -1,6 +1,7 @@
 // 存档：100 个手动存档位 + 1 个自动存档（每章胜利后写入）
 // 存档类型 kind：'stage' 关卡开头（营门出征时的自动存档，可带 deploy 营中选好的阵容）/ 'battle' 战斗中 / 'camp' 营中（stage 为下一关 id，另记 talked 已对话人物、deploy 营中选好的阵容、pos 曹操位置）
-import { isGeneral } from './generals.js';
+import { isGeneral, setRecruits } from './generals.js';
+import { SERIES } from './data.js';
 import { readLegacy, writeLegacy, mergeLegacy, normalizeLegacy, recordTreasures } from './legacy.js';
 
 const SLOT_KEY = 'sanguo-slots';
@@ -61,6 +62,12 @@ export function restoreRegistry(scene, data) {
   // 旧存档的 roster 没有 tier（阶级）：视为一阶
   const roster = Object.fromEntries(Object.entries(data.roster || {}).map(([id, r]) => [id, { ...r, tier: r.tier || 1 }]));
   scene.registry.set('roster', roster);
+  // 招募单位（旧存档没有）：先同步镜像，下面的 joined 过滤才认得招募 id
+  const recruits = Object.fromEntries(Object.entries(data.recruits && typeof data.recruits === 'object' ? data.recruits : {})
+    .filter(([, r]) => typeof r?.name === 'string' && SERIES[r.cls]));
+  scene.registry.set('recruits', recruits);
+  setRecruits(recruits);
+  scene.registry.set('recruitPool', Array.isArray(data.recruitPool?.names) ? data.recruitPool : null);
   // 旧存档没有加入记录：用 roster 中的武将推导
   scene.registry.set('joined', Array.isArray(data.joined) ? data.joined.filter(isGeneral) : Object.keys(roster).filter(isGeneral));
   scene.registry.set('items', data.items);
@@ -125,6 +132,8 @@ export function exportSlot(i) {
 const validStage = (v) => (typeof v === 'string' && v.length > 0) || (Number.isInteger(v) && v >= 0);
 const validSave = (d) => d && typeof d === 'object' && validStage(d.stage)
   && d.items && typeof d.items === 'object' && (d.joined == null || Array.isArray(d.joined))
+  && (d.recruits == null || (typeof d.recruits === 'object' && !Array.isArray(d.recruits)))
+  && (d.recruitPool == null || Array.isArray(d.recruitPool.names))
   && (d.kind === 'stage' || (d.kind === 'battle' && Array.isArray(d.units)) || (d.kind === 'camp' && (d.talked == null || Array.isArray(d.talked))));
 
 // 本地是否有可导出的结局记录 / 图鉴

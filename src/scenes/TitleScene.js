@@ -8,6 +8,8 @@ import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
 import { goStage, goCamp } from '../story/flow.js';
 import { planDeploy } from '../deploy.js';
+import { setRecruits } from '../generals.js';
+import { START_GOLD } from '../recruit.js';
 import { DEMO_SCENES } from '../story/demo.js';
 import { engine } from '../audio/engine.js';
 import { playMusic } from '../audio/music.js';
@@ -197,7 +199,10 @@ export class TitleScene extends Phaser.Scene {
     this.registry.set('red', 0);
     this.registry.set('flags', {});
     this.registry.set('inventory', []);
-    this.registry.set('gold', 0);
+    this.registry.set('gold', START_GOLD);
+    this.registry.set('recruits', {});
+    this.registry.set('recruitPool', null);
+    setRecruits({});
   }
 
   // 难度选择

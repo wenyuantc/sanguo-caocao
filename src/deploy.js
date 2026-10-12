@@ -2,7 +2,7 @@
 // 纯函数，不依赖 Phaser（Node 可直接导入）
 import { passable } from './data.js';
 import { roleOf, tierFor } from './logic.js';
-import { GENERALS, isGeneral } from './generals.js';
+import { GENERALS, isGeneral, isRecruit, generalOf } from './generals.js';
 import { getStage } from './stages.js';
 import { SHOP_UNLOCK } from './equipment.js';
 
@@ -75,9 +75,11 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
   for (const [id, g] of Object.entries(GENERALS)) if (joinReached(g, stage.id)) allJoined.add(id);
 
   const lord = defsById.caocao;
-  const poolIds = [...presetGenerals, ...Object.keys(GENERALS).filter((id) => allJoined.has(id) && !blocked.has(id) && !defsById[id])];
+  const notPreset = (id) => allJoined.has(id) && !blocked.has(id) && !defsById[id];
+  // 候选：预设武将 → 总表中已加入的武将 → 招募单位（按招募先后）
+  const poolIds = [...presetGenerals, ...Object.keys(GENERALS).filter(notPreset), ...[...allJoined].filter((id) => isRecruit(id) && notPreset(id))];
   const pool = poolIds.map((id) => {
-    const def = defsById[id], saved = roster[id], g = GENERALS[id];
+    const def = defsById[id], saved = roster[id], g = generalOf(id);
     const floor = def ? def.lvl : Math.max(1, lord.lvl - 1);
     const lvl = Math.max(floor, saved?.lvl || 0);
     // 兵种、个人修正与加成以武将总表为准；阶级同 createUnit（roster 记录，首次出阵按等级定阶）
@@ -157,7 +159,7 @@ export function buildPlayerDefs(plan, selectedIds) {
     const slot = free.find(([x, y]) => passable(p.cls, plan.map[y][x])) || free[0];
     if (!slot) continue;
     used.add(k(slot[0], slot[1]));
-    const g = GENERALS[id];
+    const g = generalOf(id);
     const base = plan.defsById[id] || { id, name: p.name, faction: 'player', bonus: p.bonus, ...(g?.mark && { mark: g.mark }) };
     defs.push({ ...base, cls: p.cls, lvl: p.floor, x: slot[0], y: slot[1] });
   }

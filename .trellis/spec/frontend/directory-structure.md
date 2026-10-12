@@ -28,12 +28,13 @@ src/
 │   └── a.js … f.js     # 每组关卡一个文件（A–F），default 导出关卡对象数组
 ├── characters.js       # 按中文名登记的外形表 BASE + 合并 extra_a..f；兵种登记 CLASS_BY_NAME；颜色工具函数
 ├── characters/extra_<组>.js  # 各组补充的武将外形（default 导出对象）
-├── generals.js         # 武将总表 GENERALS（默认兵种、bonus、阵亡/离队标记、joinAt），纯数据
+├── generals.js         # 武将总表 GENERALS（默认兵种、bonus、阵亡/离队标记、joinAt）+ 招募单位镜像 RECRUITS（setRecruits / generalOf / isGeneral）
+├── recruit.js          # 招募：武将候选池（排除名单、兵种推导）、小兵、价格、START_GOLD、recruitUnit（纯函数，不依赖 Phaser）
 ├── deploy.js           # 出阵推导 planDeploy / buildPlayerDefs、商店货架 shopStock（纯函数，不依赖 Phaser）
 ├── saves.js            # localStorage 存档位/自动存档、导出导入、applyLoad
 ├── legacy.js           # 二周目继承：结局记录与宝物图鉴（localStorage sanguo-legacy）、许劭的二周目选项脚本 / 结果写入
 ├── saveMenu.js         # 存档/读档弹窗 UI（openSaveMenu）
-├── prep.js             # 整备弹窗 UI（openPrep）：阵容 / 装备 / 道具 / 商店四页
+├── prep.js             # 整备弹窗 UI（openPrep）：阵容 / 装备 / 道具 / 商店 / 招募五页（`opts.replan` 招募后重算阵容）
 ├── rewardPanel.js      # 过关战果弹窗（openRewards，返回 Promise）
 ├── infoPanel.js        # 部队情报弹窗 UI（openInfo）
 ├── ui.js               # panel/text/button/portrait/DialogBox/floatText/wait
