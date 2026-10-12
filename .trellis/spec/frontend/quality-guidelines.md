@@ -75,9 +75,34 @@ npm run dev                               # 手动检查受影响的流程
 - **分工**：57 关浏览器回归由主会话统一执行。子代理只做关键流程抽查，时间缩放设为 15，每关控制在 15 秒以内；子代理自己跑满 57 关会耗时 40 分钟以上。
 - **记录项**：每关记录回合、阶段、是否结束、新增错误数（包装 `console.error`，并监听 `error` / `unhandledrejection`），整批结束后记录 `performance.memory.usedJSHeapSize`，确认内存不持续增长。
 
+## Git 工作流：只用 main
+
+**约定**（用户 2026-10-12 决定）：所有改动直接在 `main` 上提交并推送。不新建功能分支、不开 PR、不建 worktree，即使工具默认建议“先建分支”也以本约定为准。
+
+| 步骤 | 做法 |
+|------|------|
+| 开始 | 确认 `git branch --show-current` 为 `main`；不是就先切回，不要 `git checkout -b` |
+| 暂存 | 只用明确路径暂存本次改动：`git add <文件…>`。工作区可能有其他会话未提交的改动（例如别的任务的 `src/` 文件、`.trellis/tasks/<别的任务>/`），禁止 `git add -A` / `git add .` / `git commit -a` |
+| 推送 | `git fetch origin` 后若 `main` 已分叉，`git pull --rebase origin main` 再 `git push origin main`；不要强推 |
+| Trellis 归档 | 在 main 上 `task.py start` 会把 `branch` 和 `base_branch` 都记成 `main`，`task.py archive` 会拒绝（“A PR cannot target its own branch”）。没有 PR，归档时加 `--skip-branch-validation`；不要用 `set-branch` 伪造分支名 |
+| 提交顺序 | 不变：工作提交 → `chore(task): archive …` → `chore: record journal` |
+
+```bash
+# 错误：建分支、整体暂存（会把别的会话的改动一起提交）
+git checkout -b feat/xxx && git add -A && git commit -m "..."
+python3 .trellis/scripts/task.py set-branch <task> feat/xxx   # 为通过归档校验伪造分支
+
+# 正确
+git add index.html src/main.js .trellis/spec/frontend/scene-and-rendering.md
+git commit -m "feat(mobile): ..."
+python3 .trellis/scripts/task.py archive <task> --skip-branch-validation
+git push origin main
+```
+
 ## 评审清单
 
 - [ ] 改动只在任务涉及的文件 / 所属关卡组范围内。
+- [ ] 在 `main` 上提交，只暂存了本次改动的文件（见“Git 工作流”）。
 - [ ] 校验脚本 0 错误，警告都有说明（基线 0 警告）。
 - [ ] `npm run build` 通过（整合阶段）。
 - [ ] 新关卡 id 已在 `PLANNED_IDS` 中；`next` 衔接符合 `docs/STAGE_GUIDE.md` §2。
