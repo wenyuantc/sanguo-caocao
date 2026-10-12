@@ -11,6 +11,7 @@ import { floatText, wait } from './ui.js';
 import { castFx, spellFx, itemFx, deathFx, promoteFx } from './spellFx.js';
 import { playAttack } from './attackFx.js';
 import { sfx } from './audio/sfx.js';
+import { godOf, killBy } from './cheat.js';
 
 // 普通攻击：攻击 → 蛇矛穿透 → 方天画戟连击（击破时）/ 反击 → 双剑 / 双鞭再反击
 export async function doAttack(s, a, d) {
@@ -61,6 +62,10 @@ async function strike(s, a, d, counter, noCrit = false) {
   const p = tileCenter(d.x, d.y);
   const verb = counter ? '反击' : '攻击';
   if (r.hit && r.dmg > 0 && fx(d, 'secondHalf') && d.hitsTaken > 0) r.dmg = Math.max(1, Math.round(r.dmg / 2));
+  // 金手指：我军无敌时攻击落空；我军秒杀时必中并打掉全部兵力
+  const kill = killBy(a, d);
+  if (godOf(d)) Object.assign(r, { hit: false, crit: false, dmg: 0 });
+  else if (kill) Object.assign(r, { hit: true, dmg: d.hp });
   await playAttack(s, a, d, r, () => {
     if (!r.hit) {
       floatText(s, p.x, p.y - 20, '闪避', '#cfe8ff');
@@ -73,7 +78,7 @@ async function strike(s, a, d, counter, noCrit = false) {
       return;
     }
     d.hitsTaken = (d.hitsTaken || 0) + 1;
-    if (fx(d, 'mpShield') && d.mp > 0) {
+    if (fx(d, 'mpShield') && d.mp > 0 && !kill) {
       const m = Math.min(d.mp, r.dmg);
       d.mp -= m;
       vd.updateHp();
@@ -132,6 +137,7 @@ export function gainGear(s, u, slot, amt) {
 export async function doSpell(s, a, spellId, t) {
   const sp = SPELLS[spellId];
   const res = resolveSpell(s.map, s.units, a, spellId, t);
+  cheatSpell(a, sp, res);
   s.hud.log(`${a.name} 使用了「${sp.name}」`);
   await castFx(s, a, spellId, t);
   // 天气策略：必定成功，按本关天气类别改变天气序号（research weather.md §6）
@@ -165,6 +171,16 @@ export async function doSpell(s, a, spellId, t) {
   for (const e of hits) if (e.dmg && e.u !== a) exp = Math.max(exp, expFor(a, e.u, e.u.hp <= 0) + 4);
   await gainExp(s, a, exp);
   for (const e of res.effects) if (e.u.alive && e.u.hp <= 0) await killUnit(s, e.u);
+}
+
+// 金手指：我军受到的伤害策略无效（冥想的自身消耗不算）；我军的伤害策略必中并击破敌军（吸取量按修正后的伤害重算）
+function cheatSpell(a, sp, res) {
+  let changed = false;
+  for (const e of res.effects) {
+    if (e.u !== a && e.hit && (e.dmg || sp.cat === 'damage') && godOf(e.u)) { e.hit = false; e.dmg = 0; changed = true; }
+    else if (sp.cat === 'damage' && killBy(a, e.u)) { e.hit = true; e.dmg = e.u.hp; changed = true; }
+  }
+  if (changed && sp.special === 'drain') res.self.hp = res.effects.reduce((n, e) => n + (e.hit && e.dmg || 0), 0);
 }
 
 // 单个目标的结算表现：浮字、兵力条、状态图标与日志

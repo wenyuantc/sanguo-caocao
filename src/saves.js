@@ -77,6 +77,8 @@ export function restoreRegistry(scene, data) {
   // 旧存档没有装备与金钱：背包为空，进入战斗时按原版规则补发初始装备
   scene.registry.set('inventory', Array.isArray(data.inventory) ? data.inventory : []);
   scene.registry.set('gold', data.gold ?? 0);
+  // 金手指进度标记（旧存档没有：视为未使用）
+  scene.registry.set('cheated', !!data.cheated);
   // 存档里持有的宝物补登图鉴（有图鉴之前的存档）
   if (Array.isArray(data.inventory)) recordTreasures(data.inventory.map((it) => it?.id));
 }

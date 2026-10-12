@@ -16,6 +16,9 @@ import { issueKit } from '../equipment.js';
 import { recordTreasures } from '../legacy.js';
 import { openPrep } from '../prep.js';
 import { openSaveMenu } from '../saveMenu.js';
+import { openSettingsMenu } from '../settingsMenu.js';
+import { openCheatMenu } from '../cheatMenu.js';
+import { cheatOn, markCheat } from '../cheat.js';
 import { applyLoad, writeAuto } from '../saves.js';
 import { goStage } from '../story/flow.js';
 import { playMusic } from '../audio/music.js';
@@ -83,6 +86,8 @@ export class CampScene extends Phaser.Scene {
     this.items = { ...(this.registry.get('items') || {}) };
     // 本关间隙的招募候选（胜利时已生成；旧存档 / 调试入口在此补生成）
     ensurePool(this.registry, this.stageId);
+    // 金手指开着进入营中：本周目永久标记
+    markCheat(this);
 
     this.makeObjects();
     this.makePeople();
@@ -222,6 +227,7 @@ export class CampScene extends Phaser.Scene {
     text(this, 34, 22, `${place} · ${L.name}`, 22, '#ffd36a', FONT).setDepth(1000);
     text(this, 34, 54, `下一战：${st.chapter}　${st.name}`, 15, '#f1e3c2').setDepth(1000);
     const bw = 96;
+    button(this, WIDTH - (bw + 16) * 3, 20, bw, 38, '设　置', () => this.openSettings(), 17).setDepth(1000);
     button(this, WIDTH - (bw + 16) * 2, 20, bw, 38, '存　档', () => this.openSave('save'), 17).setDepth(1000);
     button(this, WIDTH - (bw + 16), 20, bw, 38, '读　档', () => this.openSave('load'), 17).setDepth(1000);
     this.toastText = text(this, WIDTH / 2, 96, '', 17, '#ffd27a', FONT).setOrigin(0.5).setStroke('#000', 4).setDepth(1000);
@@ -288,6 +294,7 @@ export class CampScene extends Phaser.Scene {
       inventory: (r.get('inventory') || []).map((it) => ({ ...it })),
       gold: r.get('gold') ?? 0,
       summary: { lordLvl: roster.caocao?.lvl || 1 },
+      cheated: !!r.get('cheated'),
     };
   }
 
@@ -305,6 +312,30 @@ export class CampScene extends Phaser.Scene {
       getData: () => this.snapshot(),
       onLoad: (data) => applyLoad(this, data),
       onClose: () => { this.modal = false; },
+    });
+  }
+
+  // 设置（游戏速度、音量、金手指开关）；金手指打开时可从这里进入金手指面板
+  openSettings() {
+    if (this.busy()) return;
+    this.halt();
+    this.modal = true;
+    openSettingsMenu(this, { audioOnly: true, onClose: () => { this.modal = false; }, onCheat: () => this.openCheat() });
+  }
+
+  // 金手指面板（营中没有“直接胜利”）：关闭时把军资金、道具、背包写回 registry（同整备界面）
+  openCheat() {
+    if (!cheatOn() || this.busy()) return;
+    this.modal = true;
+    this.items = { ...(this.registry.get('items') || {}) };
+    openCheatMenu(this, {
+      lordLvl: this.registry.get('roster')?.caocao?.lvl || 1,
+      onClose: () => {
+        this.registry.set('inventory', this.inventory.map((it) => ({ ...it })));
+        this.registry.set('gold', this.gold);
+        this.registry.set('items', { ...this.items });
+        this.modal = false;
+      },
     });
   }
 

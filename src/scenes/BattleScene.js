@@ -21,6 +21,8 @@ import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.
 import { writeAuto, applyLoad, restoreRegistry, stageStartSave } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
+import { openCheatMenu } from '../cheatMenu.js';
+import { cheatOn, markCheat } from '../cheat.js';
 import { isGeneral, generalOf } from '../generals.js';
 import { ensurePool, START_GOLD } from '../recruit.js';
 import { planDeploy, buildPlayerDefs, initialDeploy } from '../deploy.js';
@@ -74,12 +76,15 @@ export class BattleScene extends Phaser.Scene {
     if (stage.id === FIRST_STAGE) {
       restoreRegistry(this, {
         difficulty, roster: {}, joined: [], items: { ...diffOf(difficulty).items }, red: 0, flags: {}, inventory: [], gold: START_GOLD,
+        cheated: load.cheated,
       });
       return;
     }
     const start = stageStartSave(load, stage.id, (id) => getStage(id)?.id);
     if (start) restoreRegistry(this, start);
     else console.warn('地图版本不一致且没有本关开头的自动存档，沿用战斗存档中的战役状态', stage.id);
+    // 金手指标记不随重开清除
+    if (load.cheated) this.registry.set('cheated', true);
   }
 
   // 释放上一关生成的人物 / 头像贴图，避免连续游玩时内存持续增长（按需重新生成）
@@ -105,6 +110,8 @@ export class BattleScene extends Phaser.Scene {
       this.load = null;
       this.mapReset = true;
     }
+    // 金手指开着进入战斗：本周目永久标记
+    markCheat(this);
     // 新开一关：先播开场场景（prologue 在场景中演出），场景结束后带 skipStory 回来整备
     if (!this.load && !this.skipStory) {
       this.redirecting = true;
@@ -376,6 +383,7 @@ export class BattleScene extends Phaser.Scene {
         ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits }, items: u.items && { ...u.items },
       })),
       summary: { lordLvl: lord.lvl },
+      cheated: !!this.registry.get('cheated'),
     };
   }
 
@@ -406,7 +414,35 @@ export class BattleScene extends Phaser.Scene {
     if (this.modal || this.over || this.dialog.root.visible) return;
     this.modal = true;
     // 敌军阶段中打开时战斗可能已结束（战果面板会自行设 modal），关闭时不要覆盖
-    openSettingsMenu(this, { audioOnly: true, onClose: () => { this.applySpeed(); if (!this.over) this.modal = false; } });
+    openSettingsMenu(this, {
+      audioOnly: true,
+      onClose: () => { this.applySpeed(); if (!this.over) this.modal = false; },
+      onCheat: () => this.openCheat(),
+    });
+  }
+
+  // 金手指面板（总开关打开时，从战斗设置进入）：修改军资金 / 道具 / 装备，直接胜利
+  openCheat() {
+    if (!cheatOn() || this.modal || this.over || this.dialog.root.visible) return;
+    if (this.phase !== 'player' || !['idle', 'move'].includes(this.state)) {
+      this.hud.log('请在我军阶段打开金手指面板');
+      return;
+    }
+    this.clearSelection();
+    this.state = 'idle';
+    this.modal = true;
+    openCheatMenu(this, {
+      lordLvl: this.lordLvl(),
+      onWin: () => this.cheatWin(),
+      onClose: () => { this.hud.setItems(this.items); if (!this.over) this.modal = false; },
+    });
+  }
+
+  // 直接胜利：按本关正常胜利流程结算（victory 开头即设 over，不会重复结算）
+  cheatWin() {
+    if (this.over || this.phase !== 'player' || this.state !== 'idle') return;
+    this.clearSelection();
+    this.victory('win', 'all');
   }
 
   // 指针所在格子：按镜头换算；指针在小地图上时视为不在地图上
@@ -513,7 +549,9 @@ export class BattleScene extends Phaser.Scene {
   tickUnit(u) {
     const v = this.views.get(u);
     const p = { x: MAP_X + u.x * TILE + TILE / 2, y: MAP_Y + u.y * TILE + TILE / 2 };
-    for (const e of tickStatus(u, undefined, this.stage.poisonRate ?? POISON_RATE)) {
+    // 金手指无敌：我军中毒不扣兵力
+    const rate = u.faction === 'player' && cheatOn('cheatGod') ? 0 : this.stage.poisonRate ?? POISON_RATE;
+    for (const e of tickStatus(u, undefined, rate)) {
       if (e.type === 'poison') {
         floatText(this, p.x, p.y - 20, `中毒 -${e.dmg}`, STATUS.poison.css, 20);
         this.hud.log(`${u.name} 中毒，兵力 -${e.dmg}`);
@@ -822,6 +860,7 @@ export class BattleScene extends Phaser.Scene {
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       inventory: this.inventory, gold: this.gold, summary: { lordLvl },
       recruits: this.registry.get('recruits') || {}, recruitPool: this.registry.get('recruitPool') || null,
+      cheated: !!this.registry.get('cheated'),
       ...(toCamp ? { talked: [], deploy: null } : {}),
     }, toCamp ? 'camp' : 'stage');
     const supplies = { ...this.difficulty.reward };
@@ -1181,11 +1220,14 @@ export class BattleScene extends Phaser.Scene {
     this.closeMenu();
     this.hl.clear();
     this.sel = null;
-    u.acted = true;
-    if (u.alive) this.views.get(u)?.setActed(true);
+    // 金手指无限行动：我军行动后不置灰，可再次移动与行动，需手动结束回合
+    const again = u.faction === 'player' && cheatOn('cheatMove') && canAct(u);
+    if (!again) u.acted = true;
+    if (u.alive) this.views.get(u)?.setActed(u.acted);
     await this.tryEscape(u);
     if (await this.checkEnd()) return;
     this.state = 'idle';
+    if (again) return;
     if (!this.units.some((o) => o.alive && o.faction === 'player' && !o.acted)) {
       await wait(this, 300);
       this.endPlayerPhase();

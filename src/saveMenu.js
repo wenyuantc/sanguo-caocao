@@ -150,6 +150,8 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
         const tag = text(scene, x0 + 160, y + 4, `［${df.name}］`, 15, df.color, FONT);
         title.setX(tag.x + tag.width + 6);
         list.add(tag);
+        // 用过金手指的进度：存档时间后追加醒目标签（放第二行，不挤占标题）
+        if (data.cheated) list.add(text(scene, x0 + 300, y + 22, '［金手指］', 13, '#ff7ad9', FONT));
       }
       if (data && !row.auto) {
         let armed = false;
