@@ -237,3 +237,25 @@ core-systems 整体收尾：5 个代表关卡 AI 对战与旧格式存档读档�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: 出阵名额按章节递增
+<!-- trellis-session: v=2 fp=52929a99bae5faf8 -->
+
+**Date**: 2026-10-12
+**Task**: 出阵名额按章节递增
+**Branch**: `main`
+
+### Summary
+
+招募系统上线后各关剧情武将已占满出阵名额。按 stage.chapter 给每关加额外名额（序章 +2、第一章 +3、第二章 +4、第三章 +5、第四章/终章 +6），extraSlots 在原阵型 4 步内自动补出阵位，57 关全部补足、每关空 1–4 位；校验脚本新增额外出阵位检查；修复 camp-smoke 过期的 openPrepUI 参数并忽略完整版 Chrome 的 favicon 404，4 关营中回归通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `834d844` | feat(deploy): 出阵名额按章节递增（序章 +2 至终章 +6，自动在原阵型附近补出阵位），给招募单位留位置 |
+
+### Status
+
+[OK] **Completed**

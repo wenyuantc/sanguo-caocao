@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 10
+- **Total Sessions**: 11
 - **Last Active**: 2026-10-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~239 | Active |
+| `journal-1.md` | ~261 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 11 | 2026-10-12 | 出阵名额按章节递增 | `834d844` | `main` |
 | 10 | 2026-10-12 | 金手指功能 | `a05c863`, `50661b5`, `6a47a24` | `feat/cheat-mode` |
 | 9 | 2026-10-12 | 招募系统：金币招募小兵与武将 | `eafd45f` | `feat/recruit-system` |
 | 8 | 2026-10-12 | 游戏加速设置（1x~16x） | `0c18588` | `feat/game-speed` |

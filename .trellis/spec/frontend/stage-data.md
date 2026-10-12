@@ -42,7 +42,7 @@ export default [
 | `map`（行数 × 列数 = `MAP_SIZES[id]`；旧版 13 × 18） | `drawMap`、`terrainAt`、`reachable`、镜头 / 小地图；字符是 `terrain.js` 中 `TERRAIN` 的 key（30 种，一字符一格） |
 | `mapVersion`（1 旧版 / 2 原版尺寸） | `normalizeStage` 默认 1；写入战斗中存档，读档不一致时从本关开头重开；校验按版本检查尺寸 |
 | `units` | 敌军/友军：`BattleScene.create` → `createUnit(def, null, difficulty)`；我军：`deploy.planDeploy` 推导出阵位置、上限、必须 / 不可出阵，整备后 `buildPlayerDefs` → `createUnit(def, roster[id], difficulty)`。都先按 `flagOk`（`ifFlag`/`unlessFlag`）过滤 |
-| `deploy`（可选） | `planDeploy`：`{ max?, required?, slots? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式 |
+| `deploy`（可选） | `planDeploy`：`{ max?, required?, slots?, bonus? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式。`max` / `slots` 之外还会按章节（`CHAPTER_BONUS`）自动补额外出阵位并加名额，`bonus` 覆盖章节增量（0 = 不加） |
 | `victory[]` | `checkEnd`（`boss`/`all`/`reach`）、`nextPhase`（`survive`）、`drawGoals`（`reach` 目标格） |
 | `protect`、`escape`、`victoryFlags` | `checkEnd`、`tryEscape`、`victory()` |
 | `events[]` | 援军默认从最近地图边缘走入（6 格内，更远淡入）；落点被占时 `spawnTile` 在曼哈顿 3 格内找该兵种可站的空格，都没有才放弃该单位；`fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
