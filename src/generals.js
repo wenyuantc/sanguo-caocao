@@ -33,4 +33,13 @@ export const GENERALS = {
   guanyu_z: { name: '关羽', cls: 'cavalry', gradeMod: { int: 'A' }, bonus: { hp: 7, mp: 2, atk: 14 } },
 };
 
-export const isGeneral = (id) => Object.hasOwn(GENERALS, id);
+// 招募武将 / 小兵（registry.recruits 的镜像，结构同上：{ name, cls, bonus, kind }）：花名册判定与出阵推导共用。
+// 只在新游戏（清空）、读档、招募成功时由 setRecruits 同步，避免把 registry 传遍各调用点
+const RECRUITS = {};
+export const setRecruits = (map) => {
+  for (const id of Object.keys(RECRUITS)) delete RECRUITS[id];
+  Object.assign(RECRUITS, map || {});
+};
+export const generalOf = (id) => (Object.hasOwn(GENERALS, id) ? GENERALS[id] : Object.hasOwn(RECRUITS, id) ? RECRUITS[id] : undefined);
+export const isRecruit = (id) => Object.hasOwn(RECRUITS, id);
+export const isGeneral = (id) => Object.hasOwn(GENERALS, id) || isRecruit(id);

@@ -1,5 +1,5 @@
 import { TERRAIN, moveCost, terrainDef, IMPASSABLE, RANGES, ADVANTAGE, SPELLS, ITEMS, ALLY_ITEMS, SERIES, GRADE, STAT5, PROMOTE_LVL, classOf } from './data.js';
-import { GENERALS, isGeneral } from './generals.js';
+import { GENERALS, isGeneral, generalOf } from './generals.js';
 import { CLASS_BY_NAME } from './characters.js';
 import {
   GUARD_TAKEN, STATUS_KEYS, effStats, moveBonus, canMove, canAct, canCast, canCounter, alwaysHit, has, hasBuff, applyStatus, applyBuff, cure,
@@ -22,11 +22,11 @@ export const BASE5 = 73;
 
 const GENERAL_CLS = Object.fromEntries(Object.values(GENERALS).map((g) => [g.name, g.cls]));
 
-// 单位的兵种系列、个人修正与加成：我军武将以武将总表为准；其他单位依次按兵种登记表、同名武将、
+// 单位的兵种系列、个人修正与加成：我军武将以武将总表（含招募单位）为准；其他单位依次按兵种登记表、同名武将、
 // 黄巾兵（关卡兵种为 bandit 且名字含“黄巾”）映射，都不匹配时沿用关卡数据中的兵种
 export function roleOf(def) {
   if (def.faction === 'player' && isGeneral(def.id)) {
-    const g = GENERALS[def.id];
+    const g = generalOf(def.id);
     return { cls: g.cls, gradeMod: g.gradeMod || null, bonus: g.bonus };
   }
   const cls = CLASS_BY_NAME[def.name] || GENERAL_CLS[def.name] || (def.cls === 'bandit' && def.name.includes('黄巾') ? 'yellow' : def.cls);

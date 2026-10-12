@@ -21,7 +21,8 @@ import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.
 import { writeAuto, applyLoad, restoreRegistry, stageStartSave } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
-import { GENERALS, isGeneral } from '../generals.js';
+import { isGeneral, generalOf } from '../generals.js';
+import { ensurePool, START_GOLD } from '../recruit.js';
 import { planDeploy, buildPlayerDefs, initialDeploy } from '../deploy.js';
 import { openPrep } from '../prep.js';
 import { openInfo } from '../infoPanel.js';
@@ -72,7 +73,7 @@ export class BattleScene extends Phaser.Scene {
     const difficulty = load.difficulty || 'normal';
     if (stage.id === FIRST_STAGE) {
       restoreRegistry(this, {
-        difficulty, roster: {}, joined: [], items: { ...diffOf(difficulty).items }, red: 0, flags: {}, inventory: [], gold: 0,
+        difficulty, roster: {}, joined: [], items: { ...diffOf(difficulty).items }, red: 0, flags: {}, inventory: [], gold: START_GOLD,
       });
       return;
     }
@@ -139,6 +140,8 @@ export class BattleScene extends Phaser.Scene {
     this.inventory = (load?.inventory || this.registry.get('inventory') || []).map((it) => ({ ...it }));
     this.gold = load?.gold ?? this.registry.get('gold') ?? 0;
     this.gained = [];
+    // 本关的招募候选：先生成并写入 registry，战斗中存档随之保存（读档不会换批）
+    ensurePool(this.registry, this.stageId);
     // applyLoad 已把存档中的 joined 写入 registry（旧存档按 roster 推导）
     const joined = this.registry.get('joined') || Object.keys(roster).filter(isGeneral);
     this.deployPlan = null;
@@ -272,12 +275,21 @@ export class BattleScene extends Phaser.Scene {
     if (!roster[id]?.equip) {
       const n = this.inventory.length;
       const lv = Math.max(lvl || 1, roster[id]?.lvl || 0);
-      roster[id] = { ...roster[id], equip: issueKit(this.inventory, id, GENERALS[id].cls, lv) };
+      roster[id] = { ...roster[id], equip: issueKit(this.inventory, id, generalOf(id).cls, lv) };
       recordTreasures(this.inventory.slice(n).map((it) => it.id));
       this.registry.set('roster', { ...roster });
       this.registry.set('inventory', [...(this.registry.get('inventory') || []), ...this.inventory.slice(n).map((it) => ({ ...it }))]);
     }
     return kitFrom(this.inventory, roster[id].equip);
+  }
+
+  // 整备中招募后重新推导出阵（新成员补发初始装备），之后的重建与胜利时的 joined 都用新结果
+  replan() {
+    const plan = planDeploy(this.stage, { roster: this.registry.get('roster') || {}, joined: this.registry.get('joined') || [], flags: this.flags });
+    this.deployPlan = plan;
+    this.joined = plan.joined;
+    plan.pool.forEach((c) => this.kitFor(c.id, c.lvl));
+    return plan;
   }
 
   playerUnits(ids) {
@@ -292,7 +304,7 @@ export class BattleScene extends Phaser.Scene {
     const plan = this.deployPlan;
     if (!plan) return;
     this.modal = true;
-    const ids = await new Promise((r) => openPrep(this, plan, r, { selected: this.campDeploy && initialDeploy(plan, this.campDeploy) }));
+    const ids = await new Promise((r) => openPrep(this, plan, r, { selected: this.campDeploy && initialDeploy(plan, this.campDeploy), replan: () => this.replan() }));
     this.modal = false;
     this.hud.setItems(this.items);
     for (const u of this.units.filter((o) => o.faction === 'player')) {
@@ -355,6 +367,8 @@ export class BattleScene extends Phaser.Scene {
       gold: this.gold,
       roster: this.registry.get('roster') || {},
       joined: [...this.joined],
+      recruits: this.registry.get('recruits') || {},
+      recruitPool: this.registry.get('recruitPool') || null,
       firedEvents: [...this.firedEvents],
       mapPatches: this.mapPatches.map((p) => [...p]),
       weatherIdx: this.weatherIdx,
@@ -802,9 +816,12 @@ export class BattleScene extends Phaser.Scene {
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
     // 自动存档：下一关存在时（goNext 进营中）写营中存档，读取后回到营中；没有下一关（结局）时保持关卡开头类型
     const toCamp = !!(next && getStage(next) && next !== FIRST_STAGE);
+    // 下一关的招募候选在此生成并写入自动存档：读取营中存档不会换批、不会重置刷新次数
+    if (toCamp) ensurePool(this.registry, next);
     if (!this.stage.debug) writeAuto({
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       inventory: this.inventory, gold: this.gold, summary: { lordLvl },
+      recruits: this.registry.get('recruits') || {}, recruitPool: this.registry.get('recruitPool') || null,
       ...(toCamp ? { talked: [], deploy: null } : {}),
     }, toCamp ? 'camp' : 'stage');
     const supplies = { ...this.difficulty.reward };

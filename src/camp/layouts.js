@@ -11,6 +11,7 @@
 //   spawn / face     曹操出生点与朝向
 //   hq               整备功能点：{ at, label }（物件，at 为障碍格，站在旁边使用）或 { at, npc: 名字 }（人物站在 at）
 //   shop             商人：{ at, name, face? }（人物站在 at，对话即打开商店）
+//   recruit          募兵官：{ at, name, face? }（人物站在 at，对话即打开招募）
 //   gate             营门 / 城门：{ at, label }（障碍格，站在旁边确认出征）
 //   posts            站岗位置 [a, b, 朝向]，部分武将在此站立不动
 //   roam             闲逛区域 [a0, b0, a1, b1]，其余武将随机站位并在区域内走动
@@ -25,6 +26,7 @@ export const FOLK = {
   商人: { cls: 'strategist', side: 'ally' },
   随军商人: { cls: 'strategist', side: 'ally' },
   军需官: { cls: 'infantry', side: 'player' },
+  募兵官: { cls: 'cavalry', side: 'player' },
   侍从: { cls: 'infantry', side: 'player' },
   卫兵: { cls: 'infantry', side: 'player' },
 };
@@ -42,6 +44,7 @@ export const LAYOUTS = {
     spawn: [15, 12], face: 'dl',
     hq: { at: [3, 11], label: '大帐', labelAt: [1.8, 9.5, 120] },
     shop: { at: [13, 17], name: '随军商人', face: 'ur' },
+    recruit: { at: [11, 17], name: '募兵官', face: 'ur' },
     gate: GATE('营门'),
     posts: [[5, 13, 'dr'], [12, 5, 'dr'], [7, 7, 'dr'], [13, 12, 'dl'], [6, 16, 'dr'], [16, 6, 'dl']],
     roam: [[4, 4, 15, 15]],
@@ -56,6 +59,7 @@ export const LAYOUTS = {
     spawn: [15, 12], face: 'dl',
     hq: { at: [9, 5], npc: '军需官', face: 'dr' },
     shop: { at: [5, 4], name: '商人', face: 'dr' },
+    recruit: { at: [3, 6], name: '募兵官', face: 'dr' },
     gate: GATE('城门'),
     posts: [[8, 9, 'dr'], [12, 12, 'dl'], [15, 6, 'dl'], [6, 14, 'dr'], [16, 14, 'dl']],
     roam: [[3, 4, 17, 17]],
@@ -70,6 +74,7 @@ export const LAYOUTS = {
     spawn: [15, 12], face: 'dl',
     hq: { at: [3, 3], label: '书案', labelAt: [1.6, 1.4, 80] },
     shop: { at: [14, 15], name: '商人', face: 'ul' },
+    recruit: { at: [12, 16], name: '募兵官', face: 'ul' },
     gate: GATE('府门'),
     posts: [[5, 9, 'dr'], [9, 5, 'dl'], [5, 14, 'dr'], [14, 5, 'dl'], [12, 12, 'ul'], [8, 15, 'dr']],
     roam: [[4, 4, 16, 16]],
@@ -91,6 +96,7 @@ export const LAYOUTS = {
     spawn: [15, 12], face: 'dl',
     hq: { at: [7, 7], label: '大帐', labelAt: [5, 5, 140] },
     shop: { at: [14, 16], name: '随军商人', face: 'dr' },
+    recruit: { at: [12, 16], name: '募兵官', face: 'ur' },
     gate: GATE('营门'),
     posts: [[8, 9, 'dr'], [9, 8, 'dl'], [15, 8, 'dl'], [8, 15, 'dr'], [14, 13, 'dl']],
     roam: [[6, 6, 17, 17]],
@@ -112,6 +118,7 @@ export const LAYOUTS = {
     spawn: [15, 12], face: 'dl',
     hq: { at: [9, 11], label: '大帐', labelAt: [7, 9, 140] },
     shop: { at: [12, 17], name: '随军商人', face: 'ur' },
+    recruit: { at: [10, 17], name: '募兵官', face: 'ur' },
     gate: GATE('寨门'),
     posts: [[10, 7, 'dr'], [16, 7, 'dl'], [9, 14, 'dr'], [14, 11, 'dl'], [11, 19, 'ur']],
     roam: [[7, 7, 18, 18]],
@@ -154,6 +161,7 @@ export function reservedCells(L) {
   around(L.gate.at);
   around(L.hq.at);
   around(L.shop.at);
+  around(L.recruit.at);
   return out;
 }
 
@@ -168,12 +176,14 @@ export function checkLayout(L) {
   const need = (p, what) => { if (!pt(p)) e(`${what} 坐标无效：${JSON.stringify(p)}`); else if (!pass(p[0], p[1])) e(`${what} 站在障碍或范围外：${p.slice(0, 2)}`); else stand.push([p, what]); };
   need(L.spawn, '出生点');
   need(L.shop?.at, '商人');
+  need(L.recruit?.at, '募兵官');
   if (L.hq?.npc) need(L.hq.at, `整备（${L.hq.npc}）`);
   (L.posts || []).forEach((p, i) => need(p, `站岗位置 ${i}`));
   (L.folk || []).forEach((f) => { need(f.at, `通用角色 ${f.name}`); if (!FOLK[f.name]) e(`通用角色未登记外形：${f.name}`); });
   const spots = new Map();
   for (const [p, what] of stand) { const k = `${p[0]},${p[1]}`; if (spots.has(k)) e(`${what} 与${spots.get(k)}重叠：${k}`); else spots.set(k, what); }
   if (!FOLK[L.shop?.name]) e(`商人未登记外形：${L.shop?.name}`);
+  if (!FOLK[L.recruit?.name]) e(`募兵官未登记外形：${L.recruit?.name}`);
   if (L.hq?.npc && !FOLK[L.hq.npc]) e(`整备人物未登记外形：${L.hq.npc}`);
   const objs = [[L.gate?.at, '营门']];
   if (!L.hq?.npc) objs.push([L.hq?.at, '整备']);
