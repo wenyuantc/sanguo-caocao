@@ -37,7 +37,7 @@
 ### 状态（`src/status.js`，纯函数）
 
 - `u.status = { poison?, paralyze?, confuse?, silence?: 剩余回合 }`；`u.buffs = { atk?|int?|def?|burst?|morale?: { mult, turns }, move?: { add, turns } }`。两者随战斗中存档保存，旧存档缺失时 `restoreUnit` 补为 `{}`。
-- `applyStatus` / `cure(u, key|'all')` / `applyBuff`（同一能力只刷新不叠加）；`tickStatus(u, rng)` 在所属阵营阶段开始时调用，返回 `[{ type: 'poison'|'recover'|'expire', … }]`。
+- `applyStatus` / `cure(u, key|'all')` / `applyBuff`（同一能力只刷新不叠加）；`tickStatus(u, rng, rate = POISON_RATE)` 在所属阵营阶段开始时调用（`BattleScene` 传入 `stage.poisonRate ?? POISON_RATE`），返回 `[{ type: 'poison'|'recover'|'expire', … }]`。
 - 判定：`canMove`（麻痹 / 混乱时 false）、`canAct`（混乱 false）、`canCast`（禁咒 / 混乱 false）、`canCounter`（混乱 false）、`alwaysHit`（目标混乱）。
 - 战斗公式一律读 `effStats(u)`（套用增减益后的五项），不要直接读 `u.stats` 的五项；移动力用 `effMove(u)`（兵种 + `moveBonus` + 装备）。
 
@@ -70,6 +70,8 @@
   tier,           // 1~3：我军取 roster 的 tier（缺省 1）；roster 没有 lvl 记录的我军 tierFor(cls, lvl)（15/30）；敌军 / 友军 tierFor(cls, lvl, diff.tierLvl)
   exp,            // 0..99，仅我军使用
   ai,             // 'aggressive' | 'hold' | 'peace'
+  items,         // 友军自带补给 { [道具id]: 数量 }（关卡 extra `items`，缺省 ALLY_ITEMS）；我军 / 敌军为 null。随战斗中存档保存，旧存档的友军由 restoreUnit 补默认值
+  spellMult?,     // 施策者策略伤害倍率（关卡 extra，缺省 1），在 spellDamage 中乘入，预测 / AI / 结算一致
   mult,           // 难度属性倍率（敌军），否则为 null
   stats,          // calcStats(u)，派生值，从不存档
   hp, mp,         // 当前值
@@ -81,6 +83,7 @@
 - 公式：HP/MP = 系列基础 + 每级 × (lvl + 2 × (tier − 1)) + 加成；五项 = `BASE5` + `GRADE[档]` × lvl + 加成（`gradeMod` 覆盖个人成长档）。
 - 转职：`promoteBlock(u)` 返回 `null` 或中文原因；`promote(u)` 升阶、重算并回满，返回 `{ diff, learned }`（`learned` 为新阶级多出的策略，供策略按阶级习得使用）。
 - 读取战斗中存档的单位用 `restoreUnit(saved, diff)`：重新套用兵种覆盖、补 tier、重算能力。
+- 道具使用一律走 `actions.doItem(s, a, itemId, t)`：我军扣 `s.items` 并刷新 HUD，友军扣 `a.items`（不占玩家军需）。友军 AI 在 `planAI` 中以 `{ type: 'item', item, target }` 计划参与比较（`itemScore`：兵力低于 35% 或损失 ≥ 40% 才回复，异常按 `statusValue` 估值），补给用尽不再生成；敌军不用道具。
 - 敌我判断只有一条规则：`isFoe(a, b)`，即是否敌军；我军和友军互为友方。
 - 规则和事件用 `u.id`（关卡内唯一）识别单位；`views` 用对象引用识别单位。
 

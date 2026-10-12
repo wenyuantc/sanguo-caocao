@@ -82,7 +82,13 @@ function checkStage(s, { debug = false } = {}) {
     }
     if (typeof u.lvl !== 'number' || u.lvl < 1) err(s, `${u.id} 等级无效`);
     if (u.ai && !['aggressive', 'hold', 'peace'].includes(u.ai)) err(s, `${u.id} ai 只能是 aggressive/hold/peace`);
+    if (u.spellMult != null && !(typeof u.spellMult === 'number' && u.spellMult > 0 && u.spellMult <= 2)) err(s, `${u.id} spellMult 应为 0~2 的数字`);
+    if (u.items != null) {
+      if (u.faction !== 'ally') err(s, `${u.id} 只有友军可以设 items（自带补给）`);
+      for (const [k, n] of Object.entries(u.items)) if (!ITEMS[k] || !Number.isInteger(n) || n < 0) err(s, `${u.id} items 错误：${k}: ${n}`);
+    }
   }
+  if (s.poisonRate != null && !(typeof s.poisonRate === 'number' && s.poisonRate >= 0 && s.poisonRate <= 1)) err(s, `poisonRate 应为 0~1 的数字：${s.poisonRate}`);
   const player = s.units.filter((u) => u.faction === 'player');
   if (!player.some((u) => u.id === 'caocao')) err(s, '我军必须包含 caocao');
   if (player.length < 3 || player.length > 12) warn(s, `我军出阵 ${player.length} 人`);

@@ -204,8 +204,10 @@ function showEffect(s, e) {
 
 export async function doItem(s, a, itemId, t) {
   const it = ITEMS[itemId];
-  s.items[itemId] -= 1;
-  s.hud.setItems(s.items);
+  // 我军用军需；友军用自带补给（u.items），不占用我军军需
+  const pool = a.faction === 'player' ? s.items : a.items;
+  pool[itemId] -= 1;
+  if (pool === s.items) s.hud.setItems(s.items);
   s.hud.log(`${a.name} 对 ${t.name} 使用了「${it.name}」`);
   if (it.promote) {
     await doPromote(s, t);
@@ -291,6 +293,7 @@ export async function runAI(s, faction) {
         await s.views.get(u).moveAlong(path);
         if (plan.type === 'attack') await doAttack(s, u, plan.target);
         else if (plan.type === 'spell') await doSpell(s, u, plan.spell, plan.target);
+        else if (plan.type === 'item') await doItem(s, u, plan.item, plan.target);
       } catch (e) {
         // 单个 AI 行动出错时跳过该单位，避免整个阶段卡死
         console.error('AI 行动出错', e);

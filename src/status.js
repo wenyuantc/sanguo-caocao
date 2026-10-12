@@ -89,11 +89,12 @@ export function hasBuff(u, buff) {
 }
 
 // 所属阵营阶段开始时调用：中毒扣血（最低留 1，主将按 GUARD_TAKEN 减轻）、异常按士气概率自然恢复或到期、增减益回合递减
+// rate：中毒每回合扣血比例（关卡 poisonRate，缺省 POISON_RATE）
 // 返回事件列表 [{ type: 'poison', dmg } | { type: 'recover', key } | { type: 'expire', key }]
-export function tickStatus(u, rng = Math.random) {
+export function tickStatus(u, rng = Math.random, rate = POISON_RATE) {
   const ev = [];
   if (has(u, 'poison')) {
-    const dmg = Math.min(u.hp - 1, Math.round(u.stats.hp * POISON_RATE * (u.guard ? GUARD_TAKEN : 1)));
+    const dmg = Math.min(u.hp - 1, Math.round(u.stats.hp * rate * (u.guard ? GUARD_TAKEN : 1)));
     if (dmg > 0) { u.hp -= dmg; ev.push({ type: 'poison', dmg }); }
   }
   if (u.status) {

@@ -9,7 +9,7 @@ import {
 } from '../logic.js';
 import { WEATHERS, weatherOf, stepWeather, stageWeather, validIdx, weatherSpellIdx } from '../weather.js';
 import { WeatherFx } from '../weatherFx.js';
-import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, has } from '../status.js';
+import { STATUS, BUFF_NAME, POISON_RATE, tickStatus, canAct, canCast, has } from '../status.js';
 import { drawMap } from '../mapRender.js';
 import { MapCamera } from '../mapCamera.js';
 import { Minimap } from '../minimap.js';
@@ -339,7 +339,7 @@ export class BattleScene extends Phaser.Scene {
       mapPatches: this.mapPatches.map((p) => [...p]),
       weatherIdx: this.weatherIdx,
       units: this.units.map(({ stats, ...u }) => ({
-        ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits },
+        ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits }, items: u.items && { ...u.items },
       })),
       summary: { lordLvl: lord.lvl },
     };
@@ -474,7 +474,7 @@ export class BattleScene extends Phaser.Scene {
   tickUnit(u) {
     const v = this.views.get(u);
     const p = { x: MAP_X + u.x * TILE + TILE / 2, y: MAP_Y + u.y * TILE + TILE / 2 };
-    for (const e of tickStatus(u)) {
+    for (const e of tickStatus(u, undefined, this.stage.poisonRate ?? POISON_RATE)) {
       if (e.type === 'poison') {
         floatText(this, p.x, p.y - 20, `中毒 -${e.dmg}`, STATUS.poison.css, 20);
         this.hud.log(`${u.name} 中毒，兵力 -${e.dmg}`);
