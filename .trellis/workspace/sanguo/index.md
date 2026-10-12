@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-10-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~126 | Active |
+| `journal-1.md` | ~149 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-10-12 | core-systems 收尾归档；第一关毒烟减伤与友军自动用药 | `4771b44`, `55510fb` | `feat/stage1-poison-ally-items` |
 | 5 | 2026-10-12 | 二周目继承（ngplus）与音效父任务归档 | `954a227`, `2a2d481` | `feat/ngplus` |
 | 4 | 2026-10-11 | 配乐与场景接入 | `d17f17f`, `39720c1` | `main` |
 | 3 | 2026-10-11 | 音频引擎与音效 | `7c47466`, `7d4ec99`, `6699053` | `main` |
