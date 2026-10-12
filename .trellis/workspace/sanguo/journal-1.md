@@ -191,3 +191,25 @@ core-systems 整体收尾：5 个代表关卡 AI 对战与旧格式存档读档�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 9: 招募系统：金币招募小兵与武将
+<!-- trellis-session: v=2 fp=ed1dffee3af6a516 -->
+
+**Date**: 2026-10-12
+**Task**: 招募系统：金币招募小兵与武将
+**Branch**: `feat/recruit-system`
+
+### Summary
+
+新增招募系统：整备界面招募页与营地募兵官；小兵 5 兵种任意招募、武将从非剧情武将随机候选（每关 4 名、可刷新 3 次）；开局金币 1000；招募单位通过 generals.js 镜像表接入花名册/出阵/存档；检查修复招募 id 与关卡敌军重名（改 rec 前缀）与重开第一关金币；浏览器端到端验证通过
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eafd45f` | feat(recruit): 新增招募系统（金币招募小兵与非剧情武将，开局 1000 金，候选每关可刷新 3 次） |
+
+### Status
+
+[OK] **Completed**
