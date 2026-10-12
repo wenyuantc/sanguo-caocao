@@ -25,7 +25,7 @@
 | [关卡数据](./stage-data.md) | 关卡对象、单位、事件、对白、武将外形、校验 | 已填写 |
 | [状态管理](./state-management.md) | registry、场景字段、单位对象、localStorage 存档 | 已填写 |
 | [数据契约](./data-contracts.md) | 单位/属性/存档/规则表的结构；没有类型系统时如何保证正确 | 已填写 |
-| [质量规范](./quality-guidelines.md) | 代码风格、必须/禁止的写法、验证命令、Git 工作流（只用 main）、评审清单 | 已填写 |
+| [质量规范](./quality-guidelines.md) | 代码风格、必须/禁止的写法、验证命令、评审清单 | 已填写 |
 
 ---
 
