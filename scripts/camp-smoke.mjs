@@ -39,7 +39,8 @@ for (const id of ids) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 672 } });
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
-  page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+  // 完整版 Chrome（PW_CHROME）会请求不存在的 favicon.ico，忽略这条 404
+  page.on('console', (m) => { if (m.type() === 'error' && !m.location().url.endsWith('/favicon.ico')) errs.push(m.text()); });
   const out = { id };
   try {
     await page.goto(`http://localhost:${port}/?camp=${id}`);
@@ -77,7 +78,7 @@ for (const id of ids) {
     // 整备与商店：打开再关闭
     await page.evaluate(() => {
       const s = window.game.scene.getScene('Camp');
-      s.openPrepUI(false);
+      s.openPrepUI('prep');
     });
     await page.waitForTimeout(200);
     out.prep = await page.evaluate(() => {
@@ -88,7 +89,7 @@ for (const id of ids) {
       done?.list[2].emit('pointerdown', {}, 0, 0, { stopPropagation() {} });
       return !!done && !s.modal && Array.isArray(s.deploy);
     });
-    await page.evaluate(() => window.game.scene.getScene('Camp').openPrepUI(true));
+    await page.evaluate(() => window.game.scene.getScene('Camp').openPrepUI('shop'));
     await page.waitForTimeout(200);
     out.shop = await page.evaluate(() => {
       const s = window.game.scene.getScene('Camp');
