@@ -4,8 +4,8 @@ import { WIDTH, HEIGHT, FONT, SETTINGS } from './config.js';
 import { panel, text, button } from './ui.js';
 import { chip } from './settingsMenu.js';
 import { saveSettings } from './settings.js';
-import { ITEMS } from './data.js';
-import { EQUIP, KINDS, newGear, gearName } from './equipment.js';
+import { ITEMS, SERIES } from './data.js';
+import { EQUIP, KINDS, newGear, gearName, gearDesc, treasureLvl } from './equipment.js';
 import { recordTreasures } from './legacy.js';
 
 const GOLD_MAX = 9999999;
@@ -21,8 +21,11 @@ export function openCheatMenu(scene, { lordLvl = 1, onWin, onClose } = {}) {
   const w = 900, h = 630, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
   root.add([shade, panel(scene, x0, y0, w, h, 0.98)]);
   root.add(text(scene, WIDTH / 2, y0 + 34, '金 手 指', 30, '#ff7ad9', FONT).setOrigin(0.5));
-  const toast = text(scene, WIDTH / 2, y0 + h - 92, '', 16, '#9ce0a8', FONT).setOrigin(0.5);
-  root.add(toast);
+  const toast = text(scene, WIDTH / 2, y0 + h - 78, '', 16, '#9ce0a8', FONT).setOrigin(0.5);
+  // 说明栏：鼠标移到（或点击）道具 / 装备上时显示属性说明
+  const descText = text(scene, WIDTH / 2, y0 + 484, '', 15, '#e8d6ae').setOrigin(0.5, 0).setAlign('center')
+    .setLineSpacing(4).setWordWrapWidth(w - 80, true);
+  root.add([toast, descText]);
   const say = (msg, color = '#9ce0a8') => toast.setColor(color).setText(msg);
 
   let closed = false;
@@ -74,7 +77,7 @@ export function openCheatMenu(scene, { lordLvl = 1, onWin, onClose } = {}) {
   let tab = 'items', page = 0;
   const pages = Math.ceil(GEAR_IDS.length / PER_PAGE);
   const tabs = [['items', '道　具'], ['gear', '装　备']].map(([id, name], j) => {
-    const c = chip(scene, x0 + 40 + j * 130, y0 + 176, 120, 38, name, () => { tab = id; refresh(); });
+    const c = chip(scene, x0 + 40 + j * 130, y0 + 176, 120, 38, name, () => { tab = id; descText.setText(''); refresh(); });
     root.add(c);
     return { id, c };
   });
@@ -83,14 +86,25 @@ export function openCheatMenu(scene, { lordLvl = 1, onWin, onClose } = {}) {
   const next = button(scene, x0 + w - 110, y0 + 176, 70, 38, '下页', () => { page = Math.min(pages - 1, page + 1); refresh(); }, 16);
   root.add([pageText, prev, next]);
 
-  const cw = (w - 80) / COLS, ch = 46, ly = y0 + 228;
+  const cw = (w - 80) / COLS, ch = 42, ly = y0 + 226;
   const cell = (i) => ({ x: x0 + 40 + (i % COLS) * cw, y: ly + Math.floor(i / COLS) * ch });
+  const itemDesc = (k) => `${ITEMS[k].name}：${ITEMS[k].desc}`;
+  // 装备说明按加入背包时的等级（宝物随曹操等级）
+  const gearInfo = (id) => {
+    const e = EQUIP[id], lvl = e.treasure && e.cap > 1 ? treasureLvl(lordLvl) : 1;
+    return `${e.treasure ? '★' : ''}${e.name}（${KINDS[e.kind].name}）${e.cap > 1 ? ` Lv${lvl}` : ''}：${gearDesc(id, lvl)}\n`
+      + `可装备：${e.series.map((sr) => SERIES[sr]?.name || sr).join('、')}`;
+  };
+  // 按钮悬停时显示说明（触屏点击时 onClick 内也会显示）
+  const hover = (b, s) => { b.list[2].on('pointerover', () => descText.setText(s)); return b; };
   const addItem = (k, n) => {
+    descText.setText(itemDesc(k));
     scene.items[k] = (scene.items[k] || 0) + n;
     say(`${ITEMS[k].name} +${n}`);
     refresh();
   };
   const addGear = (id) => {
+    descText.setText(gearInfo(id));
     const it = newGear(scene.inventory, id, lordLvl);
     if (EQUIP[id].treasure) recordTreasures([id]);
     say(`获得「${gearName(it)}」`);
@@ -110,8 +124,8 @@ export function openCheatMenu(scene, { lordLvl = 1, onWin, onClose } = {}) {
       Object.keys(ITEMS).forEach((k, i) => {
         const { x, y } = cell(i);
         list.add(text(scene, x + 6, y + 19, `${ITEMS[k].name}　×${scene.items[k] || 0}`, 17, ITEMS[k].fruit ? '#9ce0a8' : '#f1e3c2').setOrigin(0, 0.5));
-        list.add(button(scene, x + cw - 128, y + 2, 54, 34, '+1', () => addItem(k, 1), 15));
-        list.add(button(scene, x + cw - 68, y + 2, 58, 34, '+10', () => addItem(k, 10), 15));
+        list.add(hover(button(scene, x + cw - 128, y + 2, 54, 34, '+1', () => addItem(k, 1), 15), itemDesc(k)));
+        list.add(hover(button(scene, x + cw - 68, y + 2, 58, 34, '+10', () => addItem(k, 10), 15), itemDesc(k)));
       });
       return;
     }
@@ -122,10 +136,10 @@ export function openCheatMenu(scene, { lordLvl = 1, onWin, onClose } = {}) {
       const e = EQUIP[id], { x, y } = cell(i);
       const n = scene.inventory.filter((it) => it.id === id).length;
       // 宝物唯一：已拥有时不能再加
-      const b = button(scene, x, y + 2, cw - 10, 38, `${e.treasure ? '★' : ''}${e.name}（${KINDS[e.kind].name}）`, () => addGear(id), 15);
+      const b = hover(button(scene, x, y + 2, cw - 10, 36, `${e.treasure ? '★' : ''}${e.name}（${KINDS[e.kind].name}）`, () => addGear(id), 15), gearInfo(id));
       if (e.treasure && n) b.setDisabled(true);
       list.add(b);
-      if (n) list.add(text(scene, x + cw - 18, y + 21, e.treasure ? '已有' : `×${n}`, 13, '#ffd36a').setOrigin(1, 0.5));
+      if (n) list.add(text(scene, x + cw - 18, y + 20, e.treasure ? '已有' : `×${n}`, 13, '#ffd36a').setOrigin(1, 0.5));
     });
   };
   const refresh = () => scene.time.delayedCall(0, render);

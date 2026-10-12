@@ -432,10 +432,12 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     });
     const pool = ensurePool(scene.registry, plan.stageId);
     list.add(text(scene, sx, by + 2, '武　将（每关换一批）', 16, '#e9c46a', FONT));
-    list.add(button(scene, sx + 466 - 150, by - 2, 150, 28, `刷新（剩余 ${pool.refreshLeft} 次）`, () => {
-      toast.setText(refreshPool(scene.registry, plan.stageId) ? '换了一批武将' : '本关刷新次数已用完');
+    // 金手指开启时刷新不限次数
+    const free = cheatOn();
+    list.add(button(scene, sx + 466 - 150, by - 2, 150, 28, free ? '刷新（无限）' : `刷新（剩余 ${pool.refreshLeft} 次）`, () => {
+      toast.setText(refreshPool(scene.registry, plan.stageId, free) ? '换了一批武将' : '本关刷新次数已用完');
       refresh();
-    }, 14).setDisabled(pool.refreshLeft <= 0));
+    }, 14).setDisabled(!free && pool.refreshLeft <= 0));
     if (!pool.names.length) list.add(text(scene, sx, by + 40, '本批武将已全部招募', 15, '#8a7a60'));
     pool.names.forEach((name, i) => {
       const p = generalPrice(lvl);
