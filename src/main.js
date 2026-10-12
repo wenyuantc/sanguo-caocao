@@ -34,16 +34,30 @@ window.game = new Phaser.Game({
   scene: [TitleScene, BattleScene, StoryScene, CampScene, EndingScene],
 });
 
-// 触屏设备：首次触摸（touchend 才算浏览器认可的用户操作）时尝试全屏，进入全屏后锁定横屏；不支持时静默忽略
+// 触屏设备：左下角全屏按钮（浏览器不支持全屏时不显示，如 iPhone Safari）；进入全屏后锁定横屏，不支持时静默忽略
 if (IS_TOUCH) {
-  const scale = window.game.scale;
-  scale.once(Phaser.Scale.Events.ENTER_FULLSCREEN, () => { try { screen.orientation?.lock?.('landscape')?.catch(() => {}); } catch (e) { /* 不支持 */ } });
-  // 等同 scale.startFullscreen()，但接住 requestFullscreen 返回的 Promise（被拒时不产生未处理的 rejection）；进入全屏后 Phaser 的 fullscreenchange 监听照常 refresh 并发出 ENTER_FULLSCREEN
-  window.addEventListener('touchend', () => {
-    const fs = scale.fullscreen, el = scale.fullscreenTarget;
-    if (!fs?.available || fs.active || !el) return;
-    try { el[fs.request]({ navigationUI: 'hide' })?.catch?.(() => {}); } catch (e) { /* 不支持 */ }
-  }, { once: true });
+  const scale = window.game.scale, fs = scale.fullscreen, btn = document.getElementById('fs-btn');
+  if (fs?.available && btn) {
+    btn.classList.add('show');
+    scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, () => {
+      btn.classList.add('on');
+      try { screen.orientation?.lock?.('landscape')?.catch(() => {}); } catch (e) { /* 不支持 */ }
+    });
+    scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => btn.classList.remove('on'));
+    // 触摸不能传给 Phaser：它在 window 上监听画布外的触摸并当作游戏点击（营中会走路、标题会开始），只跳过 defaultPrevented 的事件。
+    // 因此在 touchend 里切换（touchend 是浏览器认可的用户操作；preventDefault 后不会再有 click）
+    const block = (e) => { e.preventDefault(); e.stopPropagation(); };
+    btn.addEventListener('touchstart', block);
+    btn.addEventListener('touchend', (e) => {
+      block(e);
+      // 自己调用全屏 API 并接住返回的 Promise（Phaser 的 start / stopFullscreen 会丢弃它，被拒时产生未处理的 rejection）；
+      // 进入 / 退出后 Phaser 的 fullscreenchange 监听照常 refresh 并发出 ENTER_FULLSCREEN / LEAVE_FULLSCREEN
+      try {
+        const p = fs.active ? document[fs.cancel]() : scale.fullscreenTarget?.[fs.request]({ navigationUI: 'hide' });
+        p?.catch?.(() => {});
+      } catch (e) { /* 不支持 */ }
+    });
+  }
   // iOS Safari 忽略 user-scalable=no，双指缩放要阻止 gesturestart
   document.addEventListener('gesturestart', (e) => e.preventDefault());
 }
