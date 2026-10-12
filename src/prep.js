@@ -13,6 +13,8 @@ import {
 } from './equipment.js';
 import { ensureTextures, gearIcon } from './spellFx.js';
 import { panel, text, button, portrait } from './ui.js';
+import { cheatOn } from './cheat.js';
+import { openCheatMenu } from './cheatMenu.js';
 
 // 第一页不叫“出阵”：确认按钮“出　阵”按文字查找，不能重名
 const TABS = [['deploy', '阵　容'], ['equip', '装　备'], ['items', '道　具'], ['shop', '商　店'], ['recruit', '招　募']];
@@ -129,6 +131,12 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     onConfirm(plan.pool.filter((c) => selected.has(c.id)).map((c) => c.id));
   }, 20);
   root.add([...tabBtns, prevBtn, nextBtn, resetBtn, okBtn]);
+  // 金手指开启时：军资金左侧放“金手指”按钮，关闭面板后写回战役状态并重绘（金钱、道具、背包）
+  if (cheatOn()) {
+    root.add(button(scene, x0 + w - 270, y0 + 16, 110, 34, '金 手 指', () => {
+      openCheatMenu(scene, { lordLvl: lordLevel(roster(), getStage(plan.stageId)), onClose: () => { save(); refresh(); } });
+    }, 16));
+  }
   scene.input.keyboard?.on('keydown-LEFT', prevKey);
   scene.input.keyboard?.on('keydown-RIGHT', nextKey);
 
@@ -424,10 +432,12 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     });
     const pool = ensurePool(scene.registry, plan.stageId);
     list.add(text(scene, sx, by + 2, '武　将（每关换一批）', 16, '#e9c46a', FONT));
-    list.add(button(scene, sx + 466 - 150, by - 2, 150, 28, `刷新（剩余 ${pool.refreshLeft} 次）`, () => {
-      toast.setText(refreshPool(scene.registry, plan.stageId) ? '换了一批武将' : '本关刷新次数已用完');
+    // 金手指开启时刷新不限次数
+    const free = cheatOn();
+    list.add(button(scene, sx + 466 - 150, by - 2, 150, 28, free ? '刷新（无限）' : `刷新（剩余 ${pool.refreshLeft} 次）`, () => {
+      toast.setText(refreshPool(scene.registry, plan.stageId, free) ? '换了一批武将' : '本关刷新次数已用完');
       refresh();
-    }, 14).setDisabled(pool.refreshLeft <= 0));
+    }, 14).setDisabled(!free && pool.refreshLeft <= 0));
     if (!pool.names.length) list.add(text(scene, sx, by + 40, '本批武将已全部招募', 15, '#8a7a60'));
     pool.names.forEach((name, i) => {
       const p = generalPrice(lvl);

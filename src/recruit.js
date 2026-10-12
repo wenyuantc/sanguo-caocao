@@ -69,11 +69,11 @@ export function ensurePool(registry, stageId) {
   return next;
 }
 
-// 手动刷新：次数用尽时返回 null
-export function refreshPool(registry, stageId) {
+// 手动刷新：次数用尽时返回 null；free（金手指）为真时不限次数、不扣次数
+export function refreshPool(registry, stageId, free = false) {
   const pool = ensurePool(registry, stageId);
-  if (pool.refreshLeft <= 0) return null;
-  const next = { stageId, names: rollCandidates(registry.get('recruits') || {}, pool.names), refreshLeft: pool.refreshLeft - 1 };
+  if (!free && pool.refreshLeft <= 0) return null;
+  const next = { stageId, names: rollCandidates(registry.get('recruits') || {}, pool.names), refreshLeft: free ? pool.refreshLeft : pool.refreshLeft - 1 };
   registry.set('recruitPool', next);
   return next;
 }

@@ -202,6 +202,7 @@ export class TitleScene extends Phaser.Scene {
     this.registry.set('gold', START_GOLD);
     this.registry.set('recruits', {});
     this.registry.set('recruitPool', null);
+    this.registry.set('cheated', false);
     setRecruits({});
   }
 

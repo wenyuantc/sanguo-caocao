@@ -87,6 +87,12 @@
 - 敌我判断只有一条规则：`isFoe(a, b)`，即是否敌军；我军和友军互为友方。
 - 规则和事件用 `u.id`（关卡内唯一）识别单位；`views` 用对象引用识别单位。
 
+## 金手指（`src/cheat.js`）
+
+- 开关读 `SETTINGS`：`cheatOn(k?)`（总开关且分项开）、`godOf(d)`（我军无敌）、`killBy(a, d)`（我军打敌军秒杀）、`cheatDmg(a, d, dmg)`。只作用于 `player` 阵营，友军 / 敌军不变。
+- 挂钩点只在场景层：`actions.strike`（无敌时攻击落空、秒杀时必中并打掉全部兵力，且绕过龙鳞铠）、`actions.doSpell` 在 `resolveSpell` 与 `applySpell` 之间修正效果（`cheatSpell`）、`BattleScene.tickUnit`（无敌时中毒比例传 0）、`BattleScene.finishUnit`（无限行动不设 `acted`、不自动结束回合）。`logic.js` 的预测与 AI 不受影响。
+- 金手指面板 `cheatMenu.openCheatMenu(scene, { lordLvl, onWin?, onClose })` 直接改 `scene.gold / items / inventory`：战斗中随快照 / 胜利写回，营中在 `onClose` 写回 registry。
+
 ## 函数契约（`src/logic.js`）
 
 - 纯函数显式接收 `(map, units, u)` 或 `(map, a, d)`，从不接收场景。

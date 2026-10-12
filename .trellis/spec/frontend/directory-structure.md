@@ -34,6 +34,8 @@ src/
 ├── saves.js            # localStorage 存档位/自动存档、导出导入、applyLoad
 ├── legacy.js           # 二周目继承：结局记录与宝物图鉴（localStorage sanguo-legacy）、许劭的二周目选项脚本 / 结果写入
 ├── saveMenu.js         # 存档/读档弹窗 UI（openSaveMenu）
+├── cheat.js            # 金手指规则：开关读取 cheatOn / godOf / killBy / cheatDmg、本周目标记 markCheat
+├── cheatMenu.js        # 金手指面板 UI（openCheatMenu）：分项开关、军资金、道具、装备、直接胜利
 ├── prep.js             # 整备弹窗 UI（openPrep）：阵容 / 装备 / 道具 / 商店 / 招募五页（`opts.replan` 招募后重算阵容）
 ├── rewardPanel.js      # 过关战果弹窗（openRewards，返回 Promise）
 ├── infoPanel.js        # 部队情报弹窗 UI（openInfo）

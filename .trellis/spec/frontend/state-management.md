@@ -23,7 +23,9 @@
 | `recruits` | `{ [rec<n>]: { name, cls, kind: 'general' \| 'soldier', bonus } }`，招募单位定义；`generals.js` 的 `RECRUITS` 是它的模块级镜像（`isGeneral` / `generalOf` 读镜像） | 新游戏（`{}`）、招募（`recruit.recruitUnit`，同时写 `roster` / `joined`）、`applyLoad`（缺失为 `{}`）。**三处都必须调用 `setRecruits`** |
 | `recruitPool` | `{ stageId, names: [武将名], refreshLeft }` 当前关卡间隙的武将候选（每批 4 名，刷新 3 次，`stageId` 变化时 `ensurePool` 换批重置） | 新游戏（`null`）、`BattleScene.create` / `CampScene.create` / 胜利写自动存档前（`ensurePool`）、招募页刷新、`applyLoad`（缺失为 `null`） |
 
-- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部十个** key（并 `setRecruits({})`）。
+| `cheated` | 布尔，本周目是否用过金手指（永久标记，关掉开关也不清除） | 新游戏（`false`）、`cheat.markCheat`（金手指总开关打开时：`BattleScene.create` / `CampScene.create`、战斗 / 营中设置面板切到“开”）、`applyLoad`（缺失为 `false`）；地图版本重开时保留存档的标记 |
+
+- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部十一个** key（并 `setRecruits({})`）。
   候选必须在可存档之前生成（`ensurePool`），否则读档会换批、绕过刷新次数限制。
   新增 key 时，要在这里重置，并在 `saves.applyLoad` 中恢复。
 - 写入时一律写副本：`this.registry.set('flags', { ...this.flags })`、`items = { ...this.items }`。
@@ -79,6 +81,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
   `applyLoad` 遇到 `camp` 时写入 registry 后 `scene.start('Camp', { stage, talked, deploy, pos })`；`validSave` 接受 `camp`（`talked` 缺失或为数组）；存档列表显示“营中 · 下一战：<关名>”。`pos` 不可走时回到出生点。
 - 营中没有战斗状态：`CampScene` 只复制 `inventory` / `gold` / `items` 给整备界面（`openPrep` 直接读写 `scene.inventory` 等并立即写回 registry），对白选项（`applyChoice`）直接写 registry 的 `red` / `flags`。营中选好的阵容经 `goStage(scene, id, { deploy })` → `StoryScene` → `afterPre` 带进 `BattleScene`（`campDeploy`），由 `deploy.initialDeploy` 过滤后作为整备的初始阵容；重新挑战（`retry`）沿用 `campDeploy`；读档不带阵容。
 - `EndingScene` 会调用 `clearAuto()`。
+- 金手指标记：战斗快照、营中快照、胜利时的自动存档都写 `cheated`（取 registry），存档列表在难度标签后显示 `［金手指］`。金手指开关本身是游戏设置（`settings.js` 的 `cheat` 总开关与 `cheatGod` / `cheatKill` / `cheatMove` 分项），不进存档。
 - 导出/导入的文件格式为 `{ app: 'sanguo-caocao-save', version: 1, type: 'all' | 'single', ... }`；
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。
 - 自动存档（`writeAuto(data, kind = 'stage')`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`、`summary.lordLvl`；胜利时为 `'camp'`（另有 `talked: []`、`deploy: null`），出征时为 `'stage'`（取 `CampScene.snapshot()` 去掉 `talked` / `pos`，保留 `deploy`）。调试关卡不写。
