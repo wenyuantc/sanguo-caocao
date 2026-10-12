@@ -89,12 +89,12 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
     } catch (e) {
       say(e.message, '#ff8a7a');
     }
-  }, 15);
+  }, 15, { onRelease: true });
   const exportBtn = button(scene, x0 + 124, y0 + 14, 92, 32, '导出全部', () => {
     if (!readAuto() && !listSlots().some(Boolean) && !hasLegacy()) { say('暂无可导出的存档', '#ff8a7a'); return; }
     exportAll();
     say('已导出全部存档');
-  }, 15);
+  }, 15, { onRelease: true });
   root.add([importBtn, exportBtn]);
   scene.input.keyboard?.on('keydown-LEFT', prevKey);
   scene.input.keyboard?.on('keydown-RIGHT', nextKey);
@@ -159,7 +159,7 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
           toast.setColor('#9ce0a8').setText(`已删除 ${label}`);
           scene.time.delayedCall(0, render);
         }, 14);
-        const exp = button(scene, x0 + w - 196, y + 7, 76, 28, '导出', () => { exportSlot(row.index); say(`已导出 ${label}`); }, 14);
+        const exp = button(scene, x0 + w - 196, y + 7, 76, 28, '导出', () => { exportSlot(row.index); say(`已导出 ${label}`); }, 14, { onRelease: true });
         list.add([del, exp]);
       }
     });

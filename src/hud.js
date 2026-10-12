@@ -36,7 +36,8 @@ export class Hud {
     let prev = '';
     scene.add.zone(970, 4, 76, 32).setOrigin(0).setDepth(52).setInteractive()
       .on('pointerover', () => { prev = this.forecastText.text; this.forecast(this.weatherInfo); })
-      .on('pointerout', () => this.forecast(prev));
+      // 触屏抬起即触发 out：不还原，说明保留到下次点击地图刷新
+      .on('pointerout', (p) => { if (!p.wasTouch) this.forecast(prev); });
 
     // 右侧面板
     panel(scene, PANEL_X + 4, MAP_Y + 4, PW - 8, HEIGHT - MAP_Y - 8).setDepth(50);
