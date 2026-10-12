@@ -185,7 +185,10 @@ return key;
 
 - 设置在 `src/settings.js`（localStorage `sanguo-settings`，损坏回退默认），启动时由 `config.js` 读出
   `SETTINGS` / `RES`，`main.js` 据此设置 `antialias`、`fps.limit` 与帧率角标。设置面板 `settingsMenu.js`
-  的渲染类设置（`RENDER_KEYS`）只在标题页修改，保存后 `location.reload()` 生效（全屏立即生效）；音量类设置即时生效，战斗中可打开只含音量行的面板（见「音频」）。
+  的渲染类设置（`RENDER_KEYS`）只在标题页修改，保存后 `location.reload()` 生效（全屏立即生效）；音量类设置即时生效，战斗中可打开只含游戏速度与音量行的面板（见「音频」）。
+- 游戏速度 `speed`（1x–16x）即时保存、不重载，只作用于 Battle：`BattleScene.applySpeed()` 在 `create` 与战斗设置面板关闭时设置
+  `tweens.timeScale` / `time.timeScale`。战斗流程的等待必须走 `scene.tweens` / `scene.time`（不要用 `setTimeout`），否则不会随倍率加速；
+  `time.now` 不受倍率影响，防误触判断仍按真实时间。Story 场景自行管理倍率，不读此设置。
 - 画质“低”时 `UnitView.idle` 不创建，引用一律写 `v.idle?.…`。
 - 帧率上限默认 0（跟随屏幕）：Phaser 的限帧器在 60Hz 屏幕上设 60 会因 rAF 计时抖动丢帧。
 - `pointermove` 处理中不要无条件重建含 Text / 头像的面板：`BattleScene.onHover` 按“格子 + state”去重

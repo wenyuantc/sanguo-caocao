@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-10-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~171 | Active |
+| `journal-1.md` | ~193 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-10-12 | 游戏加速设置（1x~16x） | `0c18588` | `feat/game-speed` |
 | 7 | 2026-10-12 | 移动端横屏触屏适配 | `f3b5108` | `main` |
 | 6 | 2026-10-12 | core-systems 收尾归档；第一关毒烟减伤与友军自动用药 | `4771b44`, `55510fb` | `feat/stage1-poison-ally-items` |
 | 5 | 2026-10-12 | 二周目继承（ngplus）与音效父任务归档 | `954a227`, `2a2d481` | `feat/ngplus` |

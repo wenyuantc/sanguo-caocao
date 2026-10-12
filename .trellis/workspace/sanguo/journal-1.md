@@ -169,3 +169,25 @@ core-systems 整体收尾：5 个代表关卡 AI 对战与旧格式存档读档�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 8: 游戏加速设置（1x~16x）
+<!-- trellis-session: v=2 fp=27ec743661c5ad52 -->
+
+**Date**: 2026-10-12
+**Task**: 游戏加速设置（1x~16x）
+**Branch**: `feat/game-speed`
+
+### Summary
+
+新增游戏速度设置 1x/1.25x/1.5x/2x/4x/8x/16x，首页与战斗内设置面板均可切换，即时保存生效；仅作用于战斗场景的 tweens/time timeScale，剧情场景不受影响。补充 scene-and-rendering 规范说明。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c18588` | feat(settings): 新增游戏速度设置（1x~16x，仅作用于战斗） |
+
+### Status
+
+[OK] **Completed**
