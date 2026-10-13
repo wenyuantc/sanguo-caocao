@@ -3,6 +3,7 @@ import { panel, text, button, slider } from './ui.js';
 import { SETTING_OPTIONS, RENDER_KEYS, saveSettings, resolveRes } from './settings.js';
 import { engine } from './audio/engine.js';
 import { sfx } from './audio/sfx.js';
+import { markCheat } from './cheat.js';
 
 const ROWS = [
   ['res', '渲染分辨率'],
@@ -12,7 +13,7 @@ const ROWS = [
 ];
 
 // 选项小按钮：选中时金底高亮
-function chip(scene, x, y, w, h, label, onClick) {
+export function chip(scene, x, y, w, h, label, onClick) {
   const c = scene.add.container(x, y);
   const bg = scene.add.graphics();
   const t = text(scene, w / 2, h / 2, label, 17, '#f6e7c1', FONT).setOrigin(0.5);
@@ -63,17 +64,58 @@ function audioRows(scene, root, x0, y, step) {
   chips.forEach((o, i) => o.setOn(SETTING_OPTIONS.mute[i][0] === SETTINGS.mute));
 }
 
+// 游戏速度一行：7 档，即时写入 SETTINGS 并保存（战斗场景在关闭面板时应用倍率）
+function speedRow(scene, root, x0, y) {
+  root.add(text(scene, x0 + 40, y + 19, '游戏速度', 20, '#e9c46a', FONT).setOrigin(0, 0.5));
+  const opts = SETTING_OPTIONS.speed;
+  const sync = () => chips.forEach((o, i) => o.setOn(opts[i][0] === SETTINGS.speed));
+  const chips = opts.map(([v, name], j) => {
+    const c = chip(scene, x0 + 190 + j * 66, y, 60, 38, name, () => {
+      SETTINGS.speed = v;
+      try { saveSettings({ ...SETTINGS }); } catch { /* localStorage 不可用时只在本次生效 */ }
+      sync();
+    });
+    root.add(c);
+    return c;
+  });
+  sync();
+}
+
+// 金手指总开关一行：即时保存。mark 为真（战役中打开）时切到“开”立即标记本周目；
+// onCheat 存在时右侧显示“金手指面板”按钮（总开关关时置灰），点击后关闭设置面板再调用
+function cheatRow(scene, root, x0, y, { mark, onCheat, close }) {
+  root.add(text(scene, x0 + 40, y + 19, '金 手 指', 20, '#ff7ad9', FONT).setOrigin(0, 0.5));
+  const opts = SETTING_OPTIONS.cheat;
+  const btn = onCheat && button(scene, x0 + 430, y, 200, 38, '金手指面板', () => { close(); onCheat(); }, 17);
+  const sync = () => {
+    chips.forEach((o, i) => o.setOn(opts[i][0] === SETTINGS.cheat));
+    btn?.setDisabled(!SETTINGS.cheat);
+  };
+  const chips = opts.map(([v, name], j) => {
+    const c = chip(scene, x0 + 190 + j * 116, y, 106, 38, name, () => {
+      SETTINGS.cheat = v;
+      try { saveSettings({ ...SETTINGS }); } catch { /* localStorage 不可用时只在本次生效 */ }
+      if (mark) markCheat(scene);
+      sync();
+    });
+    root.add(c);
+    return c;
+  });
+  if (btn) root.add(btn);
+  sync();
+}
+
 // 游戏设置：渲染类改动先记在草稿里，保存后重载页面生效（全屏立即生效）；音量类改动即时生效并保存。
-// audioOnly：战斗中打开，只显示音量相关的行。onClose 在关闭后调用
-export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
+// audioOnly：战斗 / 营中打开，只显示游戏速度、音量与金手指的行（onCheat 打开金手指面板）。onClose 在关闭后调用
+export function openSettingsMenu(scene, { audioOnly = false, onClose, onCheat } = {}) {
   const draft = { ...SETTINGS };
   const root = scene.add.container(0, 0).setDepth(3000);
   const shade = scene.add.rectangle(0, 0, WIDTH, HEIGHT, 0x000000, 0.65).setOrigin(0).setInteractive();
   shade.on('pointerdown', (p, x, y, e) => e?.stopPropagation?.());
-  const w = 680, h = audioOnly ? 350 : 610, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
+  const w = 680, h = audioOnly ? 460 : 660, x0 = (WIDTH - w) / 2, y0 = (HEIGHT - h) / 2;
   root.add([shade, panel(scene, x0, y0, w, h, 0.98)]);
-  root.add(text(scene, WIDTH / 2, y0 + 36, audioOnly ? '音 量 设 置' : '游 戏 设 置', 30, '#ffd36a', FONT).setOrigin(0.5));
-  const hint = text(scene, WIDTH / 2, y0 + h - 104, '', 15, '#e8d6ae').setOrigin(0.5).setAlign('center').setLineSpacing(6);
+  root.add(text(scene, WIDTH / 2, y0 + 36, audioOnly ? (scene.scene.key === 'Camp' ? '营 中 设 置' : '战 斗 设 置') : '游 戏 设 置', 30, '#ffd36a', FONT).setOrigin(0.5));
+  const hint = text(scene, WIDTH / 2, y0 + h - 90, '', 15, '#e8d6ae').setOrigin(0.5).setAlign('center').setLineSpacing(6);
   root.add(hint);
 
   let fsLabel = null;
@@ -88,8 +130,10 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
   };
 
   if (audioOnly) {
-    audioRows(scene, root, x0, y0 + 80, 52);
-    hint.setText('音量调整即时生效');
+    speedRow(scene, root, x0, y0 + 80);
+    audioRows(scene, root, x0, y0 + 132, 52);
+    cheatRow(scene, root, x0, y0 + 296, { mark: true, onCheat, close });
+    hint.setText('游戏速度、音量与金手指开关即时生效');
     root.add(button(scene, WIDTH / 2 - 90, y0 + h - 62, 180, 42, '返　回', close, 18));
     scene.input.keyboard?.on('keydown-ESC', close);
     return;
@@ -101,10 +145,10 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
     chips.forEach(({ c, k, v }) => c.setOn(draft[k] === v));
     const r = resolveRes(draft);
     hint.setText(`当前画布 ${WIDTH * RES}×${HEIGHT * RES}　→　保存后 ${WIDTH * r}×${HEIGHT * r}\n`
-      + (renderChanged() ? '画面设置已修改，保存后将重新加载页面' : '卡顿时可降低分辨率或将画质设为“低”；音量调整即时生效'));
+      + (renderChanged() ? '画面设置已修改，保存后将重新加载页面' : '卡顿时可降低分辨率或将画质设为“低”；游戏速度（仅战斗）与音量即时生效'));
   };
   ROWS.forEach(([k, label], i) => {
-    const y = y0 + 76 + i * 50;
+    const y = y0 + 76 + i * 46;
     root.add(text(scene, x0 + 40, y + 19, label, 20, '#e9c46a', FONT).setOrigin(0, 0.5));
     SETTING_OPTIONS[k].forEach(([v, name], j) => {
       const c = chip(scene, x0 + 190 + j * 116, y, 106, 38, name, () => { draft[k] = v; refresh(); });
@@ -113,7 +157,7 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
     });
   });
   // 全屏：立即切换，不需要保存
-  const fy = y0 + 76 + ROWS.length * 50;
+  const fy = y0 + 76 + ROWS.length * 46;
   root.add(text(scene, x0 + 40, fy + 19, '全　　屏', 20, '#e9c46a', FONT).setOrigin(0, 0.5));
   const fsBtn = button(scene, x0 + 190, fy, 222, 38, '', () => { scene.scale.toggleFullscreen(); }, 17);
   fsLabel = () => fsBtn.label.setText(scene.scale.isFullscreen ? '退 出 全 屏' : '进 入 全 屏');
@@ -121,14 +165,17 @@ export function openSettingsMenu(scene, { audioOnly = false, onClose } = {}) {
   scene.scale.on('leavefullscreen', fsLabel);
   fsLabel();
   root.add(fsBtn);
-  // 音量：与画面设置之间加一条分隔线
+  // 游戏速度与音量：与画面设置之间加一条分隔线
   const ay = fy + 60;
   const line = scene.add.graphics();
   line.lineStyle(1, COLORS.gold, 0.35).lineBetween(x0 + 30, ay - 11, x0 + w - 30, ay - 11);
   root.add(line);
-  audioRows(scene, root, x0, ay, 50);
+  speedRow(scene, root, x0, ay);
+  audioRows(scene, root, x0, ay + 46, 46);
+  // 金手指：标题画面只切换开关，进入战斗 / 营中时才标记
+  cheatRow(scene, root, x0, ay + 184, { mark: false });
 
-  // 只有渲染类设置改动时才保存并重载；音量已即时保存
+  // 只有渲染类设置改动时才保存并重载；音量、游戏速度已即时保存
   const apply = () => {
     if (!renderChanged()) return close();
     const next = { ...SETTINGS };

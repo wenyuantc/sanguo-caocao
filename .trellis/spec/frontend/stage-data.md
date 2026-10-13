@@ -42,13 +42,15 @@ export default [
 | `map`（行数 × 列数 = `MAP_SIZES[id]`；旧版 13 × 18） | `drawMap`、`terrainAt`、`reachable`、镜头 / 小地图；字符是 `terrain.js` 中 `TERRAIN` 的 key（30 种，一字符一格） |
 | `mapVersion`（1 旧版 / 2 原版尺寸） | `normalizeStage` 默认 1；写入战斗中存档，读档不一致时从本关开头重开；校验按版本检查尺寸 |
 | `units` | 敌军/友军：`BattleScene.create` → `createUnit(def, null, difficulty)`；我军：`deploy.planDeploy` 推导出阵位置、上限、必须 / 不可出阵，整备后 `buildPlayerDefs` → `createUnit(def, roster[id], difficulty)`。都先按 `flagOk`（`ifFlag`/`unlessFlag`）过滤 |
-| `deploy`（可选） | `planDeploy`：`{ max?, required?, slots? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式 |
+| `deploy`（可选） | `planDeploy`：`{ max?, required?, slots?, bonus? }` 覆盖自动推导（见 `docs/STAGE_GUIDE.md` §3），校验脚本检查格式。`max` / `slots` 之外还会按章节（`CHAPTER_BONUS`）自动补额外出阵位并加名额，`bonus` 覆盖章节增量（0 = 不加） |
 | `victory[]` | `checkEnd`（`boss`/`all`/`reach`）、`nextPhase`（`survive`）、`drawGoals`（`reach` 目标格） |
 | `protect`、`escape`、`victoryFlags` | `checkEnd`、`tryEscape`、`victory()` |
 | `events[]` | 援军默认从最近地图边缘走入（6 格内，更远淡入）；落点被占时 `spawnTile` 在曼哈顿 3 格内找该兵种可站的空格，都没有才放弃该单位；`fireEvents`（回合 + 阵营，阵营默认 `'enemy'`）、`fireDeathEvents`（`onDeath`）、`findDuel`/`runDuel`（`duel`）。已触发事件在 `firedEvents` 中**按数组下标**记录 |
 | `prologue` / `epilogue` / `epilogues{annihilate,retreat,win,…}` | 在剧情场景中演出（`story/auto.js` 的 `autoScene` 生成脚本）；结尾对白选择顺序（`postLines`）：`annihilate`（敌军全灭时）→ `epilogues[outcome]` → `epilogue` |
 | `scenes`（可选）`{ pre?, post? }` | `sceneFor`：手写脚本优先于自动生成；`post` 可为数组或与 `epilogues` 同名的分支对象（加 `default`）。手写时原对白（含 `choices` / `red` / `setFlag`）须原样放进 `say`，prologue / epilogue 字段保留。指令见 `docs/STAGE_GUIDE.md` §8.5 |
 | `events[].stage`、`units[].from` | `battleStage.js`：战场演出指令与援军入场格（见 §8）；地形变化写入战斗存档 `mapPatches` |
+| `poisonRate`（可选，0~1） | 本关中毒每回合扣血比例，`BattleScene` 传给 `tickStatus`，缺省 `POISON_RATE`（0.1）；第一关为 0.05 |
+| `units[].spellMult` / `units[].items`（可选） | 见 data-contracts “运行时单位对象”；`items` 只允许友军设置，校验脚本检查道具 id 与数量 |
 | `next` | `stages.js` 中的 `resolveNext(stage, outcome, annihilated, red)` |
 | `victoryText`、`defeatText`、`turns` | `Hud` 右侧面板 / 顶栏 |
 

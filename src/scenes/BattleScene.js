@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, hiDpi } from '../config.js';
+import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, FONT, PANEL_X, WIDTH, HEIGHT, IS_TOUCH, SETTINGS, hiDpi } from '../config.js';
 import { getStage, resolveNext, routeOf, FIRST_STAGE, PLANNED_IDS } from '../stages.js';
 import { classOf, RANGES, SPELLS, ITEMS, SEAL_FROM, LOOT, diffOf, passable } from '../data.js';
 import {
@@ -9,7 +9,7 @@ import {
 } from '../logic.js';
 import { WEATHERS, weatherOf, stepWeather, stageWeather, validIdx, weatherSpellIdx } from '../weather.js';
 import { WeatherFx } from '../weatherFx.js';
-import { STATUS, BUFF_NAME, tickStatus, canAct, canCast, has } from '../status.js';
+import { STATUS, BUFF_NAME, POISON_RATE, tickStatus, canAct, canCast, has } from '../status.js';
 import { drawMap } from '../mapRender.js';
 import { MapCamera } from '../mapCamera.js';
 import { Minimap } from '../minimap.js';
@@ -21,7 +21,10 @@ import { doAttack, doSpell, doItem, runAI, gainExp, gainGear } from '../actions.
 import { writeAuto, applyLoad, restoreRegistry, stageStartSave } from '../saves.js';
 import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
-import { GENERALS, isGeneral } from '../generals.js';
+import { openCheatMenu } from '../cheatMenu.js';
+import { cheatOn, markCheat } from '../cheat.js';
+import { isGeneral, generalOf } from '../generals.js';
+import { ensurePool, START_GOLD } from '../recruit.js';
 import { planDeploy, buildPlayerDefs, initialDeploy } from '../deploy.js';
 import { openPrep } from '../prep.js';
 import { openInfo } from '../infoPanel.js';
@@ -48,6 +51,10 @@ export class BattleScene extends Phaser.Scene {
     this.sel = null;
     this.menu = null;
     this.hoverKey = null;
+    this.touchAim = null; // 触屏选目标：第一次点击预览的目标格，再点同一格才执行
+    this.aimTag = null;
+    this.cancelBtn = null;
+    this.endGuard = 0; // 取消按钮消失后“结束回合”延迟出现的时刻，防止连点取消误结束回合
     this.mapReset = false;
     // 开场场景（StoryScene）播完后进入时为 true；否则新开一关先转去开场场景（读档、重新挑战除外）
     this.skipStory = !!data?.skipStory;
@@ -68,13 +75,16 @@ export class BattleScene extends Phaser.Scene {
     const difficulty = load.difficulty || 'normal';
     if (stage.id === FIRST_STAGE) {
       restoreRegistry(this, {
-        difficulty, roster: {}, joined: [], items: { ...diffOf(difficulty).items }, red: 0, flags: {}, inventory: [], gold: 0,
+        difficulty, roster: {}, joined: [], items: { ...diffOf(difficulty).items }, red: 0, flags: {}, inventory: [], gold: START_GOLD,
+        cheated: load.cheated,
       });
       return;
     }
     const start = stageStartSave(load, stage.id, (id) => getStage(id)?.id);
     if (start) restoreRegistry(this, start);
     else console.warn('地图版本不一致且没有本关开头的自动存档，沿用战斗存档中的战役状态', stage.id);
+    // 金手指标记不随重开清除
+    if (load.cheated) this.registry.set('cheated', true);
   }
 
   // 释放上一关生成的人物 / 头像贴图，避免连续游玩时内存持续增长（按需重新生成）
@@ -86,6 +96,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     hiDpi(this);
+    this.applySpeed();
     this.purgeTextures();
     const stage = (this.stage = getStage(this.stageId) || getStage(FIRST_STAGE));
     this.stageId = stage.id;
@@ -99,6 +110,8 @@ export class BattleScene extends Phaser.Scene {
       this.load = null;
       this.mapReset = true;
     }
+    // 金手指开着进入战斗：本周目永久标记
+    markCheat(this);
     // 新开一关：先播开场场景（prologue 在场景中演出），场景结束后带 skipStory 回来整备
     if (!this.load && !this.skipStory) {
       this.redirecting = true;
@@ -134,6 +147,8 @@ export class BattleScene extends Phaser.Scene {
     this.inventory = (load?.inventory || this.registry.get('inventory') || []).map((it) => ({ ...it }));
     this.gold = load?.gold ?? this.registry.get('gold') ?? 0;
     this.gained = [];
+    // 本关的招募候选：先生成并写入 registry，战斗中存档随之保存（读档不会换批）
+    ensurePool(this.registry, this.stageId);
     // applyLoad 已把存档中的 joined 写入 registry（旧存档按 roster 推导）
     const joined = this.registry.get('joined') || Object.keys(roster).filter(isGeneral);
     this.deployPlan = null;
@@ -180,10 +195,17 @@ export class BattleScene extends Phaser.Scene {
       if (this.dialog.root.visible || this.modal) { this.cam.drag = null; return; }
       this.cam.press(p);
     });
-    const up = (p) => { if (this.cam.release(p)) this.onClick(p); };
+    // 触屏单击不会触发 pointermove：点击前先按悬停刷新光标、信息面板、伤害预测与范围预览
+    const up = (p) => { if (!this.cam.release(p)) return; if (p.wasTouch) this.onHover(p); this.onClick(p); };
     this.input.on('pointerup', up);
     this.input.on('pointerupoutside', () => { this.cam.drag = null; });
     this.input.keyboard?.on('keydown-ESC', () => this.cancel());
+    // 触屏设备：右侧面板底部的“取消”按钮代替右键（与“结束回合”同位置，选中单位期间替换显示，不遮挡地图）
+    if (IS_TOUCH) {
+      this.cancelBtn = button(this, PANEL_X + 20, HEIGHT - 58, WIDTH - PANEL_X - 40, 40, '取　消', () => {
+        if (!this.dialog.root.visible && !this.modal && this.state !== 'busy' && !this.over) this.cancel();
+      }, 20).setDepth(53).setVisible(false);
+    }
     // 开局 / 读档时镜头对准曹操（曹操不在场时对准第一个我军）
     const lead = this.units.find((u) => u.alive && u.id === 'caocao') || this.units.find((u) => u.alive && u.faction === 'player');
     if (lead) this.cam.centerTile(lead.x, lead.y, 0);
@@ -196,9 +218,17 @@ export class BattleScene extends Phaser.Scene {
     if (this.cam.moved) {
       this.cam.moved = false;
       const p = this.input.activePointer;
-      if (this.input.isOver && !this.cam.drag?.moved) this.onHover(p);
+      // 触屏抬起后指针停在原处，不按旧位置刷新
+      if (this.input.isOver && !p.wasTouch && !this.cam.drag?.moved) this.onHover(p);
     }
     this.minimap?.update(this.units);
+    if (this.cancelBtn) {
+      const c = ['move', 'menu', 'target'].includes(this.state) && !this.dialog.root.visible && !this.modal && !this.over;
+      // 两个按钮同位置：取消按钮刚消失时“结束回合”晚 0.4 秒出现，连点取消不会落到结束回合上
+      if (this.cancelBtn.visible && !c) this.endGuard = this.time.now + 400;
+      this.cancelBtn.setVisible(c);
+      this.hud.endBtn.setVisible(!c && this.time.now >= this.endGuard);
+    }
   }
 
   // 镜头跟随：把相关格子（单位或 {x, y}）移入视口，返回 Promise
@@ -252,12 +282,21 @@ export class BattleScene extends Phaser.Scene {
     if (!roster[id]?.equip) {
       const n = this.inventory.length;
       const lv = Math.max(lvl || 1, roster[id]?.lvl || 0);
-      roster[id] = { ...roster[id], equip: issueKit(this.inventory, id, GENERALS[id].cls, lv) };
+      roster[id] = { ...roster[id], equip: issueKit(this.inventory, id, generalOf(id).cls, lv) };
       recordTreasures(this.inventory.slice(n).map((it) => it.id));
       this.registry.set('roster', { ...roster });
       this.registry.set('inventory', [...(this.registry.get('inventory') || []), ...this.inventory.slice(n).map((it) => ({ ...it }))]);
     }
     return kitFrom(this.inventory, roster[id].equip);
+  }
+
+  // 整备中招募后重新推导出阵（新成员补发初始装备），之后的重建与胜利时的 joined 都用新结果
+  replan() {
+    const plan = planDeploy(this.stage, { roster: this.registry.get('roster') || {}, joined: this.registry.get('joined') || [], flags: this.flags });
+    this.deployPlan = plan;
+    this.joined = plan.joined;
+    plan.pool.forEach((c) => this.kitFor(c.id, c.lvl));
+    return plan;
   }
 
   playerUnits(ids) {
@@ -272,7 +311,7 @@ export class BattleScene extends Phaser.Scene {
     const plan = this.deployPlan;
     if (!plan) return;
     this.modal = true;
-    const ids = await new Promise((r) => openPrep(this, plan, r, { selected: this.campDeploy && initialDeploy(plan, this.campDeploy) }));
+    const ids = await new Promise((r) => openPrep(this, plan, r, { selected: this.campDeploy && initialDeploy(plan, this.campDeploy), replan: () => this.replan() }));
     this.modal = false;
     this.hud.setItems(this.items);
     for (const u of this.units.filter((o) => o.faction === 'player')) {
@@ -335,13 +374,16 @@ export class BattleScene extends Phaser.Scene {
       gold: this.gold,
       roster: this.registry.get('roster') || {},
       joined: [...this.joined],
+      recruits: this.registry.get('recruits') || {},
+      recruitPool: this.registry.get('recruitPool') || null,
       firedEvents: [...this.firedEvents],
       mapPatches: this.mapPatches.map((p) => [...p]),
       weatherIdx: this.weatherIdx,
       units: this.units.map(({ stats, ...u }) => ({
-        ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits },
+        ...u, status: { ...u.status }, buffs: { ...u.buffs }, equip: copyKit(u.equip), fruits: u.fruits && { ...u.fruits }, items: u.items && { ...u.items },
       })),
       summary: { lordLvl: lord.lvl },
+      cheated: !!this.registry.get('cheated'),
     };
   }
 
@@ -362,12 +404,45 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  // 音量设置（只显示音量相关的行）：弹窗期间不响应地图输入
+  // 游戏速度：战斗内全部补间与计时器按设置倍率播放
+  applySpeed() {
+    this.tweens.timeScale = this.time.timeScale = SETTINGS.speed;
+  }
+
+  // 战斗设置（只显示游戏速度与音量相关的行）：弹窗期间不响应地图输入
   openSettings() {
     if (this.modal || this.over || this.dialog.root.visible) return;
     this.modal = true;
     // 敌军阶段中打开时战斗可能已结束（战果面板会自行设 modal），关闭时不要覆盖
-    openSettingsMenu(this, { audioOnly: true, onClose: () => { if (!this.over) this.modal = false; } });
+    openSettingsMenu(this, {
+      audioOnly: true,
+      onClose: () => { this.applySpeed(); if (!this.over) this.modal = false; },
+      onCheat: () => this.openCheat(),
+    });
+  }
+
+  // 金手指面板（总开关打开时，从战斗设置进入）：修改军资金 / 道具 / 装备，直接胜利
+  openCheat() {
+    if (!cheatOn() || this.modal || this.over || this.dialog.root.visible) return;
+    if (this.phase !== 'player' || !['idle', 'move'].includes(this.state)) {
+      this.hud.log('请在我军阶段打开金手指面板');
+      return;
+    }
+    this.clearSelection();
+    this.state = 'idle';
+    this.modal = true;
+    openCheatMenu(this, {
+      lordLvl: this.lordLvl(),
+      onWin: () => this.cheatWin(),
+      onClose: () => { this.hud.setItems(this.items); if (!this.over) this.modal = false; },
+    });
+  }
+
+  // 直接胜利：按本关正常胜利流程结算（victory 开头即设 over，不会重复结算）
+  cheatWin() {
+    if (this.over || this.phase !== 'player' || this.state !== 'idle') return;
+    this.clearSelection();
+    this.victory('win', 'all');
   }
 
   // 指针所在格子：按镜头换算；指针在小地图上时视为不在地图上
@@ -474,7 +549,9 @@ export class BattleScene extends Phaser.Scene {
   tickUnit(u) {
     const v = this.views.get(u);
     const p = { x: MAP_X + u.x * TILE + TILE / 2, y: MAP_Y + u.y * TILE + TILE / 2 };
-    for (const e of tickStatus(u)) {
+    // 金手指无敌：我军中毒不扣兵力
+    const rate = u.faction === 'player' && cheatOn('cheatGod') ? 0 : this.stage.poisonRate ?? POISON_RATE;
+    for (const e of tickStatus(u, undefined, rate)) {
       if (e.type === 'poison') {
         floatText(this, p.x, p.y - 20, `中毒 -${e.dmg}`, STATUS.poison.css, 20);
         this.hud.log(`${u.name} 中毒，兵力 -${e.dmg}`);
@@ -777,9 +854,13 @@ export class BattleScene extends Phaser.Scene {
     const next = resolveNext(this.stage, outcome, annihilated, this.red);
     // 自动存档：下一关存在时（goNext 进营中）写营中存档，读取后回到营中；没有下一关（结局）时保持关卡开头类型
     const toCamp = !!(next && getStage(next) && next !== FIRST_STAGE);
+    // 下一关的招募候选在此生成并写入自动存档：读取营中存档不会换批、不会重置刷新次数
+    if (toCamp) ensurePool(this.registry, next);
     if (!this.stage.debug) writeAuto({
       stage: next, roster, joined, items, difficulty: this.difficultyId, red: this.red, flags: { ...this.flags },
       inventory: this.inventory, gold: this.gold, summary: { lordLvl },
+      recruits: this.registry.get('recruits') || {}, recruitPool: this.registry.get('recruitPool') || null,
+      cheated: !!this.registry.get('cheated'),
       ...(toCamp ? { talked: [], deploy: null } : {}),
     }, toCamp ? 'camp' : 'stage');
     const supplies = { ...this.difficulty.reward };
@@ -844,7 +925,13 @@ export class BattleScene extends Phaser.Scene {
       else this.cancel();
     } else if (this.state === 'target') {
       const inRange = this.sel.targets.some((o) => o.x === t.x && o.y === t.y);
-      if (inRange && u && this.validTarget(u)) this.execute(u);
+      // 触屏：第一次点击只预览（onHover 已显示预测与范围），再点同一格才执行；点了别的格子则重新预览
+      const aimed = this.touchAim === key(t.x, t.y);
+      this.aimAt(null);
+      if (inRange && u && this.validTarget(u)) {
+        if (p.wasTouch && !aimed) { this.aimAt(t); return; }
+        this.execute(u);
+      }
       else if (inRange && u && this.sel.action.kind === 'spell' && isFoe(u, this.sel.unit) && SPELLS[this.sel.action.id].target === 'foe') this.hud.log(spellBlock(this.map, this.sel.action.id, u.x, u.y) || '无法以此为目标');
       else if (inRange && u && this.sel.action.kind === 'item' && ITEMS[this.sel.action.id].promote && !isFoe(u, this.sel.unit)) this.hud.log(promoteBlock(u));
     }
@@ -852,6 +939,7 @@ export class BattleScene extends Phaser.Scene {
 
   cancel() {
     if (this.modal) return;
+    this.aimAt(null);
     if (['move', 'menu', 'target'].includes(this.state)) sfx('cancel');
     if (this.state === 'move' || (this.state === 'idle' && this.hl)) {
       this.clearSelection();
@@ -870,7 +958,19 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  // 触屏选目标：记下第一次点击的目标格，并在格子上方标“再点确认”（地图层，不占右侧预测区）；t 为 null 时清除
+  aimAt(t) {
+    this.touchAim = t ? key(t.x, t.y) : null;
+    this.aimTag?.destroy();
+    this.aimTag = null;
+    if (!t) return;
+    const c = tileCenter(t.x, t.y), top = t.y === 0;
+    this.aimTag = text(this, c.x, c.y + (top ? TILE / 2 : -TILE / 2), '再点确认', 14, '#ffe08a', FONT)
+      .setOrigin(0.5, top ? 0 : 1).setStroke('#000', 4).setDepth(40);
+  }
+
   clearSelection() {
+    this.aimAt(null);
     this.closeMenu();
     this.hl.clear();
     this.aoe.clear();
@@ -980,7 +1080,7 @@ export class BattleScene extends Phaser.Scene {
     if (pages > 1) entries.push([`下一页 ${page + 1}/${pages}`, () => this.spellMenu((page + 1) % pages)]);
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}　天气 ${WEATHERS[this.weather]}　共 ${spells.length} 种策略\n将鼠标移到策略上查看说明`);
+    this.hud.forecast(`策略值 ${u.mp}/${u.stats.mp}　天气 ${WEATHERS[this.weather]}　共 ${spells.length} 种策略\n${IS_TOUCH ? '选择策略后显示说明' : '将鼠标移到策略上查看说明'}`);
   }
 
   // 道具目标格：自身与上下左右
@@ -1002,7 +1102,7 @@ export class BattleScene extends Phaser.Scene {
     });
     entries.push(['返　回', () => this.openMenu()]);
     this.buildMenu(entries);
-    this.hud.forecast('将鼠标移到道具上查看说明');
+    this.hud.forecast(IS_TOUCH ? '选择道具后显示说明' : '将鼠标移到道具上查看说明');
   }
 
   startTarget(kind, id) {
@@ -1015,10 +1115,13 @@ export class BattleScene extends Phaser.Scene {
     this.sel.action = { kind, id };
     this.sel.targets = tiles;
     this.state = 'target';
+    this.aimAt(null);
     const healish = kind === 'item' || (kind === 'spell' && SPELLS[id].target !== 'foe');
     this.paint(tiles, healish ? 0x40e080 : 0xff3a2a, 0.22);
     this.paint(tiles.filter((t) => { const o = this.unitAt(t.x, t.y); return o && this.validTarget(o); }), healish ? 0x40e080 : 0xff3a2a, 0.45);
-    this.hud.forecast('请选择目标（右键取消）');
+    // 触屏没有悬停：把策略 / 道具说明放进选目标提示
+    const desc = kind === 'spell' ? `【${SPELLS[id].name}】${SPELLS[id].desc}\n` : kind === 'item' ? `【${ITEMS[id].name}】${ITEMS[id].desc}\n` : '';
+    this.hud.forecast(IS_TOUCH ? `${desc}请选择目标（点目标预览，再点一次确认）` : '请选择目标（右键取消）');
   }
 
   validTarget(o) {
@@ -1117,11 +1220,14 @@ export class BattleScene extends Phaser.Scene {
     this.closeMenu();
     this.hl.clear();
     this.sel = null;
-    u.acted = true;
-    if (u.alive) this.views.get(u)?.setActed(true);
+    // 金手指无限行动：我军行动后不置灰，可再次移动与行动，需手动结束回合
+    const again = u.faction === 'player' && cheatOn('cheatMove') && canAct(u);
+    if (!again) u.acted = true;
+    if (u.alive) this.views.get(u)?.setActed(u.acted);
     await this.tryEscape(u);
     if (await this.checkEnd()) return;
     this.state = 'idle';
+    if (again) return;
     if (!this.units.some((o) => o.alive && o.faction === 'player' && !o.acted)) {
       await wait(this, 300);
       this.endPlayerPhase();

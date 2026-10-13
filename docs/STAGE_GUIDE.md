@@ -27,7 +27,7 @@ export default [{
   turns: 25,                                   // 回合上限
   victoryText: '击退吕布 或 全灭敌军',            // 显示在右侧面板，≤ 18 字
   victory: [{ type: 'boss', target: 'lvbu' }, { type: 'all' }],
-  // 可选：protect: ['xiandi'], defeatText: '曹操或献帝撤退 / 超过 25 回合', victoryFlags, epilogues, weather: { type, start }
+  // 可选：protect: ['xiandi'], defeatText: '曹操或献帝撤退 / 超过 25 回合', victoryFlags, epilogues, weather: { type, start }, poisonRate: 0.05（本关中毒每回合扣最大兵力比例，缺省 0.1）
   mapVersion: 2,                               // 地图版本：按原版尺寸重做后填 2（旧版 18×13 为 1，可省略）
   map: [ /* 行数 × 列数 = MAP_SIZES[id]，每行一个字符串，一字符一格 */ ],
   deploy: { slots: [[x, y], ...] },            // mapVersion 2 必须显式写出出阵位置
@@ -49,7 +49,8 @@ export default [{
 - 出阵整备（自动推导，一般不用填）：出阵位置 = 本关预设我军单位的站位，上限 = 位置数，默认阵容 = 预设阵容。
   必须出阵：曹操、不在武将总表（`src/generals.js`）中的临时成员、在胜利条件 / `protect` / `escape` / `victoryFlags` / 事件（duel、onDeath、setAi）中出现的我军武将、开场 / 结尾 / 事件对白中 `side: 'player'` 发言的预设我军武将。
   不可出阵：带阵亡 / 离队标记的武将、本关事件中途生成（或作为敌军 / 友军登场）的武将。
-  推导不合理时可用可选字段覆盖：`deploy: { max?: 出阵上限, required?: [预设我军 id]（替换推导出的必须出阵名单，曹操始终必须）, slots?: [[x,y], ...]（替换出阵位置，须可通行、不重叠） }`，校验脚本会检查其格式。
+  推导不合理时可用可选字段覆盖：`deploy: { max?: 出阵上限, required?: [预设我军 id]（替换推导出的必须出阵名单，曹操始终必须）, slots?: [[x,y], ...]（替换出阵位置，须可通行、不重叠）, bonus?: 额外名额（覆盖章节增量，0 = 不加） }`，校验脚本会检查其格式。
+  - 章节额外名额：`planDeploy` 按 `stage.chapter` 前缀（`deploy.js` 的 `CHAPTER_BONUS`：序章 +2、第一章 +3、第二章 +4、第三章 +5、第四章 / 终章 +6）在原出阵位 4 步内自动补出位置（常用兵种可通行，避开所有单位 / 援军坐标、到达胜利格、撤离格），上限随之增加，给招募单位留位置；补不够按实际数量，校验脚本给警告。
 
 ## 4. 地图（尺寸取原版，一字符一格，坐标 x 0~列数−1 左→右，y 0~行数−1 上→下）
 - **尺寸**：取 `src/stageMeta.js` 的 `MAP_SIZES[id]`（原版对应战场，20×20 ~ 40×40，见 research maps.md §3），`map` 为“行数”个字符串、每个长度为“列数”。屏幕上的地图区固定显示 18×13 格，其余部分靠滚动 / 小地图查看。
@@ -100,7 +101,7 @@ export default [{
 - 调试：浏览器地址加 `?stage=<关卡 id>` 可以普通难度直接进入任意关卡（`?stage=test_bigmap` 为 40×40 测试地图，含全部 30 种地形，见 `src/stages/debug.js`）。
 
 ## 5. 单位
-`P/E/A(id, 名字, 兵种, 等级, x, y, extra)`；extra：`leader: true`（主将，金色光环）、`ai: 'aggressive'|'hold'|'peace'`（hold 原地固守，进入攻击范围才出击；peace 原地不动且不主动攻击，用于放行/中立）、`bonus: { hp, mp, atk, int, def, burst, morale }`（旧字段 `agi` 视为 `burst`）、`mark: '惇'`（棋子上的字，默认名字首字）、`focus: '目标id'`（AI 优先攻击，用于友军关羽去单挑华雄等）、`ifFlag`/`unlessFlag`（对白行也可带这两个字段，按剧情标记显示/隐藏）。
+`P/E/A(id, 名字, 兵种, 等级, x, y, extra)`；extra：`leader: true`（主将，金色光环）、`ai: 'aggressive'|'hold'|'peace'`（hold 原地固守，进入攻击范围才出击；peace 原地不动且不主动攻击，用于放行/中立）、`bonus: { hp, mp, atk, int, def, burst, morale }`（旧字段 `agi` 视为 `burst`）、`mark: '惇'`（棋子上的字，默认名字首字）、`focus: '目标id'`（AI 优先攻击，用于友军关羽去单挑华雄等）、`ifFlag`/`unlessFlag`（对白行也可带这两个字段，按剧情标记显示/隐藏）、`spellMult: 0.6`（该单位的策略伤害倍率，缺省 1，范围 0~2）、`items: { bean: 2, antidote: 1 }`（仅友军：自带补给，缺省 `ALLY_ITEMS`；友军 AI 在兵力偏低或有异常时对自身 / 相邻友方使用，不占我军军需）。
 - 兵种填写**系列 id**（`src/data.js` 的 `SERIES`），阶级不用填：敌军 / 友军按等级（含难度加级）自动定阶，门槛随难度：普通 ≥20 二阶、≥35 三阶，困难 / 地狱 ≥15 二阶、≥30 三阶（`DIFFICULTIES[id].tierLvl`）；我军由转职决定。
   - 可转职系列（一阶 / 二阶 / 三阶）：`lord` 群雄/英雄/霸王、`infantry` 轻步兵/重步兵/近卫兵、`archer` 弓兵/弩兵/连弩兵、`cavalry` 轻骑兵/重骑兵/亲卫队、`archercav` 弓骑兵/弩骑兵/连弩骑兵、`catapult` 轻炮车/重炮车/霹雳车（射程 4 / 4~5 / 4~5，不能打近身）、`fighter` 武道家/拳士/拳圣、`bandit` 贼兵/义贼/豪杰、`strategist` 策士/参谋/军师、`healer` 风水士/方术士/仙术士、`taoist` 道士/幻术士/妖术士、`mountstrat` 骑马策士/骑马参谋/骑马军师（骑马）、`dancer` 舞娘/舞伎/巫女。
   - 单阶特殊兵种：`xiliang` 西凉骑兵、`yellow` 黄巾贼、`pirate` 海盗、`dudu` 都督（骑马）、`sorcerer` 咒术士、`emperor` 皇帝（不能攻击，配合 protect，ai 用 hold）、`commoner` 百姓、`transport` 辎重队（不能攻击）。

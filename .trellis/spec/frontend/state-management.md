@@ -13,14 +13,20 @@
 |-----|------|----------|
 | `difficulty` | `'normal' \| 'hard' \| 'hell'` | `TitleScene.chooseDifficulty`、`applyLoad` |
 | `roster` | `{ [我军单位id]: { lvl, exp, cls, tier, equip?: { weapon, armor, acc }（背包 uid 或 null）, fruits?: { [能力]: 个数 } } }`（`tier` 阶级 1~3，旧存档缺失时 `applyLoad` 补为 1；`cls` 仅作记录，兵种以武将总表为准）。**只有带 `lvl` 的条目才算成长记录**：首次出阵前 `kitFor` / 整备可能先写入只有 `equip` / `fruits` 的条目，`createUnit` 与 `planDeploy` 用 `saved?.lvl` 判断是否沿用 `tier` | `BattleScene.victory`（合并写入，保留 `equip` / `fruits`）、`BattleScene.kitFor`、整备（`prep.js`）、`applyLoad` |
-| `joined` | `[武将id]`，已加入的武将（仅 `generals.js` 中的武将） | 新游戏（`[]`）、`BattleScene.victory`、`applyLoad`（旧存档缺失时用 `roster` 的键推导） |
+| `joined` | `[武将id]`，已加入的武将（`generals.js` 总表武将与招募单位 `rec<n>`；过滤用 `isGeneral`，读档时必须先 `setRecruits` 再过滤） | 新游戏（`[]`）、`BattleScene.victory`、`applyLoad`（旧存档缺失时用 `roster` 的键推导） |
 | `items` | `{ [道具id]: 数量 }`（id 见 data-contracts 的 `ITEMS`；`seal` 印绶从 `SEAL_FROM` 关起每关胜利 +1，另按关序轮流获得一件 `LOOT` 战利品） | 新游戏、`victory`（加上 `difficulty.reward`、印绶与战利品）、`applyLoad`（`migrateItems` 迁移旧道具） |
 | `red` | 整数，红色指数 | `applyChoice`、`victory`、`applyLoad` |
 | `flags` | `{ [标记名]: true }` | `setFlag`、`applyLoad` |
 | `inventory` | `[{ uid, id, lvl, exp }]`，全部持有的装备实例（含已装备的；`id` 见 `EQUIP`，宝物唯一） | 新游戏（`[]`）、`kitFor`（补发初始装备）、整备（买卖）、`victory`（写回熟练度并加入掉落与奖励）、`applyLoad`（缺失为 `[]`） |
-| `gold` | 整数，军资金 | 新游戏（0）、整备商店、`victory`（`goldFor(曹操等级)` + 奖励金钱）、`applyLoad`（缺失为 0） |
+| `gold` | 整数，军资金 | 新游戏（`START_GOLD` = 1000，见 `recruit.js`；地图更新重开第一关同）、整备商店与招募页、`victory`（`goldFor(曹操等级)` + 奖励金钱）、`applyLoad`（缺失为 0） |
 
-- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部八个** key。
+| `recruits` | `{ [rec<n>]: { name, cls, kind: 'general' \| 'soldier', bonus } }`，招募单位定义；`generals.js` 的 `RECRUITS` 是它的模块级镜像（`isGeneral` / `generalOf` 读镜像） | 新游戏（`{}`）、招募（`recruit.recruitUnit`，同时写 `roster` / `joined`）、`applyLoad`（缺失为 `{}`）。**三处都必须调用 `setRecruits`** |
+| `recruitPool` | `{ stageId, names: [武将名], refreshLeft }` 当前关卡间隙的武将候选（每批 4 名，刷新 3 次，`stageId` 变化时 `ensurePool` 换批重置） | 新游戏（`null`）、`BattleScene.create` / `CampScene.create` / 胜利写自动存档前（`ensurePool`）、招募页刷新、`applyLoad`（缺失为 `null`） |
+
+| `cheated` | 布尔，本周目是否用过金手指（永久标记，关掉开关也不清除） | 新游戏（`false`）、`cheat.markCheat`（金手指总开关打开时：`BattleScene.create` / `CampScene.create`、战斗 / 营中设置面板切到“开”）、`applyLoad`（缺失为 `false`）；地图版本重开时保留存档的标记 |
+
+- 新游戏（`TitleScene`）在 `scene.start('Battle', { stage: FIRST_STAGE })` 之前会重置**全部十一个** key（并 `setRecruits({})`）。
+  候选必须在可存档之前生成（`ensurePool`），否则读档会换批、绕过刷新次数限制。
   新增 key 时，要在这里重置，并在 `saves.applyLoad` 中恢复。
 - 写入时一律写副本：`this.registry.set('flags', { ...this.flags })`、`items = { ...this.items }`。
 
@@ -75,6 +81,7 @@ this.units = [...buildPlayerDefs(plan, plan.defaults).map((d) => createUnit(d, r
   `applyLoad` 遇到 `camp` 时写入 registry 后 `scene.start('Camp', { stage, talked, deploy, pos })`；`validSave` 接受 `camp`（`talked` 缺失或为数组）；存档列表显示“营中 · 下一战：<关名>”。`pos` 不可走时回到出生点。
 - 营中没有战斗状态：`CampScene` 只复制 `inventory` / `gold` / `items` 给整备界面（`openPrep` 直接读写 `scene.inventory` 等并立即写回 registry），对白选项（`applyChoice`）直接写 registry 的 `red` / `flags`。营中选好的阵容经 `goStage(scene, id, { deploy })` → `StoryScene` → `afterPre` 带进 `BattleScene`（`campDeploy`），由 `deploy.initialDeploy` 过滤后作为整备的初始阵容；重新挑战（`retry`）沿用 `campDeploy`；读档不带阵容。
 - `EndingScene` 会调用 `clearAuto()`。
+- 金手指标记：战斗快照、营中快照、胜利时的自动存档都写 `cheated`（取 registry），存档列表在难度标签后显示 `［金手指］`。金手指开关本身是游戏设置（`settings.js` 的 `cheat` 总开关与 `cheatGod` / `cheatKill` / `cheatMove` 分项），不进存档。
 - 导出/导入的文件格式为 `{ app: 'sanguo-caocao-save', version: 1, type: 'all' | 'single', ... }`；
   `planImport` 只返回导入计划、不写入，格式错误时抛出带中文信息的 `Error` 供界面显示。
 - 自动存档（`writeAuto(data, kind = 'stage')`）写入 `stage`（下一关 id）、`roster`、`joined`、`items`、`difficulty`、`red`、`flags`、`inventory`、`gold`、`summary.lordLvl`；胜利时为 `'camp'`（另有 `talked: []`、`deploy: null`），出征时为 `'stage'`（取 `CampScene.snapshot()` 去掉 `talked` / `pos`，保留 `deploy`）。调试关卡不写。

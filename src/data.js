@@ -140,6 +140,8 @@ export const ITEMS = {
 export const SEAL_FROM = 'xuzhou_ruqin';
 // 关卡战利品（自行设计，代替原版各关的宝箱）：每关胜利按关卡序号轮流获得一件，桃只能由此获得
 export const LOOT = ['peach', 'antidote', 'plaster', 'wine', 'stimulant', 'cough', 'panacea'];
+// 友军默认自带补给（自行设计）：由 AI 自行使用，不占用我军军需；关卡可用单位的 items 字段覆盖
+export const ALLY_ITEMS = { bean: 2, antidote: 1 };
 
 // 难度：仅作用于敌军（等级加成、属性倍率、AI），以及军需补给；tierLvl 为敌军 / 友军自动定阶的等级门槛 [二阶, 三阶]
 export const DIFFICULTIES = {

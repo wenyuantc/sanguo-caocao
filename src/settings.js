@@ -1,7 +1,11 @@
-// 游戏设置：不进入存档。渲染类设置修改后需重载页面生效（全屏除外）；音量类设置即时生效
+// 游戏设置：不进入存档。渲染类设置修改后需重载页面生效（全屏除外）；音量、游戏速度即时生效
 const SETTINGS_KEY = 'sanguo-settings';
 
-export const DEFAULT_SETTINGS = { res: 'auto', quality: 'high', fps: 0, showFps: false, music: 70, sfx: 80, mute: false };
+// cheat：金手指总开关；cheatGod / cheatKill / cheatMove：我方无敌 / 我方秒杀 / 无限行动（总开关打开时才生效）
+export const DEFAULT_SETTINGS = {
+  res: 'auto', quality: 'high', fps: 0, showFps: false, music: 70, sfx: 80, mute: false, speed: 1,
+  cheat: false, cheatGod: true, cheatKill: true, cheatMove: true,
+};
 
 // 需要重载页面才生效的渲染类设置
 export const RENDER_KEYS = ['res', 'quality', 'fps', 'showFps'];
@@ -16,6 +20,13 @@ export const SETTING_OPTIONS = {
   fps: [[0, '跟随屏幕'], [60, '60'], [30, '30']],
   showFps: [[true, '开'], [false, '关']],
   mute: [[false, '关'], [true, '开']],
+  // 游戏速度：只作用于战斗场景的补间与计时器
+  speed: [[1, '1x'], [1.25, '1.25x'], [1.5, '1.5x'], [2, '2x'], [4, '4x'], [8, '8x'], [16, '16x']],
+  // 金手指：总开关与分项
+  cheat: [[false, '关'], [true, '开']],
+  cheatGod: [[false, '关'], [true, '开']],
+  cheatKill: [[false, '关'], [true, '开']],
+  cheatMove: [[false, '关'], [true, '开']],
 };
 
 const valid = (k, v) => (VOLUME_KEYS.includes(k)

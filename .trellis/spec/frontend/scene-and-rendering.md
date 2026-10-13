@@ -53,9 +53,63 @@
   换算：`cam.tileAt(p)`、`cam.screenOf(p)`、`cam.toWorld / toScreen`、`cam.tileToScreen(x, y)`（界面层对象贴着格子摆放时用，如指令菜单）、`viewRect(s)`（当前视口的世界矩形，全屏特效 / 天气用）。
 - 移动：`cam.panTo(x, y, ms?)`（视口左上角，补间，返回 Promise）、`cam.centerTile(x, y, ms?)`、`cam.follow(tiles)` / `scene.follow(...units)`（都在视口内则不动）。
   AI 行动前 `await s.follow(u, plan.tile, plan.target)`；援军登场、选择单位、我军阶段开始（曹操）、部队情报跳转都会跟随。
-- 输入：场景级 `pointerdown` 只调用 `cam.press(p)`（右键直接取消），`pointerup` 时 `cam.release(p)` 为真（未拖动超过 6px）才调用 `onClick`。
-  方向键 / WASD、鼠标停在视口边缘 24px（250ms 后）滚动；`canScroll` 为假（弹窗、对话、指令菜单）时禁止手动滚动。
+- 输入：场景级 `pointerdown` 只调用 `cam.press(p)`（右键直接取消），`pointerup` 时 `cam.release(p)` 为真（未拖动超过 6px，触摸为 18px）才调用 `onClick`。
+  方向键 / WASD、鼠标停在视口边缘 24px（250ms 后）滚动（触摸不做边缘滚动）；`canScroll` 为假（弹窗、对话、指令菜单）时禁止手动滚动。
 - 小地图 `src/minimap.js`（地图大于视口时才创建）：视口右上角悬浮（depth 60），地形为每格 1 像素的画布贴图最近邻放大，单位点与视口框在 `update` 中按签名重画；点击 / 拖动跳转，按钮或 M 键折叠。
+
+## 触屏输入（移动端横屏）
+
+只支持横屏：`index.html` 的 `#rotate` 遮罩在 `(orientation: portrait) and (pointer: coarse)` 时盖住画面；页面禁止缩放、下拉刷新、长按菜单。
+不引入手势 / 高清 / 全屏库（评估过 Hammer.js、phaser3-rex-plugins、phaser-hidpi、screenfull，见归档任务 `10-12-mobile-adapt/design.md`）。
+
+### 判定：两级，不要混用
+
+| 判定 | 来源 | 用于 |
+|------|------|------|
+| `IS_TOUCH`（`config.js`） | `matchMedia('(pointer: coarse)')`，Node 下为 false | 显示哪套说明文字、是否创建触屏专用控件（取消按钮） |
+| `p.wasTouch`（Phaser `Pointer`） | 本次事件是否来自触摸 | 一切行为分支（补刷悬停、二次确认、点击容差、边缘滚动、悬停信息保留） |
+
+同一设备可能混用鼠标与触摸，行为分支必须看 `p.wasTouch`；鼠标事件会把 `activePointer` 切回鼠标指针、`wasTouch` 为 false。
+
+### Phaser 4 触摸事件语义（`node_modules/phaser/src/input/InputPlugin.js`）
+
+- `TOUCH_START` → down + **over**；`TOUCH_END` → up + **out**；只有 `TOUCH_MOVE` 才派发 move。
+  - 单击不触发场景 `pointermove`：依赖 `onHover` 的刷新要在点击时手动补（`BattleScene` 的 `up`：`if (p.wasTouch) this.onHover(p)`）。
+  - 悬停说明在抬起时被 `pointerout` 还原：需要保留的，`pointerout` 里 `if (!p.wasTouch)` 才还原（`hud.js` 天气说明）。
+- `input.isOver` 只由鼠标进出画布维护，触屏时恒为 true；触摸抬起后 `activePointer` 停在最后触点。按指针位置做的每帧逻辑（边缘滚动、镜头移动后刷新悬停）要排除 `p.wasTouch`。
+- 默认只有 1 个触摸指针（`input.activePointers = 1`），第二根手指被忽略。
+- 触摸事件在 DOM 回调中同步派发；`touchend` 是浏览器认可的用户激活，`touchstart` 不是。
+
+### 约定
+
+- 点击容差：`mapCamera.js` 的 `DRAG = 6`（鼠标）/ `DRAG_TOUCH = 18`（触摸，手机横屏画面约缩小到 0.54~0.58 倍）。
+- 需要用户激活的按钮（文件选择、下载）传 `button(..., size, { onRelease: true })`：触摸按下只记标记，在按钮上抬起才触发；鼠标仍在按下时触发。不传 `opts` 时行为不变。
+- 全屏只由玩家点左下角 DOM 按钮 `#fs-btn` 切换（不自动全屏；仅 `IS_TOUCH` 且 `scale.fullscreen.available` 时显示，iPhone Safari 不显示）。目标 `#game`（`fullscreenTarget: 'game'`，竖屏遮罩和按钮都在其内）；进入全屏后用原生 `screen.orientation.lock('landscape')`——Phaser 的 `scale.lockOrientation` 调用已废弃 API，无效。
+- 画布外的 DOM 控件必须吞掉自己的触摸：Phaser 在 window 上监听画布外的 `touchstart` / `touchend` 并当作游戏点击（营中会走路、标题会开始），只跳过 `defaultPrevented` 的事件。做法是在控件的 `touchstart` 和 `touchend` 里 `preventDefault()` + `stopPropagation()`，动作放在 `touchend` 中执行（之后不会再有 `click`）。
+- 右键 / ESC 的触屏替代：`BattleScene.cancelBtn`（仅 `IS_TOUCH`），move / menu / target 状态显示并隐藏“结束回合”；取消按钮消失后“结束回合”延迟 400ms（`endGuard`）出现，防止连点误结束回合。
+- 执行类点击要二次确认：选目标时触摸第一次点击只预览（`aimAt(t)` 记 `touchAim`，地图层标“再点确认”），再点同一格才执行；进入 / 取消目标状态、清除选择时 `aimAt(null)`。
+- 右侧预测区只容 3 行（y 392~449，450 为分隔线），提示不要往预测区追加行。
+
+### 错误示例 vs 正确示例
+
+```js
+// 错误：触屏单击不会触发 pointermove，信息面板不刷新；目标点了直接执行
+this.input.on('pointerup', (p) => { if (this.cam.release(p)) this.onClick(p); });
+// 正确
+this.input.on('pointerup', (p) => { if (!this.cam.release(p)) return; if (p.wasTouch) this.onHover(p); this.onClick(p); });
+
+// 错误：触摸 down 来自 touchstart，手机上文件选择会被浏览器拦截
+button(scene, x, y, 92, 32, '导　入', () => pickFile(), 15);
+// 正确
+button(scene, x, y, 92, 32, '导　入', () => pickFile(), 15, { onRelease: true });
+```
+
+### 验证
+
+预览浏览器 `preview_resize` 宽度 < 768（如 740×360）才会模拟触屏（`pointer: coarse`、`maxTouchPoints`），切换后要刷新页面。
+脚本注入触摸：`new Touch({ identifier, target: canvas, clientX, clientY, pageX, pageY })`——**必须带 `pageX/pageY`**，否则 Phaser 算出的指针坐标错误；
+再 `canvas.dispatchEvent(new TouchEvent('touchstart' | 'touchmove' | 'touchend', { touches, changedTouches, targetTouches, cancelable: true }))`。
+合成事件不算用户手势，控制台出现 `requestFullscreen ... user gesture` 警告属正常。需真机确认：文件选择、下载、全屏、横屏锁定。
 
 ## UI 工厂函数（`src/ui.js`）
 
@@ -63,7 +117,7 @@
 
 ```js
 text(scene, x, y, str, size = 16, color = '#f1e3c2', font = UI_FONT)
-button(scene, x, y, w, h, label, onClick, size = 18)   // Container，带 .setDisabled(d)、.label
+button(scene, x, y, w, h, label, onClick, size = 18, opts = {})   // Container，带 .setDisabled(d)、.label；opts.onRelease 见“触屏输入”
 panel(scene, x, y, w, h, alpha)                         // 金边深色面板 Graphics
 portrait(scene, x, y, name, side, size)                 // 带边框的头像 Container
 floatText(scene, x, y, str, color, size)                // 上浮的伤害/回复数字
@@ -94,7 +148,9 @@ wait(scene, ms)                                         // 基于 scene.time.del
 | 4–6 | 目标格、高亮 `hl`、光标 |
 | 10 + y | 单位容器（按行排序） |
 | 30–31 | 天气遮罩、天气粒子（`weatherFx.js`，每帧跟随视口） |
+| 40 | 触屏选目标的“再点确认”标签（`BattleScene.aimAt`） |
 | 50–52 | HUD 顶栏、面板、HUD 按钮（以下为界面层） |
+| 53 | 触屏“取消”按钮（与“结束回合”同位置，二者互斥显示） |
 | 60 | 小地图 |
 | 600 | 指令菜单 |
 | 700–799 | 攻击 / 策略特效（地图层） |
@@ -129,7 +185,10 @@ return key;
 
 - 设置在 `src/settings.js`（localStorage `sanguo-settings`，损坏回退默认），启动时由 `config.js` 读出
   `SETTINGS` / `RES`，`main.js` 据此设置 `antialias`、`fps.limit` 与帧率角标。设置面板 `settingsMenu.js`
-  的渲染类设置（`RENDER_KEYS`）只在标题页修改，保存后 `location.reload()` 生效（全屏立即生效）；音量类设置即时生效，战斗中可打开只含音量行的面板（见「音频」）。
+  的渲染类设置（`RENDER_KEYS`）只在标题页修改，保存后 `location.reload()` 生效（全屏立即生效）；音量类设置即时生效，战斗中可打开只含游戏速度与音量行的面板（见「音频」）。
+- 游戏速度 `speed`（1x–16x）即时保存、不重载，只作用于 Battle：`BattleScene.applySpeed()` 在 `create` 与战斗设置面板关闭时设置
+  `tweens.timeScale` / `time.timeScale`。战斗流程的等待必须走 `scene.tweens` / `scene.time`（不要用 `setTimeout`），否则不会随倍率加速；
+  `time.now` 不受倍率影响，防误触判断仍按真实时间。Story 场景自行管理倍率，不读此设置。
 - 画质“低”时 `UnitView.idle` 不创建，引用一律写 `v.idle?.…`。
 - 帧率上限默认 0（跟随屏幕）：Phaser 的限帧器在 60Hz 屏幕上设 60 会因 rAF 计时抖动丢帧。
 - `pointermove` 处理中不要无条件重建含 Text / 头像的面板：`BattleScene.onHover` 按“格子 + state”去重
@@ -215,3 +274,5 @@ if (killed) await killUnit(s, d);
 - 假设地图为 18×13：尺寸一律从 `map` 取（`logic.mapCols/mapRows`），`inMap(x, y, map)`、`attackTiles(map, u)`、`spellTiles(map, u, id)` 都要传地图。
 - 创建贴图前不检查 `textures.exists(key)`（会泄漏，或报重复 key 错误）。
 - 弹窗关闭后键盘监听仍未移除。
+- 只靠悬停（`pointerover` / `pointermove`）、右键、键盘提供的功能或信息，没有触屏途径（见“触屏输入”）。
+- 在 `pointerdown` 里打开文件选择、触发下载或请求全屏（触屏的 down 来自 `touchstart`，不算用户激活）。

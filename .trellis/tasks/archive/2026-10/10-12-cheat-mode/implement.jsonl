@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "registry 战役状态、设置与存档读写约定（新增 cheated / cheat* 设置）"}
+{"file": ".trellis/spec/frontend/data-contracts.md", "reason": "存档、道具、装备、单位的数据契约"}
+{"file": ".trellis/spec/frontend/scene-and-rendering.md", "reason": "设置面板、新增金手指面板的 UI 工厂与触屏约定"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新增 src/cheat.js、src/cheatMenu.js 的放置位置与依赖方向"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "代码风格与验证命令"}

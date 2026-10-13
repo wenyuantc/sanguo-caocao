@@ -18,7 +18,7 @@ import { STATUS } from '../src/status.js';
 import { CHARACTERS, CLASS_BY_NAME } from '../src/characters.js';
 import { GENERALS } from '../src/generals.js';
 import { roleOf } from '../src/logic.js';
-import { planDeploy, buildPlayerDefs } from '../src/deploy.js';
+import { planDeploy, buildPlayerDefs, CHAPTER_BONUS } from '../src/deploy.js';
 import { EQUIP, REWARDS, DROPS, SHOP_UNLOCK, STARTER_TREASURES, ITEM_PRICE, gearDesc } from '../src/equipment.js';
 import { TABLE, STAGE_WEATHER, SET_WEATHER, stageWeather, validIdx } from '../src/weather.js';
 import { TERRAIN_PRESETS } from '../src/terrain.js';
@@ -82,7 +82,13 @@ function checkStage(s, { debug = false } = {}) {
     }
     if (typeof u.lvl !== 'number' || u.lvl < 1) err(s, `${u.id} 等级无效`);
     if (u.ai && !['aggressive', 'hold', 'peace'].includes(u.ai)) err(s, `${u.id} ai 只能是 aggressive/hold/peace`);
+    if (u.spellMult != null && !(typeof u.spellMult === 'number' && u.spellMult > 0 && u.spellMult <= 2)) err(s, `${u.id} spellMult 应为 0~2 的数字`);
+    if (u.items != null) {
+      if (u.faction !== 'ally') err(s, `${u.id} 只有友军可以设 items（自带补给）`);
+      for (const [k, n] of Object.entries(u.items)) if (!ITEMS[k] || !Number.isInteger(n) || n < 0) err(s, `${u.id} items 错误：${k}: ${n}`);
+    }
   }
+  if (s.poisonRate != null && !(typeof s.poisonRate === 'number' && s.poisonRate >= 0 && s.poisonRate <= 1)) err(s, `poisonRate 应为 0~1 的数字：${s.poisonRate}`);
   const player = s.units.filter((u) => u.faction === 'player');
   if (!player.some((u) => u.id === 'caocao')) err(s, '我军必须包含 caocao');
   if (player.length < 3 || player.length > 12) warn(s, `我军出阵 ${player.length} 人`);
@@ -132,6 +138,7 @@ function checkStage(s, { debug = false } = {}) {
         if (!d.slots.some(([x, y]) => x === u.x && y === u.y)) err(s, `预设我军 ${u.name} (${u.x},${u.y}) 不在 deploy.slots 中`);
       }
     }
+    if (d.bonus != null && !(Number.isInteger(d.bonus) && d.bonus >= 0)) err(s, 'deploy.bonus 应为非负整数');
     if (d.max != null && !(Number.isInteger(d.max) && d.max >= 1 && d.max <= slots.length)) err(s, `deploy.max 应为 1~${slots.length} 的整数`);
     for (const id of d.required || []) if (!player.some((u) => u.id === id)) err(s, `deploy.required 不是本关预设我军单位：${id}`);
     if (new Set(['caocao', ...(d.required || [])]).size > (d.max ?? slots.length)) err(s, 'deploy.required 人数超过出阵上限');
@@ -146,6 +153,17 @@ function checkStage(s, { debug = false } = {}) {
     const defs = buildPlayerDefs(plan, plan.defaults);
     const base = player.filter((u) => !u.ifFlag);
     if (!s.deploy && (defs.length !== base.length || defs.some((d, i) => d !== base[i]))) err(s, '默认出阵阵容与预设我军不一致');
+    // 章节额外出阵位（deploy.js extraSlots）：常用兵种可通行、不与单位 / 援军 / 胜利到达格 / 撤离格重叠，数量不足给警告
+    const want = s.deploy?.bonus ?? CHAPTER_BONUS[(s.chapter || '').split(' ')[0]] ?? 0;
+    if (!debug && plan.bonus < want) warn(s, `额外出阵位只补到 ${plan.bonus} / ${want} 个`);
+    const occupied = new Set([...s.units, ...s.events.flatMap((e) => e.units || [])].map((u) => `${u.x},${u.y}`));
+    for (const c of s.victory) (c.tiles || []).forEach(([x, y]) => occupied.add(`${x},${y}`));
+    (s.escape?.tiles || []).forEach(([x, y]) => occupied.add(`${x},${y}`));
+    for (const [x, y] of plan.slots.slice(plan.slots.length - plan.bonus)) {
+      const k = `${x},${y}`;
+      if (!terr(x, y) || !['lord', 'infantry', 'archer', 'cavalry', 'strategist', 'healer'].every((c) => passable(c, s.map[y][x]))) err(s, `额外出阵位不可通行 (${k})`);
+      if (occupied.has(k)) err(s, `额外出阵位与单位 / 目标格重叠 (${k})`);
+    }
   }
   // 事件
   for (const e of s.events) {

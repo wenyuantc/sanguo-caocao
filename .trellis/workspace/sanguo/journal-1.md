@@ -124,3 +124,138 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: core-systems 收尾归档；第一关毒烟减伤与友军自动用药
+<!-- trellis-session: v=2 fp=dd2ef9c818159314 -->
+
+**Date**: 2026-10-12
+**Task**: core-systems 收尾归档；第一关毒烟减伤与友军自动用药
+**Branch**: `feat/stage1-poison-ally-items`
+
+### Summary
+
+core-systems 整体收尾：5 个代表关卡 AI 对战与旧格式存档读档回归，更新 GQ.md 差异说明，ai-battle 加 story=0 适配开场场景；第一关张宝/黄巾术士策略伤害 ×0.6、中毒 5%，友军自带补给并由 planAI 自动用药，第一关 AI 对战 6 局胜 5（main 基线 1/6）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4771b44` | docs(GQ): 更新与原版差异说明；fix(scripts): ai-battle 跳过开场场景直接进战场 |
+| `55510fb` | feat(battle): 第一关毒烟减伤；友军 AI 自动使用自带补给 |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 7: 移动端横屏触屏适配
+<!-- trellis-session: v=2 fp=0dab56e589dc2a81 -->
+
+**Date**: 2026-10-12
+**Task**: 移动端横屏触屏适配
+**Branch**: `main`
+
+### Summary
+
+横屏触屏可玩：竖屏横置遮罩、首触全屏+横屏锁定、禁止缩放/下拉刷新；触屏点击补刷悬停、点击容差 18、关闭触屏边缘滚动；选目标两次点击确认（目标格标“再点确认”）；触屏取消按钮与结束回合互斥并 400ms 防误触；导入/导出按钮抬起触发；说明文字按设备切换。不引入第三方库（评估 phaser-hidpi 等）。规范新增“触屏输入”章节。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f3b5108` | feat(mobile): 横屏触屏适配（竖屏提示、触屏取消 / 二次确认、修复触屏边缘滚动） |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 8: 游戏加速设置（1x~16x）
+<!-- trellis-session: v=2 fp=27ec743661c5ad52 -->
+
+**Date**: 2026-10-12
+**Task**: 游戏加速设置（1x~16x）
+**Branch**: `feat/game-speed`
+
+### Summary
+
+新增游戏速度设置 1x/1.25x/1.5x/2x/4x/8x/16x，首页与战斗内设置面板均可切换，即时保存生效；仅作用于战斗场景的 tweens/time timeScale，剧情场景不受影响。补充 scene-and-rendering 规范说明。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c18588` | feat(settings): 新增游戏速度设置（1x~16x，仅作用于战斗） |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 9: 招募系统：金币招募小兵与武将
+<!-- trellis-session: v=2 fp=ed1dffee3af6a516 -->
+
+**Date**: 2026-10-12
+**Task**: 招募系统：金币招募小兵与武将
+**Branch**: `feat/recruit-system`
+
+### Summary
+
+新增招募系统：整备界面招募页与营地募兵官；小兵 5 兵种任意招募、武将从非剧情武将随机候选（每关 4 名、可刷新 3 次）；开局金币 1000；招募单位通过 generals.js 镜像表接入花名册/出阵/存档；检查修复招募 id 与关卡敌军重名（改 rec 前缀）与重开第一关金币；浏览器端到端验证通过
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eafd45f` | feat(recruit): 新增招募系统（金币招募小兵与非剧情武将，开局 1000 金，候选每关可刷新 3 次） |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 10: 金手指功能
+<!-- trellis-session: v=2 fp=55b6efa939f8acaa -->
+
+**Date**: 2026-10-12
+**Task**: 金手指功能
+**Branch**: `feat/cheat-mode`
+
+### Summary
+
+新增金手指：设置/战斗/营中/整备面板入口，无敌、秒杀、无限行动，军资金/道具/果子/装备编辑（含属性说明），直接胜利，招募无限刷新；使用过的进度存档永久标记并在存档列表显示［金手指］
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a05c863` | feat(cheat): 新增金手指（无敌/秒杀/无限行动、资源编辑、直接胜利），使用过的进度存档带金手指标识 |
+| `50661b5` | feat(cheat): 整备面板在金手指开启时提供金手指入口 |
+| `6a47a24` | feat(cheat): 金手指面板显示道具/装备说明，金手指开启时招募武将无限刷新 |
+
+### Status
+
+[OK] **Completed**
+
+
+## Session 11: 出阵名额按章节递增
+<!-- trellis-session: v=2 fp=52929a99bae5faf8 -->
+
+**Date**: 2026-10-12
+**Task**: 出阵名额按章节递增
+**Branch**: `main`
+
+### Summary
+
+招募系统上线后各关剧情武将已占满出阵名额。按 stage.chapter 给每关加额外名额（序章 +2、第一章 +3、第二章 +4、第三章 +5、第四章/终章 +6），extraSlots 在原阵型 4 步内自动补出阵位，57 关全部补足、每关空 1–4 位；校验脚本新增额外出阵位检查；修复 camp-smoke 过期的 openPrepUI 参数并忽略完整版 Chrome 的 favicon 404，4 关营中回归通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `834d844` | feat(deploy): 出阵名额按章节递增（序章 +2 至终章 +6，自动在原阵型附近补出阵位），给招募单位留位置 |
+
+### Status
+
+[OK] **Completed**

@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, FONT, COLORS, hiDpi } from '../config.js';
+import { WIDTH, HEIGHT, FONT, COLORS, IS_TOUCH, hiDpi } from '../config.js';
 import { button, text, panel } from '../ui.js';
 import { DIFFICULTIES } from '../data.js';
 import { applyLoad } from '../saves.js';
@@ -8,6 +8,8 @@ import { openSaveMenu } from '../saveMenu.js';
 import { openSettingsMenu } from '../settingsMenu.js';
 import { goStage, goCamp } from '../story/flow.js';
 import { planDeploy } from '../deploy.js';
+import { setRecruits } from '../generals.js';
+import { START_GOLD } from '../recruit.js';
 import { DEMO_SCENES } from '../story/demo.js';
 import { engine } from '../audio/engine.js';
 import { playMusic } from '../audio/music.js';
@@ -152,7 +154,7 @@ export class TitleScene extends Phaser.Scene {
     const got = TREASURES.filter((id) => lg.codex.includes(id)).length;
     root.add(text(this, x0 + 30, y0 + 64, `已收集　${got} / ${TREASURES.length}`, 18, got === TREASURES.length ? '#ffd36a' : '#f1e3c2'));
     root.add(text(this, x0 + w - 30, y0 + 64, ENDING_ROUTES.map((r) => `${ENDING_INFO[r].name}${lg.endings[r] ? '　已达成' : '　未达成'}`).join('　｜　'), 16, '#bfae88').setOrigin(1, 0));
-    const info = text(this, WIDTH / 2, y0 + 524, '将鼠标移到宝物上查看说明', 16, '#bfae88').setOrigin(0.5, 0).setAlign('center').setWordWrapWidth(w - 60);
+    const info = text(this, WIDTH / 2, y0 + 524, IS_TOUCH ? '点击宝物查看说明' : '将鼠标移到宝物上查看说明', 16, '#bfae88').setOrigin(0.5, 0).setAlign('center').setWordWrapWidth(w - 60);
     root.add(info);
     const cw = 88, ch = 86, gx = x0 + (w - cw * 10) / 2, gy = y0 + 94;
     TREASURES.forEach((id, i) => {
@@ -178,7 +180,7 @@ export class TitleScene extends Phaser.Scene {
     }, 24);
     button(this, WIDTH / 2 - 110, 512, 220, 52, '游 戏 设 置', () => openSettingsMenu(this), 24);
     text(this, WIDTH / 2, HEIGHT - 70,
-      '左键：选择 / 移动 / 指令　右键或 ESC：取消　骑兵克步兵，步兵克弓兵，弓兵克骑兵', 16, '#e8d6ae').setOrigin(0.5);
+      `${IS_TOUCH ? '点击：选择 / 移动 / 指令　取消按钮：取消　选目标时再点一次确认　拖动地图滚动' : '左键：选择 / 移动 / 指令　右键或 ESC：取消'}　骑兵克步兵，步兵克弓兵，弓兵克骑兵`, 16, '#e8d6ae').setOrigin(0.5);
   }
 
   // 新游戏：重置全部战役状态后进入 stage（先播开场场景；skipStory 为调试用，直接进入整备）；等级、装备、金钱不跨周目继承
@@ -197,7 +199,11 @@ export class TitleScene extends Phaser.Scene {
     this.registry.set('red', 0);
     this.registry.set('flags', {});
     this.registry.set('inventory', []);
-    this.registry.set('gold', 0);
+    this.registry.set('gold', START_GOLD);
+    this.registry.set('recruits', {});
+    this.registry.set('recruitPool', null);
+    this.registry.set('cheated', false);
+    setRecruits({});
   }
 
   // 难度选择

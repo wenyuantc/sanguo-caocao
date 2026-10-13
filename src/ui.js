@@ -14,7 +14,8 @@ export function text(scene, x, y, str, size = 16, color = '#f1e3c2', font = UI_F
   return scene.add.text(x, y, str, { fontFamily: font, fontSize: `${size}px`, color });
 }
 
-export function button(scene, x, y, w, h, label, onClick, size = 18) {
+// opts.onRelease：触摸时在按钮上抬起才触发（文件选择 / 下载需要 touchend 带来的用户激活，touchstart 不算）；鼠标仍在按下时触发
+export function button(scene, x, y, w, h, label, onClick, size = 18, opts = {}) {
   const c = scene.add.container(x, y);
   const bg = scene.add.graphics();
   const draw = (hover, disabled) => {
@@ -28,14 +29,21 @@ export function button(scene, x, y, w, h, label, onClick, size = 18) {
   c.add([bg, t, zone]);
   c.disabled = false;
   zone.on('pointerover', () => !c.disabled && draw(true));
-  zone.on('pointerout', () => draw(false, c.disabled));
-  zone.on('pointerdown', (p, lx, ly, ev) => {
-    ev?.stopPropagation?.();
-    if (c.disabled) return;
+  const fire = () => {
     // 点击音：返回 / 取消类按钮（标签去掉空格后以这些词开头）用取消音
     sfx(/^(返回|取消|关闭|放弃)/.test(t.text.replace(/\s/g, '')) ? 'cancel' : 'confirm');
     onClick();
+  };
+  let pressed = false;
+  // 触屏抬起的事件顺序是 up 再 out，out 清除按下标记不影响本次触发
+  zone.on('pointerout', () => { pressed = false; draw(false, c.disabled); });
+  zone.on('pointerdown', (p, lx, ly, ev) => {
+    ev?.stopPropagation?.();
+    if (c.disabled) return;
+    if (opts.onRelease && p.wasTouch) { pressed = true; return; }
+    fire();
   });
+  if (opts.onRelease) zone.on('pointerup', (p) => { if (p.wasTouch && pressed && !c.disabled) fire(); pressed = false; });
   c.setDisabled = (d) => { c.disabled = d; draw(false, d); t.setAlpha(d ? 0.45 : 1); return c; };
   c.label = t;
   return c;

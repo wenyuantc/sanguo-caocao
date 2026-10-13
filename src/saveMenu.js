@@ -89,12 +89,12 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
     } catch (e) {
       say(e.message, '#ff8a7a');
     }
-  }, 15);
+  }, 15, { onRelease: true });
   const exportBtn = button(scene, x0 + 124, y0 + 14, 92, 32, '导出全部', () => {
     if (!readAuto() && !listSlots().some(Boolean) && !hasLegacy()) { say('暂无可导出的存档', '#ff8a7a'); return; }
     exportAll();
     say('已导出全部存档');
-  }, 15);
+  }, 15, { onRelease: true });
   root.add([importBtn, exportBtn]);
   scene.input.keyboard?.on('keydown-LEFT', prevKey);
   scene.input.keyboard?.on('keydown-RIGHT', nextKey);
@@ -150,6 +150,8 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
         const tag = text(scene, x0 + 160, y + 4, `［${df.name}］`, 15, df.color, FONT);
         title.setX(tag.x + tag.width + 6);
         list.add(tag);
+        // 用过金手指的进度：存档时间后追加醒目标签（放第二行，不挤占标题）
+        if (data.cheated) list.add(text(scene, x0 + 300, y + 22, '［金手指］', 13, '#ff7ad9', FONT));
       }
       if (data && !row.auto) {
         let armed = false;
@@ -159,7 +161,7 @@ export function openSaveMenu(scene, { mode, getData, onLoad, onClose }) {
           toast.setColor('#9ce0a8').setText(`已删除 ${label}`);
           scene.time.delayedCall(0, render);
         }, 14);
-        const exp = button(scene, x0 + w - 196, y + 7, 76, 28, '导出', () => { exportSlot(row.index); say(`已导出 ${label}`); }, 14);
+        const exp = button(scene, x0 + w - 196, y + 7, 76, 28, '导出', () => { exportSlot(row.index); say(`已导出 ${label}`); }, 14, { onRelease: true });
         list.add([del, exp]);
       }
     });

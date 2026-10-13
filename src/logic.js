@@ -1,5 +1,5 @@
-import { TERRAIN, moveCost, terrainDef, IMPASSABLE, RANGES, ADVANTAGE, SPELLS, SERIES, GRADE, STAT5, PROMOTE_LVL, classOf } from './data.js';
-import { GENERALS, isGeneral } from './generals.js';
+import { TERRAIN, moveCost, terrainDef, IMPASSABLE, RANGES, ADVANTAGE, SPELLS, ITEMS, ALLY_ITEMS, SERIES, GRADE, STAT5, PROMOTE_LVL, classOf } from './data.js';
+import { GENERALS, isGeneral, generalOf } from './generals.js';
 import { CLASS_BY_NAME } from './characters.js';
 import {
   GUARD_TAKEN, STATUS_KEYS, effStats, moveBonus, canMove, canAct, canCast, canCounter, alwaysHit, has, hasBuff, applyStatus, applyBuff, cure,
@@ -22,11 +22,11 @@ export const BASE5 = 73;
 
 const GENERAL_CLS = Object.fromEntries(Object.values(GENERALS).map((g) => [g.name, g.cls]));
 
-// 单位的兵种系列、个人修正与加成：我军武将以武将总表为准；其他单位依次按兵种登记表、同名武将、
+// 单位的兵种系列、个人修正与加成：我军武将以武将总表（含招募单位）为准；其他单位依次按兵种登记表、同名武将、
 // 黄巾兵（关卡兵种为 bandit 且名字含“黄巾”）映射，都不匹配时沿用关卡数据中的兵种
 export function roleOf(def) {
   if (def.faction === 'player' && isGeneral(def.id)) {
-    const g = GENERALS[def.id];
+    const g = generalOf(def.id);
     return { cls: g.cls, gradeMod: g.gradeMod || null, bonus: g.bonus };
   }
   const cls = CLASS_BY_NAME[def.name] || GENERAL_CLS[def.name] || (def.cls === 'bandit' && def.name.includes('黄巾') ? 'yellow' : def.cls);
@@ -87,6 +87,7 @@ export function createUnit(def, saved, diff, equip) {
     buffs: {},
     equip: equip || defaultKit(role.cls, lvl),
     fruits: saved?.fruits ? { ...saved.fruits } : null,
+    items: def.faction === 'ally' ? { ...(def.items || ALLY_ITEMS) } : null,
     mult: hard ? diff.mult : null,
     acted: false,
     moved: false,
@@ -102,6 +103,8 @@ export function createUnit(def, saved, diff, equip) {
 export function restoreUnit(saved, diff) {
   // 旧存档没有异常 / 增减益：视为无状态；没有装备：按兵种与等级配默认普通装备（我军武将由 BattleScene 先补上）
   const u = { ...saved, ...roleOf(saved), status: { ...saved.status }, buffs: { ...saved.buffs } };
+  // 旧存档的友军没有自带补给：按默认补给补上
+  u.items = u.faction === 'ally' ? { ...(saved.items || ALLY_ITEMS) } : null;
   u.tier = Math.min(saved.tier || (u.faction === 'player' ? 1 : tierFor(u.cls, u.lvl, gateOf(diff))), SERIES[u.cls].tiers.length);
   u.equip = saved.equip ? copyKit(saved.equip) : defaultKit(u.cls, u.lvl);
   u.stats = calcStats(u);
@@ -362,7 +365,7 @@ export function spellVictims(map, units, a, spellId, c) {
 }
 
 // 预测伤害（确定性，AI 与 HUD 共用）：公式 × SPELL_SCALE × 范围系数 × 地形防御（减半计）× 主将保护（策略为 GUARD_SPELL_TAKEN）；火系乘地形易燃倍率；
-// 诱惑由舞娘施放伤害加倍；目标为西凉骑兵 +10%；海啸 / 晕眩的伤害等于目标当前兵力（主将仍按保护倍率）
+// 诱惑由舞娘施放伤害加倍；目标为西凉骑兵 +10%；施策者的 spellMult（关卡数据，缺省 1）；海啸 / 晕眩的伤害等于目标当前兵力（主将仍按保护倍率）
 export function spellDamage(map, a, d, spellId) {
   const sp = SPELLS[spellId];
   if (sp.formula === 'kill') return Math.max(1, Math.round(d.hp * spellTaken(d)));
@@ -371,6 +374,8 @@ export function spellDamage(map, a, d, spellId) {
   if (sp.elem === 'fire') m *= t.fire || 1;
   if (sp.special === 'drain' && a.cls === 'dancer') m *= 2;
   if (d.cls === 'xiliang') m *= 1.1;
+  // 关卡可为个别施策者设 spellMult 调整策略伤害（如第一关张宝），缺省为 1
+  m *= a.spellMult || 1;
   // 装备：芭蕉扇 / 五火神焰扇强化对应属性，白银铠减轻受到的策略伤害
   const up = fx(a, 'elemUp');
   if (up && up.elem === sp.elem) m *= up.mult;
@@ -633,6 +638,34 @@ function spellScore(map, units, u, id, c, foes) {
   return score + Math.min(stat, STATUS_CAP) + Math.min(aux, AUX_CAP);
 }
 
+// 解除单一异常的道具 id（解毒药、膏药、兴奋剂、止咳药）
+const CURE_ITEM = Object.fromEntries(Object.entries(ITEMS).filter(([, it]) => it.cure && it.cure !== 'all').map(([id, it]) => [it.cure, id]));
+// 友军用自带补给（u.items）对 v 使用的最佳道具：{ item, score } 或 null（自行设计，量级与 spellScore 的回复 / 解除分支相当）
+// 兵力：损失 ≥ 40% 或低于 35% 才用，回复量超出损失的部分扣分（够用时先豆后米）；异常：按异常价值计分，
+// 万能药只在多种异常或没有对应单药时用；神秘水 / 酒：会策略且策略值低于 30% 才用；印绶、果子不用
+function itemScore(u, v) {
+  let best = null;
+  const lost = v.stats.hp - v.hp, low = v.hp < v.stats.hp * 0.35;
+  const bad = STATUS_KEYS.filter((k) => has(v, k));
+  for (const [id, n] of Object.entries(u.items)) {
+    const it = ITEMS[id];
+    if (!(n > 0) || it.promote || it.fruit) continue;
+    let score = 0;
+    if ((it.hp || it.full === 'hp') && (lost >= v.stats.hp * 0.4 || low)) {
+      const amt = it.hp || lost;
+      score = Math.min(lost, amt) * 0.9 - Math.max(0, amt - lost) * 0.3 + (low ? 30 : 0);
+    } else if (it.cure) {
+      const keys = it.cure === 'all' ? bad : bad.filter((k) => k === it.cure);
+      if (it.cure === 'all' && keys.length < 2 && keys.some((k) => u.items[CURE_ITEM[k]] > 0)) continue;
+      for (const k of keys) score += Math.min(30, statusValue({ ...v, status: {} }, k)) + (low ? 10 : 0) + (k === 'poison' && low ? 15 : 0);
+    } else if ((it.mp || it.full === 'mp') && knownSpells(v).length && v.mp < v.stats.mp * 0.3) {
+      score = Math.min(it.mp || v.stats.mp, v.stats.mp - v.mp) * 0.5;
+    }
+    if (score > 0 && (!best || score > best.score)) best = { item: id, score };
+  }
+  return best;
+}
+
 // AI 可用的策略：已掌握且 spellUsable 通过（禁咒、宝玉、天气、策略值）；回归与天气策略不由 AI 使用
 export function castable(u, weather = SUN) {
   if (!canCast(u)) return [];
@@ -662,6 +695,15 @@ export function planAI(map, units, u, weather = SUN) {
       if (score > 0) plans.push({ id, c, score, range: sp.range });
     }
   }
+  // 友军自带补给：先按目标计分；用药的站位偏向靠近敌军的格子（每远一步扣 1 分），避免无仗可打时后撤吃药
+  const uses = u.items ? friends.map((v) => ({ v, ...itemScore(u, v) })).filter((p) => p.item && (p.v === u || dist(p.v, u) <= reach + 1)) : [];
+  let far = null;
+  if (uses.length) {
+    const field = distanceField(map, foes, u.cls);
+    const steps = (t) => (Number.isFinite(field[key(t.x, t.y)]) ? field[key(t.x, t.y)] : 99);
+    const near = Math.min(...tiles.map(steps));
+    far = (t) => steps(t) - near;
+  }
   let best = null;
   const consider = (score, plan) => { if (!best || score > best.score) best = { score, ...plan }; };
   for (const tile of tiles) {
@@ -678,6 +720,10 @@ export function planAI(map, units, u, weather = SUN) {
     for (const p of plans) {
       if (p.range !== 'map' && p.c !== u && dist(tile, p.c) > p.range) continue;
       consider(p.score + tdef, { tile, type: 'spell', spell: p.id, target: p.c });
+    }
+    for (const p of uses) {
+      if (p.v !== u && dist(tile, p.v) !== 1) continue;
+      consider(p.score + tdef - far(tile), { tile, type: 'item', item: p.item, target: p.v });
     }
   }
   if (best) return best;

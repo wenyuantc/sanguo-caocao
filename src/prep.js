@@ -1,29 +1,37 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, FONT, COLORS } from './config.js';
-import { classOf, ITEMS, STAT5, STAT_NAME } from './data.js';
-import { calcStats } from './logic.js';
+import { WIDTH, HEIGHT, FONT, COLORS, IS_TOUCH } from './config.js';
+import { classOf, ITEMS, SERIES, STAT5, STAT_NAME } from './data.js';
+import { calcStats, tierFor } from './logic.js';
 import { shopStock } from './deploy.js';
+import { getStage } from './stages.js';
+import {
+  SOLDIER_CLS, REFRESHES, ensurePool, refreshPool, recruitUnit, recruitBonus, recruitClassOf, lordLevel, recruitLevel, soldierPrice, generalPrice,
+} from './recruit.js';
 import {
   SLOTS, SLOT_NAME, EQUIP, EXP_PER_LVL, NORMAL_CAP, FRUIT_EXP, ITEM_PRICE,
   canEquip, gearDesc, gearName, kitFrom, newGear, sellPrice,
 } from './equipment.js';
 import { ensureTextures, gearIcon } from './spellFx.js';
 import { panel, text, button, portrait } from './ui.js';
+import { cheatOn } from './cheat.js';
+import { openCheatMenu } from './cheatMenu.js';
 
 // 第一页不叫“出阵”：确认按钮“出　阵”按文字查找，不能重名
-const TABS = [['deploy', '阵　容'], ['equip', '装　备'], ['items', '道　具'], ['shop', '商　店']];
+const TABS = [['deploy', '阵　容'], ['equip', '装　备'], ['items', '道　具'], ['shop', '商　店'], ['recruit', '招　募']];
 const HINT = {
   deploy: '点选武将上场 / 下场，锁定的武将必须出阵',
-  equip: '选择武将与栏位，再从背包中点选装备；鼠标移到装备上可比较能力',
+  equip: `选择武将与栏位，再从背包中点选装备；${IS_TOUCH ? '每件装备下方显示能力变化' : '鼠标移到装备上可比较能力'}`,
   items: '果子只能在整备时使用：选择武将后点“使用”',
   shop: '购买普通装备与消耗品；卖出价为买入价的一半，3 级普通装备卖出另得果子，宝物不能卖出',
+  recruit: `花军资金招募部下，永久加入我军；小兵可随时招募，武将候选每关换一批，可免费刷新 ${REFRESHES} 次`,
 };
 const STAT_ROWS = [['hp', '兵力'], ['mp', '策略'], ...STAT5.map((k) => [k, STAT_NAME[k]])];
 
-// 出阵整备：阵容 / 装备 / 道具 / 商店四页；onConfirm(选中的武将 id 数组)
+// 出阵整备：阵容 / 装备 / 道具 / 商店 / 招募五页；onConfirm(选中的武将 id 数组)
 // 装备、道具、商店的改动立即写入战役状态（registry），重新挑战本关时保留
 // scene 需要有 inventory / gold / items 字段（BattleScene、CampScene）。
-// opts：{ selected?: 初始阵容, tabs?: 显示的页 id, tab?: 初始页, title?, confirmLabel?: 确认按钮文字（营中为“完　成”） }
+// opts：{ selected?: 初始阵容, tabs?: 显示的页 id, tab?: 初始页, title?, confirmLabel?: 确认按钮文字（营中为“完　成”），
+//         replan?: 招募后重新推导出阵、返回新 plan 的函数（新成员立即出现在阵容 / 装备页） }
 export function openPrep(scene, plan, onConfirm, opts = {}) {
   ensureTextures(scene);
   const root = scene.add.container(0, 0).setDepth(3000);
@@ -42,11 +50,17 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
   const list = scene.add.container(0, 0);
   root.add([list, hint, countText, goldText, toast, pageText]);
 
-  const cards = [...plan.pool.filter((c) => c.preset), ...plan.fixedCards, ...plan.pool.filter((c) => !c.preset)];
-  const generals = cards.filter((c) => !c.fixed);
+  const GEN_PER = 11;
+  let cards, generals, PAGES, GEN_PAGES;
+  // 由 plan 派生的列表；招募后换成新 plan 重新派生
+  const derive = () => {
+    cards = [...plan.pool.filter((c) => c.preset), ...plan.fixedCards, ...plan.pool.filter((c) => !c.preset)];
+    generals = cards.filter((c) => !c.fixed);
+    PAGES = Math.max(1, Math.ceil(cards.length / PER_PAGE));
+    GEN_PAGES = Math.max(1, Math.ceil(generals.length / GEN_PER));
+  };
+  derive();
   const locked = (c) => c.fixed || plan.required.has(c.id);
-  const PAGES = Math.max(1, Math.ceil(cards.length / PER_PAGE));
-  const GEN_PER = 11, GEN_PAGES = Math.max(1, Math.ceil(generals.length / GEN_PER));
   let selected = new Set(opts.selected || plan.defaults);
   let tab = tabs.some(([id]) => id === opts.tab) ? opts.tab : tabs[0][0];
   const pages = { deploy: 0, gen: 0, bag: 0, buy: 0, sell: 0 };
@@ -96,7 +110,9 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     refresh();
   };
 
-  const tabBtns = tabs.map(([id, label], i) => button(scene, x0 + 24 + i * 92, y0 + 16, 84, 34, label, () => {
+  // 五页时按钮收窄，免得压到标题
+  const [tw, ts] = tabs.length > 4 ? [76, 80] : [84, 92];
+  const tabBtns = tabs.map(([id, label], i) => button(scene, x0 + 24 + i * ts, y0 + 16, tw, 34, label, () => {
     if (tab === id) return;
     tab = id;
     toast.setText('');
@@ -115,11 +131,17 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     onConfirm(plan.pool.filter((c) => selected.has(c.id)).map((c) => c.id));
   }, 20);
   root.add([...tabBtns, prevBtn, nextBtn, resetBtn, okBtn]);
+  // 金手指开启时：军资金左侧放“金手指”按钮，关闭面板后写回战役状态并重绘（金钱、道具、背包）
+  if (cheatOn()) {
+    root.add(button(scene, x0 + w - 270, y0 + 16, 110, 34, '金 手 指', () => {
+      openCheatMenu(scene, { lordLvl: lordLevel(roster(), getStage(plan.stageId)), onClose: () => { save(); refresh(); } });
+    }, 16));
+  }
   scene.input.keyboard?.on('keydown-LEFT', prevKey);
   scene.input.keyboard?.on('keydown-RIGHT', nextKey);
 
   // ---------- 通用部件 ----------
-  // 列表行：icon 贴图键、标题、副标题、右侧文字、行内按钮；onClick 点整行，onHover(true/false) 悬停
+  // 列表行：icon 贴图键（或 face 头像名）、标题、副标题、右侧文字、行内按钮；onClick 点整行，onHover(true/false) 悬停
   const row = (x, y, rw, rh, o) => {
     const g = scene.add.graphics();
     const draw = (hover) => {
@@ -138,6 +160,7 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     }
     let tx = x + 10;
     if (o.icon) { parts.push(scene.add.image(x + 6 + (rh - 12) / 2, y + rh / 2, o.icon).setScale((rh - 12) / 72)); tx = x + rh + 2; }
+    if (o.face) { parts.push(portrait(scene, x + 6 + (rh - 12) / 2, y + rh / 2, o.face, 'player', rh - 12)); tx = x + rh + 2; }
     parts.push(text(scene, tx, y + (o.sub ? 4 : rh / 2 - 10), o.title, 16, o.color || '#f1e3c2', FONT));
     if (o.sub && o.wrap) parts.push(text(scene, tx, y + 26, o.sub, 12, '#bfae88').setWordWrapWidth(x + rw - (o.btn ? 76 : 10) - tx));
     else if (o.sub) parts.push(text(scene, tx, y + rh - 20, o.sub, 12, '#bfae88'));
@@ -379,6 +402,52 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
     });
   };
 
+  // ---------- 招募页 ----------
+  const lvlNow = () => recruitLevel(lordLevel(roster(), getStage(plan.stageId)));
+  const brief = (cls, kind, lvl) => {
+    const tier = tierFor(cls, lvl);
+    const s = calcStats({ cls, tier, lvl, bonus: recruitBonus(kind, cls) });
+    return `${classOf(cls, tier).name}　Lv ${lvl}　兵力 ${s.hp}　攻击 ${s.atk}　精神 ${s.int}　防御 ${s.def}`;
+  };
+  const hire = (spec, price, lvl) => {
+    if (scene.gold < price) { toast.setText('军资金不足'); return; }
+    scene.gold -= price;
+    const id = recruitUnit(scene.registry, spec, lvl);
+    save();
+    // 重新推导出阵，新成员立即出现在阵容 / 装备页（营中、战前各自补发初始装备）
+    if (opts.replan) { plan = opts.replan(); derive(); cur = cur || generals[0]?.id; }
+    toast.setText(`${scene.registry.get('recruits')[id].name}加入了我军！`);
+    refresh();
+  };
+  const renderRecruit = () => {
+    const lvl = lvlNow();
+    const bx = x0 + 22, by = y0 + 92, sx = x0 + 512;
+    list.add(text(scene, bx, by + 2, '小　兵（可随时招募）', 16, '#e9c46a', FONT));
+    SOLDIER_CLS.forEach((cls, i) => {
+      const p = soldierPrice(lvl);
+      row(bx, by + 32 + i * 58, 466, 52, {
+        title: SERIES[cls].name, sub: brief(cls, 'soldier', lvl), right: `${p} 金`,
+        btn: '招募', btnOff: scene.gold < p, onBtn: () => hire({ kind: 'soldier', cls }, p, lvl),
+      });
+    });
+    const pool = ensurePool(scene.registry, plan.stageId);
+    list.add(text(scene, sx, by + 2, '武　将（每关换一批）', 16, '#e9c46a', FONT));
+    // 金手指开启时刷新不限次数
+    const free = cheatOn();
+    list.add(button(scene, sx + 466 - 150, by - 2, 150, 28, free ? '刷新（无限）' : `刷新（剩余 ${pool.refreshLeft} 次）`, () => {
+      toast.setText(refreshPool(scene.registry, plan.stageId, free) ? '换了一批武将' : '本关刷新次数已用完');
+      refresh();
+    }, 14).setDisabled(!free && pool.refreshLeft <= 0));
+    if (!pool.names.length) list.add(text(scene, sx, by + 40, '本批武将已全部招募', 15, '#8a7a60'));
+    pool.names.forEach((name, i) => {
+      const p = generalPrice(lvl);
+      row(sx, by + 32 + i * 70, 466, 64, {
+        face: name, title: name, sub: brief(recruitClassOf(name), 'general', lvl), right: `${p} 金`,
+        btn: '招募', btnOff: scene.gold < p, onBtn: () => hire({ kind: 'general', name }, p, lvl),
+      });
+    });
+  };
+
   const render = () => {
     if (closed) return;
     list.removeAll(true);
@@ -401,6 +470,7 @@ export function openPrep(scene, plan, onConfirm, opts = {}) {
       }
       if (tab === 'equip') renderEquip();
       else if (tab === 'items') renderItems();
+      else if (tab === 'recruit') renderRecruit();
       else renderShop();
     }
   };

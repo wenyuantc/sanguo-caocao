@@ -26,6 +26,7 @@ export default [
     turns: 23,
     victoryText: '击败黄巾军首领 张梁',
     victory: [{ type: 'boss', target: 'zhangliang' }],
+    poisonRate: 0.05, // 第一关我军等级低：中毒每回合只扣最大兵力 5%（张宝、黄巾术士另设 spellMult 0.6）
     mapVersion: 2,
     map: [
       'XXMM,.,,...,,.,,MMXX',
@@ -67,7 +68,7 @@ export default [
       A('guanyu', '关羽', 'cavalry', 5, 3, 16, { bonus: { atk: 14, hp: 20 } }),
       A('zhangfei', '张飞', 'cavalry', 5, 5, 16, { bonus: { atk: 12, hp: 20 } }),
       E('zhangliang', '张梁', 'bandit', 7, 10, 3, { leader: true, ai: 'hold', bonus: { atk: 8, def: 6, hp: 40 } }),
-      E('zhangbao', '张宝', 'taoist', 5, 3, 4, { ai: 'hold', bonus: { int: 8, hp: 20 } }),
+      E('zhangbao', '张宝', 'taoist', 5, 3, 4, { ai: 'hold', bonus: { int: 8, hp: 20 }, spellMult: 0.6 }),
       E('hj1', '黄巾兵', 'bandit', 2, 9, 4),
       E('hj2', '黄巾兵', 'bandit', 2, 12, 4),
       E('hj3', '黄巾兵', 'bandit', 2, 10, 7),
@@ -79,7 +80,7 @@ export default [
       E('hj9', '黄巾兵', 'bandit', 2, 17, 4),
       E('hj10', '黄巾弓兵', 'archer', 3, 8, 2, { ai: 'hold' }),
       E('hj11', '黄巾弓兵', 'archer', 3, 12, 2, { ai: 'hold' }),
-      E('hj12', '黄巾术士', 'taoist', 3, 11, 5, { ai: 'hold' }),
+      E('hj12', '黄巾术士', 'taoist', 3, 11, 5, { ai: 'hold', spellMult: 0.6 }),
     ],
     events: [
       { turn: 4, faction: 'enemy', units: [E('hjr1', '黄巾兵', 'bandit', 3, 0, 5), E('hjr2', '黄巾兵', 'bandit', 3, 0, 4)],

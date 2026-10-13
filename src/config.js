@@ -13,6 +13,8 @@ export const WIDTH = 1200;
 export const HEIGHT = MAP_Y + VIEW_H + 8;
 export const FONT = '"STKaiti","KaiTi","Kaiti SC","PingFang SC","Microsoft YaHei",serif';
 export const UI_FONT = '"PingFang SC","Microsoft YaHei","Heiti SC",sans-serif';
+// 设备级触屏判定：只用于选择说明文字、是否显示“取消”按钮；行为分支一律用 pointer.wasTouch（同一设备可能混用鼠标与触摸）
+export const IS_TOUCH = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 export const COLORS = {
   player: 0x2f6fd6,

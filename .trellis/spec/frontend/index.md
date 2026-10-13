@@ -21,7 +21,7 @@
 | 规范 | 说明 | 状态 |
 |------|------|------|
 | [目录结构](./directory-structure.md) | 模块地图、依赖方向、新代码放哪里 | 已填写 |
-| [场景与渲染](./scene-and-rendering.md) | Phaser 场景、UI 工厂函数、视图类、程序化贴图、异步动画流程 | 已填写 |
+| [场景与渲染](./scene-and-rendering.md) | Phaser 场景、触屏输入、UI 工厂函数、视图类、程序化贴图、异步动画流程 | 已填写 |
 | [关卡数据](./stage-data.md) | 关卡对象、单位、事件、对白、武将外形、校验 | 已填写 |
 | [状态管理](./state-management.md) | registry、场景字段、单位对象、localStorage 存档 | 已填写 |
 | [数据契约](./data-contracts.md) | 单位/属性/存档/规则表的结构；没有类型系统时如何保证正确 | 已填写 |
@@ -33,7 +33,7 @@
 
 - 修改关卡或武将外形 → 先读 `stage-data.md` 和 `docs/STAGE_GUIDE.md`。
 - 修改战斗流程、AI、战斗公式 → 读 `state-management.md` 和 `data-contracts.md`。
-- 修改任何画面显示 → 读 `scene-and-rendering.md`。
+- 修改任何画面显示或输入处理 → 读 `scene-and-rendering.md`（新增交互要同时考虑触屏，见“触屏输入”）。
 - 任何改动 → 读 `quality-guidelines.md`（验证命令）。
 
 ---

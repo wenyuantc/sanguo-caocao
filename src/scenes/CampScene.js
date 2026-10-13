@@ -1,5 +1,5 @@
 import * as Phaser from 'phaser';
-import { WIDTH, HEIGHT, RES, FONT, hiDpi } from '../config.js';
+import { WIDTH, HEIGHT, RES, FONT, IS_TOUCH, hiDpi } from '../config.js';
 import { button, text, panel, DialogBox } from '../ui.js';
 import { getStage } from '../stages.js';
 import { STAGE_PLACE, isoToScreen } from '../story/defs.js';
@@ -9,12 +9,16 @@ import { findPath, canStep, octile } from '../story/path.js';
 import { campLayoutOf, layoutGrid, reservedCells, FOLK } from '../camp/layouts.js';
 import { drawProp } from '../camp/props.js';
 import { pickTalk, stageTalks } from '../camp/talks.js';
-import { GENERALS, isGeneral } from '../generals.js';
+import { GENERALS, isGeneral, isRecruit, generalOf } from '../generals.js';
+import { ensurePool } from '../recruit.js';
 import { planDeploy, initialDeploy } from '../deploy.js';
 import { issueKit } from '../equipment.js';
 import { recordTreasures } from '../legacy.js';
 import { openPrep } from '../prep.js';
 import { openSaveMenu } from '../saveMenu.js';
+import { openSettingsMenu } from '../settingsMenu.js';
+import { openCheatMenu } from '../cheatMenu.js';
+import { cheatOn, markCheat } from '../cheat.js';
 import { applyLoad, writeAuto } from '../saves.js';
 import { goStage } from '../story/flow.js';
 import { playMusic } from '../audio/music.js';
@@ -80,6 +84,10 @@ export class CampScene extends Phaser.Scene {
     this.inventory = (this.registry.get('inventory') || []).map((it) => ({ ...it }));
     this.gold = this.registry.get('gold') ?? 0;
     this.items = { ...(this.registry.get('items') || {}) };
+    // 本关间隙的招募候选（胜利时已生成；旧存档 / 调试入口在此补生成）
+    ensurePool(this.registry, this.stageId);
+    // 金手指开着进入营中：本周目永久标记
+    markCheat(this);
 
     this.makeObjects();
     this.makePeople();
@@ -148,16 +156,19 @@ export class CampScene extends Phaser.Scene {
     // 功能人物
     this.newEnt({ kind: 'npc', role: 'shop', name: L.shop.name, ...FOLK[L.shop.name], at: L.shop.at, face: L.shop.face, mode: 'post' });
     if (L.hq.npc) this.newEnt({ kind: 'npc', role: 'prep', name: L.hq.npc, ...FOLK[L.hq.npc], at: L.hq.at, face: L.hq.face, mode: 'post' });
+    this.newEnt({ kind: 'npc', role: 'recruit', name: L.recruit.name, ...FOLK[L.recruit.name], at: L.recruit.at, face: L.recruit.face, mode: 'post' });
+    const ROLE_LABEL = { shop: '商店', prep: '整备', recruit: '招募' };
     for (const e of this.ents.filter((o) => o.role)) {
-      const label = `${e.name}（${e.role === 'shop' ? '商店' : '整备'}）`;
+      const label = `${e.name}（${ROLE_LABEL[e.role]}）`;
       e.tag = this.worldText(0, 0, label, 15, '#ffe08a').setOrigin(0.5, 1).setDepth(890);
     }
 
     // 已加入的武将（阵亡 / 离队、本关作为敌军登场的除外）
     const plan = this.makePlan();
     const joined = (reg.get('joined') || []).filter((id) => isGeneral(id) && id !== 'caocao'
-      && !(GENERALS[id].gone && flags[GENERALS[id].gone]) && !plan.blocked.has(id));
-    const people = joined.map((id) => ({ name: GENERALS[id].name, gid: id, side: 'player' }));
+      && !(generalOf(id).gone && flags[generalOf(id).gone]) && !plan.blocked.has(id));
+    // 招募单位不在武将总表中：兵种直接给出（剧情小人按名字查不到兵种）
+    const people = joined.map((id) => ({ name: generalOf(id).name, gid: id, side: 'player', ...(isRecruit(id) && { cls: generalOf(id).cls }) }));
     // 本关台词里的武将尚未记入 joined、但已是本关出阵候选（预设我军 / joinAt 到达，如汉中战后归降的庞德）：也在营中；
     // 客人：本关台词里不是我军武将的人物（如暂居营中的刘备）；
     // 与登记武将同名但写明 side、且尚未在营中的（如暂投曹营的关羽）也作为客人
@@ -216,10 +227,11 @@ export class CampScene extends Phaser.Scene {
     text(this, 34, 22, `${place} · ${L.name}`, 22, '#ffd36a', FONT).setDepth(1000);
     text(this, 34, 54, `下一战：${st.chapter}　${st.name}`, 15, '#f1e3c2').setDepth(1000);
     const bw = 96;
+    button(this, WIDTH - (bw + 16) * 3, 20, bw, 38, '设　置', () => this.openSettings(), 17).setDepth(1000);
     button(this, WIDTH - (bw + 16) * 2, 20, bw, 38, '存　档', () => this.openSave('save'), 17).setDepth(1000);
     button(this, WIDTH - (bw + 16), 20, bw, 38, '读　档', () => this.openSave('load'), 17).setDepth(1000);
     this.toastText = text(this, WIDTH / 2, 96, '', 17, '#ffd27a', FONT).setOrigin(0.5).setStroke('#000', 4).setDepth(1000);
-    text(this, WIDTH / 2, HEIGHT - 18, '点击地面行走　方向键 / WASD 移动　走到人物旁按空格 / 回车或点击人物对话　右键取消', 14, '#e8d6ae')
+    text(this, WIDTH / 2, HEIGHT - 18, IS_TOUCH ? '点击地面行走　点击人物对话 / 物件互动' : '点击地面行走　方向键 / WASD 移动　走到人物旁按空格 / 回车或点击人物对话　右键取消', 14, '#e8d6ae')
       .setOrigin(0.5, 1).setStroke('#000', 3).setDepth(1000);
   }
 
@@ -251,7 +263,7 @@ export class CampScene extends Phaser.Scene {
     for (const c of plan.pool) {
       if (!isGeneral(c.id) || roster[c.id]?.equip) continue;
       const lv = Math.max(c.lvl || 1, roster[c.id]?.lvl || 0);
-      roster[c.id] = { ...roster[c.id], equip: issueKit(this.inventory, c.id, GENERALS[c.id].cls, lv) };
+      roster[c.id] = { ...roster[c.id], equip: issueKit(this.inventory, c.id, generalOf(c.id).cls, lv) };
       changed = true;
       recordTreasures(this.inventory.slice(n).map((it) => it.id));
     }
@@ -274,12 +286,15 @@ export class CampScene extends Phaser.Scene {
       difficulty: r.get('difficulty') || 'normal',
       roster,
       joined: [...(r.get('joined') || [])],
+      recruits: r.get('recruits') || {},
+      recruitPool: r.get('recruitPool') || null,
       items: { ...(r.get('items') || {}) },
       red: r.get('red') ?? 0,
       flags: { ...(r.get('flags') || {}) },
       inventory: (r.get('inventory') || []).map((it) => ({ ...it })),
       gold: r.get('gold') ?? 0,
       summary: { lordLvl: roster.caocao?.lvl || 1 },
+      cheated: !!r.get('cheated'),
     };
   }
 
@@ -300,20 +315,47 @@ export class CampScene extends Phaser.Scene {
     });
   }
 
-  // 整备（大帐 / 军需官）：阵容、装备、道具；商人：商店
-  openPrepUI(shop) {
+  // 设置（游戏速度、音量、金手指开关）；金手指打开时可从这里进入金手指面板
+  openSettings() {
+    if (this.busy()) return;
+    this.halt();
+    this.modal = true;
+    openSettingsMenu(this, { audioOnly: true, onClose: () => { this.modal = false; }, onCheat: () => this.openCheat() });
+  }
+
+  // 金手指面板（营中没有“直接胜利”）：关闭时把军资金、道具、背包写回 registry（同整备界面）
+  openCheat() {
+    if (!cheatOn() || this.busy()) return;
+    this.modal = true;
+    this.items = { ...(this.registry.get('items') || {}) };
+    openCheatMenu(this, {
+      lordLvl: this.registry.get('roster')?.caocao?.lvl || 1,
+      onClose: () => {
+        this.registry.set('inventory', this.inventory.map((it) => ({ ...it })));
+        this.registry.set('gold', this.gold);
+        this.registry.set('items', { ...this.items });
+        this.modal = false;
+      },
+    });
+  }
+
+  // 整备（大帐 / 军需官）：阵容、装备、道具、招募；商人：商店；募兵官：招募
+  openPrepUI(mode) {
     if (this.busy()) return;
     this.halt();
     this.modal = true;
     const plan = this.makePlan();
     this.items = { ...(this.registry.get('items') || {}) };
-    const opts = shop
-      ? { tabs: ['shop'], title: '商　　店', confirmLabel: '离　开' }
-      : { tabs: ['deploy', 'equip', 'items'], title: '营 中 整 备', confirmLabel: '完　成', selected: this.deploy && initialDeploy(plan, this.deploy) };
+    const prep = mode === 'prep';
+    const opts = {
+      shop: { tabs: ['shop'], title: '商　　店', confirmLabel: '离　开' },
+      recruit: { tabs: ['recruit'], title: '招　　募', confirmLabel: '离　开' },
+      prep: { tabs: ['deploy', 'equip', 'items', 'recruit'], title: '营 中 整 备', confirmLabel: '完　成', selected: this.deploy && initialDeploy(plan, this.deploy) },
+    }[mode];
     openPrep(this, plan, (ids) => {
-      if (!shop) this.deploy = ids;
+      if (prep) this.deploy = ids;
       this.modal = false;
-    }, opts);
+    }, { ...opts, replan: () => this.makePlan() });
   }
 
   confirmDepart() {
@@ -390,8 +432,9 @@ export class CampScene extends Phaser.Scene {
     const p = this.player;
     this.faceEnt(p, sign(t.a - p.a), sign(t.b - p.b));
     if (t.kind === 'gate') return this.confirmDepart();
-    if (t.kind === 'prep' || t.role === 'prep') return this.openPrepUI(false);
-    if (t.role === 'shop') return this.openPrepUI(true);
+    if (t.kind === 'prep' || t.role === 'prep') return this.openPrepUI('prep');
+    if (t.role === 'shop') return this.openPrepUI('shop');
+    if (t.role === 'recruit') return this.openPrepUI('recruit');
     if (!t.moving) this.faceEnt(t, sign(p.a - t.a), sign(p.b - t.b));
     t.path = null;
     return this.talk(t).catch((e) => console.error('营中对话出错', e));
@@ -604,9 +647,9 @@ export class CampScene extends Phaser.Scene {
     }
     const target = this.busy() ? null : this.nearTarget();
     if (target) {
-      const verb = target.kind === 'gate' ? '出征' : target.kind === 'prep' || target.role === 'prep' ? '整备' : target.role === 'shop' ? '商店' : `与${target.name}对话`;
+      const verb = target.kind === 'gate' ? '出征' : target.kind === 'prep' || target.role === 'prep' ? '整备' : target.role === 'shop' ? '商店' : target.role === 'recruit' ? '招募' : `与${target.name}对话`;
       const at = target.actor ? { x: target.actor.c.x, y: target.actor.c.y - (target.unread || target.tag ? 124 : 100) } : target.top;
-      this.prompt.setText(`［空格］${verb}`).setPosition(at.x, at.y - (target.actor ? 0 : 22)).setVisible(true);
+      this.prompt.setText(`［${IS_TOUCH ? '点击' : '空格'}］${verb}`).setPosition(at.x, at.y - (target.actor ? 0 : 22)).setVisible(true);
     } else this.prompt.setVisible(false);
   }
 

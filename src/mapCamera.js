@@ -7,6 +7,7 @@
 import { TILE, MAP_X, MAP_Y, VIEW_W, VIEW_H, VIEW_COLS, VIEW_ROWS, RES, WIDTH, HEIGHT } from './config.js';
 
 const DRAG = 6; // 拖动阈值（像素），以内视为点击
+const DRAG_TOUCH = 18; // 触屏点击容差：手机横屏画面约缩小到 0.58 倍，6 像素只有 3 个多 CSS 像素，手指轻微抖动就会判成拖动
 const EDGE = 24; // 边缘滚动区宽度
 const EDGE_DELAY = 250; // 鼠标在边缘停留多久后开始滚动（毫秒），避免移向右侧面板时误滚
 const EDGE_SPEED = 520; // 边缘滚动速度（世界像素 / 秒）
@@ -168,7 +169,7 @@ export class MapCamera {
     const d = this.drag;
     if (!d || !p.isDown) return;
     const s = this.screenOf(p);
-    if (!d.moved && Math.hypot(s.x - d.sx, s.y - d.sy) <= DRAG) return;
+    if (!d.moved && Math.hypot(s.x - d.sx, s.y - d.sy) <= (p.wasTouch ? DRAG_TOUCH : DRAG)) return;
     d.moved = true;
     if (!d.allow) return;
     this.panTween?.stop();
@@ -181,7 +182,7 @@ export class MapCamera {
     this.drag = null;
     if (!d) return false;
     const s = this.screenOf(p);
-    return !d.moved && Math.hypot(s.x - d.sx, s.y - d.sy) <= DRAG;
+    return !d.moved && Math.hypot(s.x - d.sx, s.y - d.sy) <= (p.wasTouch ? DRAG_TOUCH : DRAG);
   }
 
   // ---------- 每帧：键盘与边缘滚动 ----------
@@ -196,11 +197,11 @@ export class MapCamera {
       vy = (k.DOWN.isDown || k.S.isDown ? 1 : 0) - (k.UP.isDown || k.W.isDown ? 1 : 0);
     }
     if (vx || vy) { this.scrollBy(vx * KEY_SPEED * step, vy * KEY_SPEED * step); return; }
-    // 边缘滚动：鼠标在画布内、未拖动、位于地图视口边缘（排除小地图等界面元素）
+    // 边缘滚动：鼠标在画布内、未拖动、位于地图视口边缘（排除小地图等界面元素）；触屏不做（抬起后指针停在原处且 isOver 恒为真，会一直滚）
     const p = this.scene.input.activePointer;
     const s = this.screenOf(p);
     let ex = 0, ey = 0;
-    if (this.scene.input.isOver && !this.drag && this.inView(s.x, s.y) && !this.scene.minimap?.hit(s.x, s.y)) {
+    if (this.scene.input.isOver && !p.wasTouch && !this.drag && this.inView(s.x, s.y) && !this.scene.minimap?.hit(s.x, s.y)) {
       ex = s.x < MAP_X + EDGE ? -1 : s.x >= MAP_X + VIEW_W - EDGE ? 1 : 0;
       ey = s.y < MAP_Y + EDGE ? -1 : s.y >= MAP_Y + VIEW_H - EDGE ? 1 : 0;
     }

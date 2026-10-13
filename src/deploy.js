@@ -2,7 +2,7 @@
 // 纯函数，不依赖 Phaser（Node 可直接导入）
 import { passable } from './data.js';
 import { roleOf, tierFor } from './logic.js';
-import { GENERALS, isGeneral } from './generals.js';
+import { GENERALS, isGeneral, isRecruit, generalOf } from './generals.js';
 import { getStage } from './stages.js';
 import { SHOP_UNLOCK } from './equipment.js';
 
@@ -56,6 +56,45 @@ function storyIds(stage, presetOk, flags) {
   return ids;
 }
 
+// 章节额外出阵名额（按 stage.chapter 空格前的前缀，两条路线同名章节共用）；关卡可写 deploy.bonus 覆盖
+export const CHAPTER_BONUS = { 序章: 2, 第一章: 3, 第二章: 4, 第三章: 5, 第四章: 6, 终章: 6 };
+const chapterKey = (stage) => (stage.chapter || '').split(' ')[0];
+// 新出阵位必须让这些兵种都能站（不管谁上场）
+const SLOT_CLS = ['lord', 'infantry', 'archer', 'cavalry', 'strategist', 'healer'];
+const EXTRA_RANGE = 4;
+
+// 额外出阵位：从原出阵位多源 BFS 向外找（4 步内），避开所有单位 / 援军坐标、到达胜利格、撤离格；凑不够按实际数量
+const extraCache = new Map();
+export function extraSlots(stage, baseSlots, n) {
+  const key = `${stage.id}:${n}`;
+  if (extraCache.has(key)) return extraCache.get(key);
+  const k = (x, y) => `${x},${y}`;
+  const H = stage.map.length, W = stage.map[0].length;
+  const bad = new Set(baseSlots.map(([x, y]) => k(x, y)));
+  for (const u of [...stage.units, ...stage.events.flatMap((e) => e.units || [])]) bad.add(k(u.x, u.y));
+  for (const c of stage.victory) (c.tiles || []).forEach(([x, y]) => bad.add(k(x, y)));
+  (stage.escape?.tiles || []).forEach(([x, y]) => bad.add(k(x, y)));
+  const dist = new Map(baseSlots.map(([x, y]) => [k(x, y), 0]));
+  const q = [...baseSlots];
+  const out = [];
+  while (q.length && out.length < n) {
+    const [x, y] = q.shift();
+    const d = dist.get(k(x, y));
+    if (d >= EXTRA_RANGE) continue;
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H || dist.has(k(nx, ny))) continue;
+      const ch = stage.map[ny][nx];
+      if (!SLOT_CLS.some((c) => passable(c, ch))) continue;
+      dist.set(k(nx, ny), d + 1);
+      q.push([nx, ny]);
+      if (out.length < n && !bad.has(k(nx, ny)) && SLOT_CLS.every((c) => passable(c, ch))) out.push([nx, ny]);
+    }
+  }
+  extraCache.set(key, out);
+  return out;
+}
+
 export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {}) {
   const preset = stage.units.filter((d) => d.faction === 'player');
   const presetOk = preset.filter((d) => flagOk(d, flags));
@@ -75,9 +114,11 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
   for (const [id, g] of Object.entries(GENERALS)) if (joinReached(g, stage.id)) allJoined.add(id);
 
   const lord = defsById.caocao;
-  const poolIds = [...presetGenerals, ...Object.keys(GENERALS).filter((id) => allJoined.has(id) && !blocked.has(id) && !defsById[id])];
+  const notPreset = (id) => allJoined.has(id) && !blocked.has(id) && !defsById[id];
+  // 候选：预设武将 → 总表中已加入的武将 → 招募单位（按招募先后）
+  const poolIds = [...presetGenerals, ...Object.keys(GENERALS).filter(notPreset), ...[...allJoined].filter((id) => isRecruit(id) && notPreset(id))];
   const pool = poolIds.map((id) => {
-    const def = defsById[id], saved = roster[id], g = GENERALS[id];
+    const def = defsById[id], saved = roster[id], g = generalOf(id);
     const floor = def ? def.lvl : Math.max(1, lord.lvl - 1);
     const lvl = Math.max(floor, saved?.lvl || 0);
     // 兵种、个人修正与加成以武将总表为准；阶级同 createUnit（roster 记录，首次出阵按等级定阶）
@@ -100,8 +141,10 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
   for (const id of reqSrc) if (poolIds.includes(id)) required.add(id);
 
   const seen = new Set();
-  const slots = (ov.slots || preset.map((d) => [d.x, d.y])).filter(([x, y]) => !seen.has(`${x},${y}`) && seen.add(`${x},${y}`));
-  const max = Math.min(ov.max ?? slots.length, slots.length);
+  const baseSlots = (ov.slots || preset.map((d) => [d.x, d.y])).filter(([x, y]) => !seen.has(`${x},${y}`) && seen.add(`${x},${y}`));
+  const extra = extraSlots(stage, baseSlots, ov.bonus ?? CHAPTER_BONUS[chapterKey(stage)] ?? 0);
+  const slots = [...baseSlots, ...extra];
+  const max = Math.min(ov.max ?? baseSlots.length, baseSlots.length) + extra.length;
   const room = max - fixed.length;
   // 默认阵容 = 预设阵容（超出上限时先去掉非必须出阵的武将）
   const defaults = [...presetGenerals, ...[...required].filter((id) => !presetGenerals.includes(id))];
@@ -117,7 +160,7 @@ export function planDeploy(stage, { roster = {}, joined = [], flags = {} } = {})
     const saved = roster[d.id], lvl = Math.max(d.lvl, saved?.lvl || 0);
     return { id: d.id, name: d.name, cls, bonus, lvl, tier: saved?.lvl ? saved.tier || 1 : tierFor(cls, lvl), fixed: true };
   });
-  return { stageId: stage.id, map: stage.map, slots, max, required, blocked, pool, fixed, fixedCards, defaults, defsById, joined: [...allJoined] };
+  return { stageId: stage.id, map: stage.map, slots, max, bonus: extra.length, required, blocked, pool, fixed, fixedCards, defaults, defsById, joined: [...allJoined] };
 }
 
 // 商店货架：本关及之前（沿关卡衔接能走到本关）上架过的商品，按上架先后去重
@@ -157,7 +200,7 @@ export function buildPlayerDefs(plan, selectedIds) {
     const slot = free.find(([x, y]) => passable(p.cls, plan.map[y][x])) || free[0];
     if (!slot) continue;
     used.add(k(slot[0], slot[1]));
-    const g = GENERALS[id];
+    const g = generalOf(id);
     const base = plan.defsById[id] || { id, name: p.name, faction: 'player', bonus: p.bonus, ...(g?.mark && { mark: g.mark }) };
     defs.push({ ...base, cls: p.cls, lvl: p.floor, x: slot[0], y: slot[1] });
   }

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "评审清单与验证命令"}
+{"file": ".trellis/spec/frontend/data-contracts.md", "reason": "核对新字段与存档契约一致"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "核对 AI / 存档读档行为"}
+{"file": ".trellis/spec/frontend/stage-data.md", "reason": "核对关卡字段与 validate-stages 校验"}
