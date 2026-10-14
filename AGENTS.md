@@ -39,6 +39,11 @@
 
 实施前阅读 `.trellis/workflow.md` 和 `.trellis/spec/` 中适用的规范。只修改任务范围内的内容，并遵守关卡分组的文件负责范围。
 
+## Cursor Cloud specific instructions
+
+- `.gitignore` 忽略了 `package-lock.json`，全新检出没有锁文件，`npm ci` 会失败。Cloud Agent 安装依赖用 `npm install`。
+- 浏览器验证需要开发服务器监听 `0.0.0.0:5188`（与 `.claude/launch.json` 相同端口）：`npm run dev -- --host 0.0.0.0 --port 5188 --strictPort`。若 `http://127.0.0.1:5188/` 已返回页面，不要再启动第二个进程。
+
 <!-- TRELLIS:START -->
 # Trellis Instructions
 
